@@ -4,7 +4,9 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 
 **Hard rules (Space Apps 2026):** 30 seconds or less (over 30 s makes the project ineligible for Global judging), English subtitles, no images of anyone under 18, and it must show how NASA data made the project possible. Data is archived: never say "live".
 
-**Placeholders to fill before export:** the app link on the last card (the Vercel production link, see `SUBMISSION.md`).
+**App link** on the last card: https://aer-black.vercel.app (test it in a private window).
+
+**This is the team's only video script** (the shorter draft in `SUBMISSION.md` was removed, issue #34). It was written for the 2D HUD. **TODO:** #27 made the 3D view the main screen, so re-plan rows 3-5 for the 3D view with the minimap and a route, and keep the captions. Fix the on-camera bugs in #40 (points 1-4) first. Record from the deployed build after the freeze, not a local branch.
 
 ---
 
@@ -17,7 +19,7 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 | 3 | 0:07–0:13 | Recording A: HUD running Sol 1 | Real Perseverance weather (MEDA, sol 312) sets what every step costs. |
 | 4 | 0:13–0:20 | Recording B: Sol 1 scrubber alarm → diagnose | On Mars, the danger is your own breath. Your CO₂ scrubber is running out. |
 | 5 | 0:20–0:26 | Recording C: storm countdown and shelter cards | Dust storm in 5:00. Pick your shelter.<br>Small: *Game storm is stronger than Jezero's real 2022 storm (τ 1.38).* |
-| 6 | 0:26–0:30 | Black, or the Jezero still dimmed | From one walk today to the first human missions.<br>github.com/ZektoxFx/aer · [APP LINK] |
+| 6 | 0:26–0:30 | Black, or the Jezero still dimmed | From one walk today to the first human missions.<br>github.com/ZektoxFx/aer · aer-black.vercel.app |
 
 Keep each caption on screen for its whole clip; the shortest is 3 seconds. Captions are short enough to read at that pace.
 
@@ -67,7 +69,7 @@ Record each clip a little long (10–20 s); you will trim in iMovie.
 
 - [ ] 30.0 s or less
 - [ ] Every caption in English and readable
-- [ ] `[APP LINK]` replaced
+- [ ] App link on the last card opens in a private window
 - [ ] Row 5 says the game storm is stronger than the real one
 - [ ] No people, no NASA logos or insignia on the title cards
 - [ ] The word "live" appears nowhere
