@@ -108,3 +108,8 @@
 @media (max-width: 760px) {
   .visor { grid-template: 'top' 'centre' 'left' 'right' 'bottom' / minmax(0, 1fr); min-height: 0; }
 }
+
+/* Walking a planned route */
+.walk-line { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; letter-spacing: 0.06em; }
+.walk-line .choice-btn { padding: 5px 12px; text-align: center; }
+.walk-go { border-color: var(--fg); }
