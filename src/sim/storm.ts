@@ -43,10 +43,15 @@ export function stormTau(s: StormEvent, baseTau: number, tMin: number): number {
   return baseTau;
 }
 
+/** Surface sunlight (W/m²) from dust τ and sun elevation. */
+export type SolarFn = (tau: number, sunElevationDeg: number) => number;
+
 /** The outdoor environment at time t, with storm dust and the resulting sunlight applied. */
-export function conditionsAt(base: Environment, storm: StormEvent | null, tMin: number, sunElevationDeg: number): Environment {
+export function conditionsAt(
+  base: Environment, storm: StormEvent | null, tMin: number, sunElevationDeg: number, solar: SolarFn = approxSolarWm2,
+): Environment {
   const tau = storm ? stormTau(storm, base.tau, tMin) : base.tau;
-  return { ...base, tau, solarWm2: approxSolarWm2(tau, sunElevationDeg) };
+  return { ...base, tau, solarWm2: solar(tau, sunElevationDeg) };
 }
 
 // How much of the outside cold reaches the astronaut in each shelter [verify]: 0 = fully protected, 1 = outside.

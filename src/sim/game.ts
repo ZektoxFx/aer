@@ -1,7 +1,9 @@
+import type { SunlightTable } from '../data/files';
+import { sunElevationDeg as nasaSunElevationDeg, solarWm2 as nasaSolarWm2 } from '../data/sunlight';
 import type { SolWeather } from '../data/types';
-import { CABIN_POWER, powerStep } from './power';
+import { CABIN_POWER, approxSolarWm2, powerStep } from './power';
 import { FULL_SUIT, simulate } from './simulate';
-import { MIN_PER_SOL, conditionsAt, shelterEnvironment, soilingAfter, stormPhase } from './storm';
+import { MIN_PER_SOL, conditionsAt, shelterEnvironment, soilingAfter, stormPhase, type SolarFn } from './storm';
 import type { Activity, ClockSpeed, Environment, Forecast, GameState, SuitState, TickResult } from './types';
 
 /** Game minutes per real minute at each clock speed (§6.4). traverse is a design value to tune in playtesting. */
@@ -9,12 +11,25 @@ export const SPEED_X: Record<ClockSpeed, number> = { paused: 0, traverse: 60, st
 
 const REST: Activity = { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 
-/** A new run: in the cabin at 08:00 local time on sol 0, with a full suit. */
-export function newGame(weather: SolWeather): GameState {
+/** A new run: in the cabin at 08:00 local time on sol 0, with a full suit. Pass `sky` to use NASA sunlight data. */
+export function newGame(weather: SolWeather, sky?: GameState['sky']): GameState {
   const clockMin = (8 / 24) * MIN_PER_SOL;
   return {
-    clockMin, weather, activity: REST, shelter: 'cabin', power: CABIN_POWER, loads: [], storm: null,
+    clockMin, weather, activity: REST, shelter: 'cabin', power: CABIN_POWER, loads: [], storm: null, sky,
     suit: { ...FULL_SUIT, elapsedMin: clockMin },
+  };
+}
+
+/**
+ * Sunlight from NASA's table (TM-103623) for the season.
+ * shortcut: the table stops at τ 6, so above that its τ-6 value is dimmed further by the approximate fit's ratio.
+ */
+export function nasaSolar(table: SunlightTable, lsDeg: number): SolarFn {
+  const maxTau = table.tau[table.tau.length - 1];
+  return (tau, elev) => {
+    if (tau <= maxTau) return nasaSolarWm2(table, tau, elev, lsDeg);
+    const atMax = approxSolarWm2(maxTau, elev);
+    return atMax > 0 ? nasaSolarWm2(table, maxTau, elev, lsDeg) * (approxSolarWm2(tau, elev) / atMax) : 0;
   };
 }
 
@@ -24,10 +39,11 @@ export function localHour(clockMin: number): number {
 }
 
 /**
- * Sun height above the horizon; negative at night.
- * shortcut: sunrise 06:00, sunset 18:00, 70° at noon (Jezero is at 18° N); ignores the season.
+ * Sun height above the horizon; negative at night. With `sky`, real geometry for the site's latitude and season.
+ * shortcut (no sky): sunrise 06:00, sunset 18:00, 70° at noon (Jezero is at 18° N), no seasons.
  */
-export function sunElevationDeg(clockMin: number): number {
+export function sunElevationDeg(clockMin: number, sky?: GameState['sky']): number {
+  if (sky) return nasaSunElevationDeg(sky.latDeg, sky.lsDeg, localHour(clockMin));
   return 70 * Math.sin(((localHour(clockMin) - 6) / 12) * Math.PI);
 }
 
@@ -50,7 +66,8 @@ export function weatherAt(sol: SolWeather, clockMin: number): Environment {
 
 /** Outdoor conditions right now, with time of day and any storm applied. */
 export function outdoorEnv(s: GameState): Environment {
-  return conditionsAt(weatherAt(s.weather, s.clockMin), s.storm, s.clockMin, sunElevationDeg(s.clockMin));
+  const solar = s.sky ? nasaSolar(s.sky.table, s.sky.lsDeg) : approxSolarWm2;
+  return conditionsAt(weatherAt(s.weather, s.clockMin), s.storm, s.clockMin, sunElevationDeg(s.clockMin, s.sky), solar);
 }
 
 /** Emergency (1×) on any critical alarm, 24× while a storm is approaching, otherwise time warp. */
