@@ -8,7 +8,7 @@ import { browserStorage, loadSettings, saveSettings, type Settings } from './ui/
 export default function App() {
   const [data, setData] = useState<GameData | null>(null);
   const [error, setError] = useState('');
-  const [view, setView] = useState<'hud' | 'telemetry'>('hud');
+  const [view, setView] = useState<'game3d' | 'hud' | 'telemetry'>('game3d');
   // The title screen sits on top; the game mounts when the crash ends, so its clock starts then.
   const [showGame, setShowGame] = useState(false);
   const [showTitle, setShowTitle] = useState(true);
@@ -30,11 +30,11 @@ export default function App() {
           {data && (
             <>
               <nav className="view-nav" aria-label="Views">
-                {(['hud', 'telemetry'] as const).map((v) => (
-                  <button key={v} aria-pressed={view === v} onClick={() => setView(v)}>{v.toUpperCase()}</button>
+                {([['game3d', '3D GAME'], ['hud', '2D HUD'], ['telemetry', 'TELEMETRY']] as const).map(([v, label]) => (
+                  <button key={v} aria-pressed={view === v} onClick={() => setView(v)}>{label}</button>
                 ))}
               </nav>
-              {view === 'hud' ? <Hud data={data} /> : <Shell data={data} />}
+              {view === 'telemetry' ? <Shell data={data} /> : <Hud data={data} mode={view === 'game3d' ? '3d' : '2d'} />}
             </>
           )}
         </div>

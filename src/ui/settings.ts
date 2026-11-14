@@ -41,12 +41,12 @@ export function browserStorage(): Storage | null {
 
 /** Keyboard controls on the HUD, shown in Settings. */
 export const CONTROLS: { keys: string; action: string }[] = [
+  { keys: 'W A S D', action: '3D: walk (arrow keys work too)' },
+  { keys: 'Shift', action: '3D: run' },
+  { keys: 'Q · E / drag', action: '3D: look around (scroll to zoom)' },
   { keys: 'Space', action: 'Pause / resume' },
-  { keys: '1 · 2 · 3 · 4', action: 'In cabin · Rest outside · Walk · Run' },
-  { keys: 'S', action: 'Start Sol 1' },
-  { keys: 'T', action: 'Trigger dust storm' },
-  { keys: 'H', action: 'Skip one game hour (test)' },
-  { keys: 'R', action: 'Restart' },
+  { keys: '1 · 2 · 3 · 4', action: '2D HUD: in cabin · rest · walk · run' },
+  { keys: 'S · T · H · R', action: '2D HUD: Sol 1 · storm · skip hour · restart' },
 ];
 
 /** HUD action for a key press, or null. */

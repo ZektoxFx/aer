@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HudMap, type Pt, type RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
@@ -17,6 +17,9 @@ import {
 import { Sol1Panel } from './Sol1Panel';
 import { hudKeyAction } from './settings';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
+import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
+import { World3D } from './World3D';
+import './game3d.css';
 import './hud.css';
 
 // Test controls until Map drives the activity from a planned route.
@@ -30,8 +33,15 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
 const SHELTER_NAME: Record<Shelter, string> = { cabin: 'CABIN', wreck: 'WRECK', builtShelter: 'BUILT SHELTER', none: 'OPEN GROUND' };
 
 /** In-suit HUD: a visor frame of readouts around an open centre (map and photos go there later). */
-export function Hud({ data }: { data: GameData }) {
+export function Hud({ data, mode = '2d' }: { data: GameData; mode?: '2d' | '3d' }) {
   const { pack } = data;
+  const base = useMemo(() => basePoint(pack), [pack]);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  // 3D free walking: the latest movement from the 3D view, and a key to put the astronaut back at the cabin.
+  const moveRef = useRef<MoveResult | null>(null);
+  const [placeKey, setPlaceKey] = useState(0);
+  const [suitOpen, setSuitOpen] = useState(false);
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
@@ -82,6 +92,10 @@ export function Hud({ data }: { data: GameData }) {
       }
       setFlow(flowRef.current);
     }
+    const mv = moveRef.current;
+    if (modeRef.current === '3d' && mv && !walkRef.current && !missionRef.current && !flowRef.current) {
+      state = { ...state, activity: activityFor(mv), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
+    }
     const wk = walkRef.current;
     if (wk && wk.stoppedAt === null) {
       const w = walkAt(wk.plan, state.clockMin - wk.startMin);
@@ -123,9 +137,18 @@ export function Hud({ data }: { data: GameData }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  const onMove3d = useCallback((m: MoveResult) => {
+    moveRef.current = m;
+    if (walkRef.current) return; // the route walker owns the position
+    const atCabin = inCabinZone(m.pos, base);
+    if (atCabin ? postedRef.current !== null : !postedRef.current || distM(postedRef.current, m.pos) > 20) {
+      postedRef.current = atCabin ? null : m.pos;
+      setAstronaut(atCabin ? undefined : m.pos);
+    }
+  }, [base]);
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; setWalk(null); homeAfterRef.current = null;
-    if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); }
+    if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
   };
   const setMode = (id: string) => {
     const m = MODES.find((x) => x.id === id)!;
@@ -207,6 +230,7 @@ export function Hud({ data }: { data: GameData }) {
     if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
     const action = hudKeyAction(e.key);
     if (!action) return;
+    if (modeRef.current === '3d' && action !== 'pause') return;
     if (action === 'pause') { e.preventDefault(); setPaused((p) => !p); return; }
     const busy = missionRef.current !== null;
     if (action.startsWith('mode:') && !busy) setMode(action.slice(5));
@@ -308,6 +332,93 @@ export function Hud({ data }: { data: GameData }) {
       </div>
     );
   };
+
+  if (mode === '3d') {
+    const holding = paused || (mission !== null && (isHolding(mission) || isOver(mission)));
+    const timeScale = holding ? 0 : SPEED_X[frame.speed];
+    const lowest = Math.min(
+      s.suit.o2Kg / FULL_SUIT.o2Kg, s.suit.liohKg / FULL_SUIT.liohKg, s.suit.waterKg / FULL_SUIT.waterKg, s.suit.batteryWh / FULL_SUIT.batteryWh,
+    );
+    return (
+      <div className={critical ? 'game3d critical-frame' : 'game3d'}>
+        <World3D
+          pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
+          tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
+        />
+
+        <div className="g3-topleft glass">
+          <span>DAY {clock.sol} · {clock.time} LTST · MEDA SOL {s.weather.sol}</span>
+          <span className={frame.speed === 'emergency' ? 'critical' : frame.speed === 'storm' ? 'warning' : undefined}>
+            {SPEED_LABEL[frame.speed]} · OUT {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
+          </span>
+          {hero && (
+            <span className={hero.min < 30 ? 'g3-hero warning' : 'g3-hero'}>
+              {CONSUMABLE_LABEL[hero.key]} OUT IN <b>{formatMinutes(hero.min)}</b>
+            </span>
+          )}
+          <span className="g3-where">{s.shelter === 'cabin' ? 'IN CABIN · SUIT CHARGING' : 'OUTSIDE'}</span>
+        </div>
+
+        <div className="g3-center">
+          {phase === 'warning' && (
+            <p className="storm warning">DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}</p>
+          )}
+          {stormActive && phase !== 'warning' && <p className="storm warning">DUST STORM: {phase.toUpperCase()}</p>}
+          {flow && !flow.arrived && (
+            <p className="warning">EN ROUTE: {SHELTER_NAME[flow.choice.shelter]} · {formatMinutes(flow.choice.travelMin - (s.clockMin - flow.chosenAtMin))} TO COVER</p>
+          )}
+          {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
+          {mission && !missionCard && <div className="glass g3-mission">{sol1Panel}</div>}
+          {walkLine && <div className="glass g3-walk">{walkLine}</div>}
+        </div>
+
+        <aside className="g3-right">
+          <div className="glass g3-map">
+            <HudMap
+              pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
+              night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
+              astronaut={astronaut} onRoute={onRoute}
+            />
+          </div>
+          <button className={lowest < 0.3 ? 'glass g3-suit-toggle warning' : 'glass g3-suit-toggle'}
+            aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
+            SUIT · LOWEST {Math.round(Math.max(0, lowest) * 100)}% {suitOpen ? '▴' : '▾'}
+          </button>
+          {suitOpen && (
+            <div className="glass g3-suit">
+              {gauge('o2Min', s.suit.o2Kg * 1000, FULL_SUIT.o2Kg * 1000, 'g')}
+              {gauge('scrubberMin', s.suit.liohKg * 1000, FULL_SUIT.liohKg * 1000, 'g')}
+              {gauge('waterMin', s.suit.waterKg, FULL_SUIT.waterKg, 'kg', 2)}
+              {gauge('batteryMin', s.suit.batteryWh, FULL_SUIT.batteryWh, 'Wh')}
+              <div className="readouts">
+                <span className={s.suit.inspiredPCO2KPa > 1 ? 'warning' : undefined}>pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} kPa</span>
+                <span className={s.suit.coreTempC > 38 || s.suit.coreTempC < 36 ? 'warning' : undefined}>CORE {s.suit.coreTempC.toFixed(1)} °C</span>
+              </div>
+            </div>
+          )}
+          {frame.warnings.length > 0 && (
+            <div className="glass g3-alarms" aria-live="polite">
+              {frame.warnings.map((w) => <span key={w.code} className={w.level}>▲ {w.message}</span>)}
+            </div>
+          )}
+        </aside>
+
+        {overlay && <div className="g3-overlay">{overlay}</div>}
+
+        <footer className="g3-bottom glass">
+          <span className="dim">WASD move · SHIFT run · Q/E or drag to look · scroll to zoom · SPACE pause</span>
+          <div className="controls" role="group" aria-label="Game controls">
+            <button className="start-sol1" onClick={startSol1}>{mission ? 'RESTART SOL 1' : 'START SOL 1'}</button>
+            <button aria-pressed={paused} onClick={() => setPaused((p) => !p)}>{paused ? 'RESUME' : 'PAUSE'}</button>
+            <button onClick={triggerStorm} disabled={stormActive || mission !== null}>TRIGGER STORM</button>
+            <button onClick={skipHour}>SKIP +1 H</button>
+            <button onClick={() => restart()}>RESTART</button>
+          </div>
+          <span className="dim g3-source">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</span>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <>

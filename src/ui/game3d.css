@@ -1,0 +1,86 @@
+/* 3D game view. Layout only; colours come from the :root variables in src/index.css.
+   The panels are "glass": see-through and blurred, so they blend into the Mars scene behind them. */
+
+.game3d {
+  position: relative; height: calc(100vh - 70px); min-height: 480px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--fg) 20%, transparent); border-radius: 14px;
+  background: var(--bg);
+}
+.game3d.critical-frame { border-color: var(--critical); }
+.world3d { position: absolute; inset: 0; touch-action: none; cursor: grab; }
+.world3d:active { cursor: grabbing; }
+.world3d canvas { display: block; }
+
+.glass {
+  background: color-mix(in srgb, var(--bg) 52%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent);
+  border-radius: 10px;
+  backdrop-filter: blur(7px) saturate(1.15);
+  -webkit-backdrop-filter: blur(7px) saturate(1.15);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--bg) 85%, transparent);
+}
+
+.g3-topleft {
+  position: absolute; top: 12px; left: 12px; z-index: 2; padding: 8px 12px;
+  display: flex; flex-direction: column; gap: 2px; font-size: 12px; letter-spacing: 0.06em; max-width: min(420px, 60%);
+}
+.g3-hero { font-size: 13px; letter-spacing: 0.1em; }
+.g3-where { letter-spacing: 0.12em; }
+.g3-hero b { font-size: 24px; font-weight: normal; margin-left: 6px; font-variant-numeric: tabular-nums; }
+
+.g3-center {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; max-width: 40%;
+}
+/* Readable over a bright sky: dim text inside glass is lifted, and status lines get their own glass strip. */
+.glass .dim { color: color-mix(in srgb, var(--fg) 72%, transparent); }
+.g3-center > p {
+  margin: 0; padding: 3px 10px; border-radius: 8px; text-shadow: 0 1px 4px var(--bg);
+  background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.g3-mission, .g3-walk { padding: 6px 10px; }
+.g3-mission .mission-status p { margin: 0 0 6px; }
+
+.g3-right {
+  position: absolute; top: 12px; right: 12px; z-index: 2; width: min(360px, 34vw);
+  display: flex; flex-direction: column; gap: 8px; max-height: calc(100% - 90px); overflow: auto;
+}
+.g3-map { padding: 6px; }
+.g3-map .hud-map-canvas { min-height: 0; }
+.g3-map .hud-map-src, .g3-map .hud-map-log { font-size: 10px; }
+.g3-suit-toggle {
+  font: inherit; font-size: 12px; letter-spacing: 0.12em; padding: 7px 10px; cursor: pointer; color: var(--fg); text-align: left;
+}
+.g3-suit-toggle.warning { color: var(--warning); border-color: var(--warning); }
+.g3-suit-toggle:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.g3-suit { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+/* Gauge bars blend into the scene: see-through tracks, softly glowing fills. */
+.g3-suit .gauge-bar { border-color: color-mix(in srgb, var(--fg) 30%, transparent); background: color-mix(in srgb, var(--bg) 30%, transparent); }
+.g3-suit .gauge-bar > span { background: color-mix(in srgb, var(--fg) 75%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--fg) 40%, transparent); }
+.g3-suit .gauge.warning .gauge-bar > span { background: var(--warning); }
+.g3-alarms { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+
+.g3-overlay {
+  position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 16px; overflow: auto;
+  background: color-mix(in srgb, var(--bg) 45%, transparent); backdrop-filter: blur(3px);
+}
+
+.g3-bottom {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2; padding: 6px 10px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; font-size: 11px;
+}
+.g3-bottom .controls button { background: color-mix(in srgb, var(--bg) 30%, transparent); }
+.g3-source { flex-basis: 100%; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .game3d { height: calc(100vh - 60px); }
+  .g3-right { width: 46vw; }
+  .g3-center { top: auto; bottom: 120px; max-width: 90%; }
+  .g3-topleft { max-width: 50%; }
+  .g3-bottom > .dim:first-child { display: none; }
+  /* Keep only the map and its buttons; the help and credit lines stay in the footer caption. */
+  .g3-map .hud-map > :not(.hud-map-canvas):not(.hud-map-bar) { display: none; }
+  .g3-topleft { font-size: 10px; padding: 6px 8px; }
+  .g3-hero b { font-size: 18px; }
+  .g3-bottom .controls button { padding: 3px 7px; font-size: 11px; }
+}
