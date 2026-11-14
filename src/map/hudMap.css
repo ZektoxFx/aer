@@ -1,6 +1,6 @@
 /* The map component for the HUD (Map role). Styles only its own .hud-map elements, never the HUD's. */
 
-.hud-map { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; width: 100%; text-align: left; }
+.hud-map { container-type: inline-size; flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; width: 100%; text-align: left; }
 .hud-map-canvas { position: relative; flex: none; aspect-ratio: 8 / 5; min-height: 260px; border: 1px solid var(--dim); border-radius: 8px; overflow: hidden; }
 .hud-map-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; font-size: 12px; letter-spacing: 0.06em; }
 .hud-map-bar .warning { color: var(--warning); }
@@ -30,3 +30,10 @@
 .hud-map-suit .warning { color: var(--warning); }
 .hud-map-suit .warning b { background: var(--warning); }
 .hud-map-btns button[aria-pressed='true'] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+
+/* Help line: the full sentence on the 2D HUD, a short one on narrow maps (the 3D view's minimap). */
+.hud-map-hint-short { display: none; }
+@container (max-width: 480px) {
+  .hud-map-hint-long { display: none; }
+  .hud-map-hint-short { display: inline; }
+}

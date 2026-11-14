@@ -5,6 +5,9 @@
   padding: 4px 8px; background: rgba(7, 11, 8, 0.8); border: 1px solid #1c2a20; color: var(--fg); font-size: 12px; pointer-events: none;
 }
 
+/* Minimap: one short line (slope, ground, return margin) in the corner instead of the full readout. */
+.mv-readout.compact { left: 6px; top: 6px; max-width: calc(100% - 44px); gap: 2px 8px; padding: 2px 6px; font-size: 10px; }
+
 .md { height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); }
 .md .dim { color: var(--dim); }
 .md .small { font-size: 12px; }

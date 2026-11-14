@@ -1,6 +1,7 @@
 // The Mars map canvas. Static layers (terrain, contours, slope, explored ground, safe zone) are rendered once
 // into offscreen canvases; an animation loop composites them with the live parts (route, astronaut, storm).
 // Click = add waypoint, right-click a waypoint = remove it, wheel = zoom, drag = pan, double-click = fit.
+// Small maps (the HUD minimap) follow the astronaut, zoomed in, until the player zooms or drags; double-click goes back.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as RMouseEvent, WheelEvent as RWheelEvent } from 'react';
 import type { DataPack } from '../data/types';
@@ -266,6 +267,17 @@ function niceLength(target: number): number {
 
 interface Mote { x: number; y: number; v: number; len: number }
 
+/** Below this width the map is the small HUD minimap: it follows the astronaut and shows fewer labels. */
+const COMPACT_W = 480;
+/** Minimap zoom while following, as a multiple of the whole-area fit. */
+const FOLLOW_ZOOM = 3;
+
+interface Box { x: number; y: number; w: number; h: number }
+const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+/** Label order: the most important names get their place first; the rest are skipped if there is no room. */
+const LABEL_RANK: Partial<Record<ItemKind, number>> = { base: 0, rover: 1, shelter: 2, o2: 3, lioh: 3, water: 3, battery: 3, repair: 3, manual: 4, scrap: 5, clue: 6, science: 6 };
+const labelRank = (it: MapItem) => (it.required ? 0 : LABEL_RANK[it.kind] ?? 6);
+
 export function MapView(props: MapViewProps) {
   const { pack, explored, exploredVersion, range, crashPath } = props;
   const reserve = props.reserve ?? 0.1;
@@ -290,7 +302,7 @@ export function MapView(props: MapViewProps) {
   const masks = useMemo(() => renderMasks(props.zones), [props.zones]);
   const slope = useMemo(() => renderSlope(el), [el]);
   // exploredVersion signals that the grid inside `explored` changed.
-  const fog = useMemo(() => renderFog(explored), [explored, exploredVersion]);
+  const fog = useMemo(() => { void exploredVersion; return renderFog(explored); }, [explored, exploredVersion]);
   const rangeImg = useMemo(() => (range ? renderRange(el, range, reserve) : null), [el, range, reserve]);
   const rangeEdges = useMemo(() => {
     if (!range) return null;
@@ -323,6 +335,11 @@ export function MapView(props: MapViewProps) {
   useEffect(() => { if (!userMovedRef.current) viewRef.current = null; }, [size.w, size.h]);
 
   const getView = (): View => {
+    // Minimap: centred on the astronaut and zoomed in, until the player moves the view themselves.
+    if (size.w < COMPACT_W && !userMovedRef.current) {
+      const scale = Math.min(size.w / W, size.h / H) * 0.94 * FOLLOW_ZOOM, a = props.astronaut;
+      return { scale, ox: size.w / 2 - a.x * scale, oy: size.h / 2 - a.y * scale };
+    }
     if (!viewRef.current) {
       const scale = Math.min(size.w / W, size.h / H) * 0.94;
       viewRef.current = { scale, ox: (size.w - W * scale) / 2, oy: (size.h - H * scale) / 2 };
@@ -332,7 +349,7 @@ export function MapView(props: MapViewProps) {
   const toMap = (sx: number, sy: number): Pt => { const v = getView(); return { x: (sx - v.ox) / v.scale, y: (sy - v.oy) / v.scale }; };
 
   // Everything the draw loop needs, refreshed after every render so the loop always sees the latest props.
-  const live = { props, size, getView, terrain, contours, slope, fog, rangeImg, rangeEdges, scar, photo, reserve, masks };
+  const live = { props, size, hover, getView, terrain, contours, slope, fog, rangeImg, rangeEdges, scar, photo, reserve, masks };
   const liveRef = useRef(live);
   useEffect(() => { liveRef.current = live; });
 
@@ -352,6 +369,16 @@ export function MapView(props: MapViewProps) {
       const v = L.getView();
       const S = (p: Pt) => ({ x: v.ox + p.x * v.scale, y: v.oy + p.y * v.scale });
       const mapW = PW * v.scale, mapH = PH * v.scale;
+      const compact = sz.w < COMPACT_W;
+      // Screen boxes already used (north arrow, key, scale bar, icons, labels), so labels never cover each other.
+      const north = compact ? { x: sz.w - 18, y: 20, r: 12 } : { x: sz.w - 28, y: 30, r: 17 };
+      const key: Box = compact ? { x: sz.w - 92, y: sz.h - 36, w: 86, h: 30 } : { x: sz.w - 204, y: sz.h - 58, w: 192, h: 40 };
+      const barLen = niceLength((compact ? 80 : 140) / v.scale), barW = barLen * v.scale;
+      const placed: Box[] = [
+        { x: north.x - north.r, y: north.y - north.r, w: north.r * 2, h: north.r * 2 },
+        { x: 10, y: sz.h - 36, w: barW + 12, h: 26 },
+      ];
+      if (lay.range && P.range) placed.push(key);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = '#070b08';
       ctx.fillRect(0, 0, sz.w, sz.h);
@@ -410,8 +437,13 @@ export function MapView(props: MapViewProps) {
         const c = S(P.searchArea.at), r = P.searchArea.r * v.scale;
         ctx.setLineDash([10, 6]); ctx.strokeStyle = 'rgba(255,107,214,0.7)'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(255,107,214,0.9)'; ctx.font = 'bold 10px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center';
-        ctx.fillText('ROVER: LAST KNOWN AREA', c.x, c.y - r - 6);
+        ctx.fillStyle = 'rgba(255,107,214,0.9)'; ctx.font = `bold ${compact ? 9 : 10}px ui-monospace, Consolas, monospace`; ctx.textAlign = 'center';
+        // Kept inside the visible map, so it is never cut off at the edge.
+        const txt = compact ? 'ROVER: LAST SEEN' : 'ROVER: LAST KNOWN AREA', tw = ctx.measureText(txt).width;
+        const lo = Math.max(0, v.ox) + tw / 2 + 4, hi = Math.min(sz.w, v.ox + mapW) - tw / 2 - 4;
+        const tx = Math.max(lo, Math.min(hi, c.x)), ty = Math.max(14, Math.min(sz.h - 6, c.y - r - 6));
+        ctx.fillText(txt, tx, ty);
+        placed.push({ x: tx - tw / 2 - 3, y: ty - 10, w: tw + 6, h: 13 });
       }
       if (!P.storm) {
         ctx.strokeStyle = 'rgba(255,107,214,0.95)'; ctx.lineWidth = 2;
@@ -542,13 +574,19 @@ export function MapView(props: MapViewProps) {
         }
       });
 
-      // Items. In a storm, shelters still reachable pulse (proposal §6.3).
+      // Items: icons first, then labels, most important first, skipping any label that would cover one already placed
+      // (on the small HUD map the names piled up). Hovering an item shows its full name. In a storm, shelters still
+      // reachable pulse (proposal §6.3).
       ctx.font = 'bold 9px ui-monospace, Consolas, monospace';
+      const hs = L.hover ? S(L.hover) : null;
+      let hot: { it: MapItem; color: string } | null = null, hotD = 14;
+      const tags: { it: MapItem; s: Pt; code: string; color: string; alpha: number }[] = [];
       for (const it of items) {
         const shown = !it.hidden || found.has(it.id);
         if (!shown && !lay.allItems) continue;
         const s = S(it.at);
         const st = it.required ? { code: 'COMMS', color: '#ffffff' } : ITEM_STYLE[it.kind];
+        if (hs) { const d = Math.hypot(hs.x - s.x, hs.y - s.y); if (d < hotD) { hotD = d; hot = { it, color: st.color }; } }
         if (it.kind === 'sample') {
           ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.strokeStyle = st.color; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.arc(s.x, s.y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -568,10 +606,25 @@ export function MapView(props: MapViewProps) {
           ctx.beginPath(); ctx.moveTo(s.x, s.y - 8); ctx.lineTo(s.x + 8, s.y); ctx.lineTo(s.x, s.y + 8); ctx.lineTo(s.x - 8, s.y); ctx.closePath(); ctx.fill(); ctx.stroke();
           ctx.fillStyle = st.color; ctx.beginPath(); ctx.arc(s.x, s.y, 2.2, 0, Math.PI * 2); ctx.fill();
         }
-        const tw = ctx.measureText(st.code).width + 6;
-        ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(s.x - tw / 2, s.y + 11, tw, 12);
-        ctx.fillStyle = st.color; ctx.fillText(st.code, s.x, s.y + 17.5);
+        placed.push({ x: s.x - 9, y: s.y - 9, w: 18, h: 18 });
+        if (st.code) tags.push({ it, s, code: st.code, color: st.color, alpha: ctx.globalAlpha });
         ctx.globalAlpha = 1;
+      }
+      tags.sort((p, q) => labelRank(p.it) - labelRank(q.it));
+      for (const t of tags) {
+        // The minimap names only what matters for getting home; NASA sites and scrap show on hover or the big map.
+        if (t.it === hot?.it || (compact && labelRank(t.it) >= 5)) continue;
+        const tw = ctx.measureText(t.code).width + 6;
+        for (const [dx, dy] of [[0, 17.5], [0, -17.5], [tw / 2 + 11, 0], [-(tw / 2 + 11), 0]]) {
+          const bx: Box = { x: t.s.x + dx - tw / 2, y: t.s.y + dy - 6, w: tw, h: 12 };
+          if (placed.some((q) => overlaps(q, bx))) continue;
+          placed.push(bx);
+          ctx.globalAlpha = t.alpha;
+          ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(bx.x, bx.y, bx.w, bx.h);
+          ctx.fillStyle = t.color; ctx.fillText(t.code, t.s.x + dx, t.s.y + dy);
+          ctx.globalAlpha = 1;
+          break;
+        }
       }
 
       // Find pings.
@@ -597,21 +650,41 @@ export function MapView(props: MapViewProps) {
       ctx.fillStyle = '#e8fff0'; ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(a.x, a.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-      // Scale bar, north arrow and the safe-zone key.
+      // The hovered item's full name, kept inside the canvas.
+      if (hot) {
+        const hs2 = S(hot.it.at);
+        const text = `${hot.it.label}${hot.it.fiction ? ' (game fiction)' : ''}`;
+        ctx.font = 'bold 10px ui-monospace, Consolas, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        const tw = Math.min(sz.w - 8, ctx.measureText(text).width + 10);
+        const x = Math.max(4, Math.min(sz.w - tw - 4, hs2.x - tw / 2)), y = hs2.y - 30 < 4 ? hs2.y + 14 : hs2.y - 30;
+        ctx.fillStyle = 'rgba(7,11,8,0.92)'; ctx.fillRect(x, y, tw, 16);
+        ctx.strokeStyle = hot.color; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, tw - 1, 15);
+        ctx.fillStyle = hot.color; ctx.fillText(text, x + 5, y + 8.5, tw - 10);
+      }
+
+      // Scale bar, north arrow and the safe-zone key (smaller on the minimap).
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-      const len = niceLength(140 / v.scale);
-      const bx = 16, by = sz.h - 18, bw = len * v.scale;
+      const len = barLen;
+      const bx = 16, by = sz.h - 18, bw = barW;
       ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.fillRect(bx - 6, by - 18, bw + 12, 26);
       ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by - 4); ctx.stroke();
       ctx.fillStyle = '#4dff88'; ctx.font = '11px ui-monospace, Consolas, monospace';
       ctx.fillText(len >= 1000 ? `${len / 1000} km` : `${len} m`, bx, by - 7);
-      const nx = sz.w - 28, ny = 30;
-      ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.beginPath(); ctx.arc(nx, ny, 17, 0, Math.PI * 2); ctx.fill();
+      const nx = north.x, ny = north.y, nk = north.r / 17;
+      ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.beginPath(); ctx.arc(nx, ny, north.r, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#4dff88';
-      ctx.beginPath(); ctx.moveTo(nx, ny - 12); ctx.lineTo(nx + 6, ny + 6); ctx.lineTo(nx, ny + 2); ctx.lineTo(nx - 6, ny + 6); ctx.closePath(); ctx.fill();
-      ctx.font = 'bold 9px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center'; ctx.fillText('N', nx, ny + 14);
-      if (lay.range && P.range) {
+      ctx.beginPath(); ctx.moveTo(nx, ny - 12 * nk); ctx.lineTo(nx + 6 * nk, ny + 6 * nk); ctx.lineTo(nx, ny + 2 * nk); ctx.lineTo(nx - 6 * nk, ny + 6 * nk); ctx.closePath(); ctx.fill();
+      if (!compact) { ctx.font = 'bold 9px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center'; ctx.fillText('N', nx, ny + 14); }
+      if (lay.range && P.range && compact) {
+        ctx.textAlign = 'left'; ctx.font = '9px ui-monospace, Consolas, monospace';
+        const kx = key.x + 6, ky = key.y + 11;
+        ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(key.x, key.y, key.w, key.h);
+        ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(kx, ky - 3); ctx.lineTo(kx + 12, ky - 3); ctx.stroke();
+        ctx.fillStyle = '#4dff88'; ctx.fillText('SAFE RETURN', kx + 16, ky);
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffb000'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(kx, ky + 9); ctx.lineTo(kx + 12, ky + 9); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#ffb000'; ctx.fillText('ONE-WAY', kx + 16, ky + 12);
+      } else if (lay.range && P.range) {
         ctx.textAlign = 'left'; ctx.font = '10px ui-monospace, Consolas, monospace';
         const kx = sz.w - 196, ky = sz.h - 44;
         ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(kx - 8, ky - 14, 192, 40);
@@ -672,12 +745,13 @@ export function MapView(props: MapViewProps) {
     const sl = slopeAt(el, hover);
     const ci = cellOf(el, hover);
     const safe = range?.safe[ci], reach = range?.reach[ci];
+    const compact = size.w < COMPACT_W;
     return (
-      <div className="mv-readout">
-        <span>{ll.lat.toFixed(4)}°N {ll.lon.toFixed(4)}°E</span>
-        <span>elev {heightAt(el, hover).toFixed(0)} m</span>
+      <div className={compact ? 'mv-readout compact' : 'mv-readout'}>
+        {!compact && <span>{ll.lat.toFixed(4)}°N {ll.lon.toFixed(4)}°E</span>}
+        {!compact && <span>elev {heightAt(el, hover).toFixed(0)} m</span>}
         <span style={{ color: sl > SLOPE_BLOCKED ? 'var(--critical)' : sl > SLOPE_CAUTION ? 'var(--warning)' : undefined }}>slope {sl.toFixed(1)}°{sl > SLOPE_BLOCKED ? ' BLOCKED' : ''}</span>
-        <span>{z ? z.label : 'firm ground'}</span>
+        {(!compact || z) && <span>{z ? z.label : 'firm ground'}</span>}
         <span>{(dist(hover, props.base) / 1000).toFixed(2)} km to base</span>
         {safe !== undefined && reach !== undefined && (
           safe >= reserve ? <span>return margin {(safe * 100).toFixed(0)}%</span>

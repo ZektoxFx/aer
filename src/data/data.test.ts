@@ -221,3 +221,27 @@ describe('terrain tile, relay passes and dust devils', () => {
     expect(dd.hourlyLTST.filter((h) => h.hour < 8 || h.hour >= 20).every((h) => h.vortices === 0)).toBe(true);
   });
 });
+
+describe('season (Ls) on every sol', () => {
+  it('each scenario sol in the pack carries its own Ls, matching weather.json (issue #16)', () => {
+    const weather = load<WeatherFile>('weather.json');
+    for (const s of pack.sols) {
+      const w = weather.sols.find((x) => x.sol === s.sol);
+      expect(s.ls, `sol ${s.sol}`).toBeDefined();
+      expect(s.ls).toBe(w?.ls);
+    }
+  });
+
+  it('a sol with borrowed dust still has its own season: Ls rises about 0.5 deg a sol', () => {
+    const weather = load<WeatherFile>('weather.json');
+    const byS = new Map(weather.sols.map((w) => [w.sol, w]));
+    // Sol 313 had no dust measurement (tau from 312), but its Ls is its own.
+    expect(byS.get(313)!.tauFromSol).toBe(312);
+    expect(byS.get(313)!.ls - byS.get(312)!.ls).toBeCloseTo(0.5, 1);
+    // Across the storm window, Ls never stalls or jumps.
+    for (let sol = 301; sol <= 330; sol++) {
+      const a = byS.get(sol - 1), b = byS.get(sol);
+      if (a && b) expect(b.ls - a.ls, `sol ${sol}`).toBeGreaterThan(0.3);
+    }
+  });
+});

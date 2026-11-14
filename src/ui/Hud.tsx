@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { HudMap, type Pt, type RouteResult } from '../map';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { HudMap, type MapWorldState, type Pt, type RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
@@ -15,8 +15,13 @@ import {
   type ActionId, type CauseId, type Sol1State,
 } from './sol1';
 import { Sol1Panel } from './Sol1Panel';
-import { hudKeyAction } from './settings';
+import { browserStorage, hudKeyAction } from './settings';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
+import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
+import { World3D } from './World3D';
+import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
+import { missionSteps, nextRelayPass } from './mission';
+import './game3d.css';
 import './hud.css';
 
 // Test controls until Map drives the activity from a planned route.
@@ -30,11 +35,64 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
 const SHELTER_NAME: Record<Shelter, string> = { cabin: 'CABIN', wreck: 'WRECK', builtShelter: 'BUILT SHELTER', none: 'OPEN GROUND' };
 
 /** In-suit HUD: a visor frame of readouts around an open centre (map and photos go there later). */
-export function Hud({ data }: { data: GameData }) {
+export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d' | '3d'; onView?: (v: 'hud' | 'telemetry') => void }) {
   const { pack } = data;
+  const base = useMemo(() => basePoint(pack), [pack]);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  // 3D free walking: the latest movement from the 3D view, and a key to put the astronaut back at the cabin.
+  const moveRef = useRef<MoveResult | null>(null);
+  // LOCAL DRAFT (Map): the map's items, zones, safe zone and route, so the 3D world shows the same world.
+  const [mapWorld, setMapWorld] = useState<MapWorldState | null>(null);
+  const [placeKey, setPlaceKey] = useState(0);
+  const [suitOpen, setSuitOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [lookLocked, setLookLocked] = useState(false);
+  // How to play: shown once per browser on the first 3D visit (the clock holds while it is open); MENU reopens it.
+  const [howToOpen, setHowToOpen] = useState(() => {
+    try { return mode === '3d' && browserStorage()?.getItem('aer.howto.seen') !== '1'; } catch { return mode === '3d'; }
+  });
+  const closeHowTo = () => {
+    setHowToOpen(false);
+    setPaused(false);
+    try { browserStorage()?.setItem('aer.howto.seen', '1'); } catch { /* private window: show again next time */ }
+  };
+  // The controls hint fades out once the player starts walking (or after 15 s).
+  const [hintOn, setHintOn] = useState(true);
+  const hintOnRef = useRef(true);
+  useEffect(() => {
+    if (howToOpen) return; // count from when the player can actually play
+    const id = setTimeout(() => { hintOnRef.current = false; setHintOn(false); }, 15000);
+    return () => clearTimeout(id);
+  }, [howToOpen]);
+  // LOCAL DRAFT (Map/Aiman): first- or third-person camera in the 3D view; V switches.
+  // LOCAL DRAFT: start in first person (the eyes open through the visor at the end of the intro), then the camera
+  // pulls back to third person after a few seconds, unless the player has already picked a view.
+  const [view, setView] = useState<'first' | 'third'>(mode === '3d' ? 'first' : 'third');
+  const viewPicked = useRef(false);
+  useEffect(() => {
+    const id = setTimeout(() => { if (!viewPicked.current) setView('third'); }, 8000);
+    return () => clearTimeout(id);
+  }, []);
+  useEffect(() => {
+    if (mode !== '3d') return;
+    const onV = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'v' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof Element && e.target.closest('input, select, textarea')) return;
+      viewPicked.current = true;
+      setView((v) => (v === 'first' ? 'third' : 'first'));
+    };
+    window.addEventListener('keydown', onV);
+    return () => window.removeEventListener('keydown', onV);
+  }, [mode]);
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
+  // Free-play environment timeline: the storm forecast for this run (null once it has arrived, or in Sol 1).
+  const [stormAt, setStormAt] = useState<number | null>(() => stormForecastAt(frame.state.clockMin));
+  const stormAtRef = useRef(stormAt);
+  useEffect(() => { stormAtRef.current = stormAt; }, [stormAt]);
   const [paused, setPaused] = useState(false);
   const [modeId, setModeId] = useState('cabin');
   const [flow, setFlow] = useState<ShelterFlow | null>(null);
@@ -56,6 +114,7 @@ export function Hud({ data }: { data: GameData }) {
   const missionRef = useRef<Sol1State | null>(null);
   const pausedRef = useRef(paused);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { if (howToOpen) setPaused(true); }, [howToOpen]);
 
   /** One step of the game: the sim tick plus the shelter flow (arrival, then the summary once the storm is over). */
   const step = (dt: number, isPaused: boolean): TickResult => {
@@ -81,6 +140,17 @@ export function Hud({ data }: { data: GameData }) {
         flowRef.current = next;
       }
       setFlow(flowRef.current);
+    }
+    // The forecast storm arrives on schedule (free play only).
+    const due = stormAtRef.current;
+    if (due !== null && !missionRef.current && state.clockMin >= due) {
+      if (!state.storm || stormPhase(state.storm, state.clockMin) === 'over') state = { ...state, storm: makeStorm(state.clockMin) };
+      stormAtRef.current = null;
+      setStormAt(null);
+    }
+    const mv = moveRef.current;
+    if (modeRef.current === '3d' && mv && !walkRef.current && !missionRef.current && !flowRef.current) {
+      state = { ...state, activity: activityFor(mv), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
     }
     const wk = walkRef.current;
     if (wk && wk.stoppedAt === null) {
@@ -114,18 +184,31 @@ export function Hud({ data }: { data: GameData }) {
   // Game loop: advance the sim by real elapsed time every animation frame.
   useEffect(() => {
     let last = performance.now();
+    let lastDraw = 0;
     let raf = requestAnimationFrame(function loop(now) {
       const dt = Math.min(0.25, (now - last) / 1000); // cap so a hidden tab doesn't jump hours
       last = now;
-      setFrame(stepRef.current(dt, pausedRef.current));
+      const r = stepRef.current(dt, pausedRef.current);
+      // In 3D the scene draws itself every frame; the HUD text only needs ~15 updates a second.
+      if (modeRef.current !== '3d' || now - lastDraw > 66) { lastDraw = now; setFrame(r); }
       raf = requestAnimationFrame(loop);
     });
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  const onMove3d = useCallback((m: MoveResult) => {
+    moveRef.current = m;
+    if (m.moving && hintOnRef.current) { hintOnRef.current = false; setHintOn(false); }
+    if (walkRef.current) return; // the route walker owns the position
+    const atCabin = inCabinZone(m.pos, base);
+    if (atCabin ? postedRef.current !== null : !postedRef.current || distM(postedRef.current, m.pos) > 20) {
+      postedRef.current = atCabin ? null : m.pos;
+      setAstronaut(atCabin ? undefined : m.pos);
+    }
+  }, [base, setHintOn]);
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; setWalk(null); homeAfterRef.current = null;
-    if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); }
+    if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
   };
   const setMode = (id: string) => {
     const m = MODES.find((x) => x.id === id)!;
@@ -156,11 +239,16 @@ export function Hud({ data }: { data: GameData }) {
     walkRef.current = next; setWalk(next);
   };
   const clearFlow = () => { flowRef.current = null; setFlow(null); setSummary(null); };
-  const triggerStorm = () => { clearFlow(); game.current = { ...game.current, storm: makeStorm(game.current.clockMin) }; };
+  const triggerStorm = () => {
+    clearFlow(); stormAtRef.current = null; setStormAt(null);
+    game.current = { ...game.current, storm: makeStorm(game.current.clockMin) };
+  };
   const setMissionState = (m: Sol1State | null) => { missionRef.current = m; setMission(m); };
   const restart = (i = solIndex) => {
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
+    const forecast = stormForecastAt(game.current.clockMin);
+    stormAtRef.current = forecast; setStormAt(forecast);
   };
 
   // Sol 1: Scrubber Saturation runs on the pack's Sol 1 scenario day, with the crash-damaged scrubber.
@@ -170,6 +258,7 @@ export function Hud({ data }: { data: GameData }) {
     game.current = { ...game.current, suit: { ...game.current.suit, liohKg: SOL1_START_LIOH_KG } };
     setMissionState(sol1Start(game.current.clockMin));
     setModeId('');
+    stormAtRef.current = null; setStormAt(null); // Sol 1 is about the scrubber; no storm
   };
   const missionBegin = () => {
     const m = sol1Begin(missionRef.current!, game.current.clockMin);
@@ -207,6 +296,7 @@ export function Hud({ data }: { data: GameData }) {
     if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
     const action = hudKeyAction(e.key);
     if (!action) return;
+    if (modeRef.current === '3d' && action !== 'pause') return;
     if (action === 'pause') { e.preventDefault(); setPaused((p) => !p); return; }
     const busy = missionRef.current !== null;
     if (action.startsWith('mode:') && !busy) setMode(action.slice(5));
@@ -234,6 +324,15 @@ export function Hud({ data }: { data: GameData }) {
   const stormActive = phase === 'warning' || phase === 'building' || phase === 'peak' || phase === 'clearing';
   const showChoices = stormActive && !flow && s.shelter !== 'cabin' && (phase === 'warning' || phase === 'building');
 
+  const menuAction = (id: string) => {
+    if (id === 'pause') setPaused((p) => !p);
+    else if (id === 'sol1') startSol1();
+    else if (id === 'storm') triggerStorm();
+    else if (id === 'skip') skipHour();
+    else if (id === 'restart') restart();
+    else if (id === 'howto') { setHowToOpen(true); hintOnRef.current = true; setHintOn(true); }
+    else if ((id === 'hud' || id === 'telemetry') && onView) onView(id);
+  };
   const missionCard = mission !== null && (isHolding(mission) || isOver(mission));
   const sol1Panel = mission && (
     <Sol1Panel
@@ -255,6 +354,10 @@ export function Hud({ data }: { data: GameData }) {
       <button className="choice-btn" onClick={() => setSummary(null)}>CONTINUE</button>
     </section>
   ) : showChoices ? (
+    <div className="shelter-pick">
+    <h2 className="shelter-title warning">
+      ▲ DUST STORM {phase === 'warning' ? `IN ${Math.floor(stormRealSec / 60)}:${String(stormRealSec % 60).padStart(2, '0')}` : 'IS HERE'} · WHERE WILL YOU WAIT IT OUT?
+    </h2>
     <div className="shelter-choices" role="group" aria-label="Where to wait out the storm">
       {SHELTER_CHOICES.map((c) => (
         <button key={c.id} className="shelter-card" onClick={() => pick(c)}>
@@ -264,6 +367,7 @@ export function Hud({ data }: { data: GameData }) {
           <span className="dim">{c.travelMin ? `${formatMinutes(c.travelMin)} to cover` : 'No cover'}</span>
         </button>
       ))}
+    </div>
     </div>
   ) : null;
 
@@ -308,6 +412,182 @@ export function Hud({ data }: { data: GameData }) {
       </div>
     );
   };
+
+  if (mode === '3d') {
+    const holding = paused || (mission !== null && (isHolding(mission) || isOver(mission)));
+    const timeScale = holding ? 0 : SPEED_X[frame.speed];
+    // A slim bar along the visor edge: see-through track, soft glow, minutes left.
+    const vbar = (key: Consumable, label: string, value: number, full: number) => {
+      const pct = Math.max(0, Math.min(100, (value / full) * 100));
+      return (
+        <div className={fc[key] < 30 ? 'vbar warning' : 'vbar'} key={key} title={`${CONSUMABLE_LABEL[key]} ${pct.toFixed(0)}%`}>
+          <span className="vbar-label">{label}</span>
+          <span className="vbar-track" role="meter" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}
+            aria-label={`${CONSUMABLE_LABEL[key]} remaining`}><span style={{ width: `${pct}%` }} /></span>
+          <span className="vbar-time">{formatMinutes(fc[key])}</span>
+        </div>
+      );
+    };
+    // The mission under the minimap: why, the steps ticked off from what the map has found, and the next relay pass.
+    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes);
+    const nextStep = steps.findIndex((x) => !x.done);
+    const goalPanel = (
+      <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
+        <button className="v-mission-head" aria-expanded={goalOpen} onClick={() => setGoalOpen((o) => !o)}>
+          <span>MISSION · CALL EARTH</span><span>{steps.filter((x) => x.done).length}/{steps.length} {goalOpen ? '▴' : '▾'}</span>
+        </button>
+        {goalOpen && (
+          <>
+            <p className="v-mission-why">Your lander's radio died in the crash. Perseverance's radio can still reach Earth through the orbiters.</p>
+            <ol className="v-mission-steps">
+              {steps.map((st, i) => (
+                <li key={st.id} className={st.done ? 'done' : i === nextStep ? 'next' : undefined}>
+                  <span className="v-check" aria-hidden="true">{st.done ? '✓' : i === nextStep ? '▸' : '○'}</span>
+                  <span>{st.label}{st.detail && <em>{st.detail}</em>}</span>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+      </section>
+    );
+    return (
+      <div className="game3d">
+        <World3D
+          pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
+          tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
+          onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
+          map={mapWorld}
+        />
+        <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
+
+        {/* Top left: time, conditions, oxygen and the first thing to run out. */}
+        <header className="v-top">
+          <div className="v-clock">
+            <span className="v-time">{clock.time}</span>
+            <span className="v-sub">LTST · DAY {clock.sol} · MEDA SOL {s.weather.sol}</span>
+            <span className={frame.speed === 'emergency' ? 'v-sub critical' : frame.speed === 'storm' ? 'v-sub warning' : 'v-sub'}>
+              {SPEED_LABEL[frame.speed]} · {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
+            </span>
+          </div>
+          <ul className="v-forecast" aria-label="Environment forecast">
+            {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky, data.devils).map((e) => (
+              <li key={e.id} className={e.hazard ? 'warning' : undefined}>
+                <span>{e.label}</span><b>{e.inMin === 0 ? 'NOW' : formatMinutes(e.inMin)}</b>
+              </li>
+            ))}
+          </ul>
+          <div className="v-o2">
+            {vbar('o2Min', 'O₂', s.suit.o2Kg, FULL_SUIT.o2Kg)}
+            {hero && (
+              <span className={hero.min < 30 ? 'v-hero warning' : 'v-hero'}>
+                {CONSUMABLE_LABEL[hero.key]} OUT IN <b>{formatMinutes(hero.min)}</b>
+              </span>
+            )}
+          </div>
+        </header>
+
+        {/* Top centre: what is happening right now. */}
+        <div className="v-status">
+          {phase === 'warning' && (
+            <p className="warning">DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}</p>
+          )}
+          {stormActive && phase !== 'warning' && <p className="warning">DUST STORM: {phase.toUpperCase()}</p>}
+          {flow && !flow.arrived && (
+            <p className="warning">EN ROUTE: {SHELTER_NAME[flow.choice.shelter]} · {formatMinutes(flow.choice.travelMin - (s.clockMin - flow.chosenAtMin))} TO COVER</p>
+          )}
+          {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
+          {mission && !missionCard && <div className="v-pill">{sol1Panel}</div>}
+          {walkLine && <div className="v-pill">{walkLine}</div>}
+          {frame.warnings.map((w) => <p key={w.code} className={w.level}>▲ {w.message}</p>)}
+        </div>
+
+        {/* Top right: the minimap, with suit details under it. */}
+        <aside className="v-map">
+          <HudMap
+            pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
+            night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
+            astronaut={astronaut} onRoute={onRoute} onWorld={setMapWorld}
+          />
+          {goalPanel}
+          <button className="v-toggle" aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
+            SUIT DETAILS {suitOpen ? '▴' : '▾'}
+          </button>
+          {suitOpen && (
+            <dl className="v-details">
+              <dt>O₂</dt><dd>{(s.suit.o2Kg * 1000).toFixed(0)} g · {formatMinutes(fc.o2Min)}</dd>
+              <dt>Scrubber</dt><dd>{(s.suit.liohKg * 1000).toFixed(0)} g · {formatMinutes(fc.scrubberMin)}</dd>
+              <dt>Water</dt><dd>{s.suit.waterKg.toFixed(2)} kg · {formatMinutes(fc.waterMin)}</dd>
+              <dt>Battery</dt><dd>{s.suit.batteryWh.toFixed(0)} Wh · {formatMinutes(fc.batteryMin)}</dd>
+              <dt>Inspired pCO₂</dt><dd className={s.suit.inspiredPCO2KPa > 1 ? 'warning' : undefined}>{s.suit.inspiredPCO2KPa.toFixed(2)} kPa</dd>
+              <dt>Core temp</dt><dd className={s.suit.coreTempC > 38 || s.suit.coreTempC < 36 ? 'warning' : undefined}>{s.suit.coreTempC.toFixed(1)} °C</dd>
+              <dt>Effort</dt><dd>{Math.round(metabolicW(s.activity))} W</dd>
+            </dl>
+          )}
+        </aside>
+
+        {/* Bottom edge: the other consumables, where you are, and the menu. */}
+        <footer className="v-bottom">
+          <div className="v-bars">
+            {vbar('scrubberMin', 'SCRUB', s.suit.liohKg, FULL_SUIT.liohKg)}
+            {vbar('waterMin', 'H₂O', s.suit.waterKg, FULL_SUIT.waterKg)}
+            {vbar('batteryMin', 'BAT', s.suit.batteryWh, FULL_SUIT.batteryWh)}
+          </div>
+          <span className="v-where">
+            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
+          </span>
+          {/* LOCAL DRAFT: camera switch. */}
+          <button className="v-menu-btn v-view-btn" aria-pressed={view === 'first'} onClick={() => { viewPicked.current = true; setView((v) => (v === 'first' ? 'third' : 'first')); }}
+            title="Switch camera (V)">{view === 'first' ? '◉ 1ST PERSON' : '◎ 3RD PERSON'}</button>
+          <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
+        </footer>
+        <p className={hintOn ? 'v-hint' : 'v-hint off'} aria-hidden={!hintOn}>
+          {lookLocked
+            ? `MOUSE LOOK ON · WASD move · SHIFT run · ${view === 'first' ? '' : 'scroll to zoom · '}V view · ESC frees the cursor`
+            : 'CLICK THE VIEW TO LOOK AROUND WITH THE MOUSE · WASD move · SHIFT run · V first/third person · SPACE pause'}
+        </p>
+        <p className="v-credit">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</p>
+
+        {menuOpen && (
+          <nav className="v-menu" aria-label="Game menu">
+            <h2>MENU</h2>
+            {([
+              [paused ? 'RESUME' : 'PAUSE', 'pause', false],
+              [mission ? 'RESTART SOL 1' : 'START SOL 1: SCRUBBER SATURATION', 'sol1', false],
+              ['TRIGGER DUST STORM', 'storm', stormActive || mission !== null],
+              ['SKIP +1 HOUR (TEST)', 'skip', false],
+              ['RESTART AT THE CABIN', 'restart', false],
+              ['HOW TO PLAY', 'howto', false],
+              ...(onView ? [['SWITCH TO 2D HUD', 'hud', false], ['TELEMETRY CHARTS', 'telemetry', false]] as const : []),
+            ] as const).map(([label, id, disabled]) => (
+              <button key={id} disabled={disabled} onClick={() => { menuAction(id); setMenuOpen(false); }}>{label}</button>
+            ))}
+            <button className="v-menu-close" onClick={() => setMenuOpen(false)}>CLOSE</button>
+          </nav>
+        )}
+
+        {overlay && <div className="g3-overlay">{overlay}</div>}
+
+        {howToOpen && (
+          <div className="g3-overlay">
+            <section className="howto" aria-label="How to play">
+              <h2>HOW TO PLAY</h2>
+              <p className="howto-goal">You crash-landed in Jezero Crater. Stay alive: keep an eye on your oxygen and suit, explore, and get under cover when a dust storm comes.</p>
+              <dl>
+                <dt>Walk</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hold <kbd>Shift</kbd> to run</dd>
+                <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>
+                <dt>Map</dt><dd>Top right. Click it to plan a route, then press WALK ROUTE. Stay inside the green line to get home.</dd>
+                <dt>Suit</dt><dd>Bars along the bottom; the big countdown top left is what runs out first. Stand at the lander to recharge.</dd>
+                <dt>Weather</dt><dd>Top-left forecast: dust devils, the storm warning, nightfall.</dd>
+                <dt>Menu</dt><dd>☰ MENU: start the Sol 1 mission, pause, or switch to the 2D view.</dd>
+              </dl>
+              <button className="choice-btn howto-go" onClick={closeHowTo} autoFocus>LET'S GO</button>
+            </section>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>

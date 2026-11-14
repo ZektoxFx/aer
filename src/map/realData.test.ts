@@ -114,8 +114,10 @@ describe('real Jezero data (Data role files)', () => {
     const rf = rangeField(g, model, L.base, L.base, FULL_SUIT);
     const ms = performance.now() - t0;
     expect(rf.safe[cellOf(pack.elevation, L.base)]).toBeGreaterThan(0.5);
-    expect(ms).toBeLessThan(3000);
-  });
+    // Loose limit (issue #32): it takes well under a second alone, but a busy laptop running the whole suite can be
+    // several times slower. This only catches a real slowdown, such as an accidental O(n²) search.
+    expect(ms).toBeLessThan(10000);
+  }, 20000);
 
   it('links samples to the Data role’s rock formations by target name', () => {
     const delta = (pack.rockFormations ?? []).find((r) => /wildcat ridge/i.test(r.associatedTarget));
