@@ -10,17 +10,18 @@ import referenceRaw from '../../public/data/reference.json?raw';
 import relayRaw from '../../public/data/relay.json?raw';
 import sunRaw from '../../public/data/sunlight.json?raw';
 import patchRaw from '../../public/data/terrain_patch_2m.json?raw';
+import tilesRaw from '../../public/data/terrain_tiles.json?raw';
 import weatherRaw from '../../public/data/weather.json?raw';
 import type {
-  ContentFile, CreditsFile, DustDevilFile, DustFile, PoiFile, RelayFile, SunlightTable, TerrainLayers, TerrainPatchMeta, WeatherFile,
+  ContentFile, CreditsFile, DustDevilFile, DustFile, PoiFile, RelayFile, SunlightTable, TerrainLayers, TerrainPatchMeta, TerrainTilesFile, WeatherFile,
 } from './files';
-import { distanceFactor, solarWm2, sunElevationDeg } from './sunlight';
+import { distanceFactor, solarWm2, sunAzimuthDeg, sunElevationDeg } from './sunlight';
 import { decodeTerrainPatch, patchHeightAt } from './terrainPatch';
 import type { DataPack } from './types';
 
 const raw: Record<string, string> = {
   'content.json': contentRaw, 'credits.json': creditsRaw, 'dust.json': dustRaw, 'dustdevils.json': devilsRaw, 'jezero_pack.json': packRaw, 'layers_20m.json': layersRaw,
-  'pois.json': poisRaw, 'reference.json': referenceRaw, 'relay.json': relayRaw, 'sunlight.json': sunRaw, 'terrain_patch_2m.json': patchRaw, 'weather.json': weatherRaw,
+  'pois.json': poisRaw, 'reference.json': referenceRaw, 'relay.json': relayRaw, 'sunlight.json': sunRaw, 'terrain_patch_2m.json': patchRaw, 'terrain_tiles.json': tilesRaw, 'weather.json': weatherRaw,
 };
 const load = <T>(name: string): T => JSON.parse(raw[name]) as T;
 
@@ -242,6 +243,64 @@ describe('season (Ls) on every sol', () => {
     for (let sol = 301; sol <= 330; sol++) {
       const a = byS.get(sol - 1), b = byS.get(sol);
       if (a && b) expect(b.ls - a.ls, `sol ${sol}`).toBeGreaterThan(0.3);
+    }
+  });
+});
+
+describe('sun direction and photo tiles for the 3D view', () => {
+  const LAT = 18.4;
+
+  it('puts the sun in the east in the morning, on the meridian at noon and in the west in the afternoon', () => {
+    for (const ls of [0, 90, 153, 270]) {
+      const am = sunAzimuthDeg(LAT, ls, 8), pm = sunAzimuthDeg(LAT, ls, 16);
+      expect(am).toBeGreaterThan(0);
+      expect(am).toBeLessThan(180);
+      expect(pm).toBeCloseTo(360 - am, 6); // mirrored about noon
+    }
+    // Sol 312 (Ls 153): the sun passes south of overhead, so it is due south at noon.
+    expect(sunAzimuthDeg(LAT, 153, 12)).toBeCloseTo(180, 6);
+    // Northern midsummer (Ls 90): the sun is 25.19 deg north, past Jezero's 18.4, so it is due north at noon.
+    expect(sunAzimuthDeg(LAT, 90, 12) % 360).toBeCloseTo(0, 6);
+    // At the equinox it rises due east and sets due west.
+    expect(sunAzimuthDeg(LAT, 0, 6)).toBeCloseTo(90, 6);
+    expect(sunAzimuthDeg(LAT, 0, 18)).toBeCloseTo(270, 6);
+  });
+
+  it('agrees with the sun height: at the horizon at sunrise, highest at noon', () => {
+    expect(sunElevationDeg(LAT, 0, 6)).toBeCloseTo(0, 6);
+    expect(sunElevationDeg(LAT, 153, 12)).toBeGreaterThan(sunElevationDeg(LAT, 153, 9));
+  });
+
+  it('photo tiles sit inside the map, match their pixel size, and the finest is centred on the cabin', async () => {
+    const file = load<TerrainTilesFile>('terrain_tiles.json');
+    const fs = (await import(/* @vite-ignore */ 'node:' + 'fs')) as { statSync(p: URL): { size: number } };
+    expect(file.tiles.map((t) => t.metresPerPixel)).toEqual([1, 0.25]);
+    for (const t of file.tiles) {
+      expect(t.cols).toBe(t.widthM / t.metresPerPixel);
+      expect(t.rows).toBe(t.heightM / t.metresPerPixel);
+      expect(Math.max(t.cols, t.rows)).toBeLessThanOrEqual(4096); // fits every WebGL 2 GPU
+      expect(t.x0M).toBeGreaterThanOrEqual(0);
+      expect(t.y0M).toBeGreaterThanOrEqual(0);
+      expect(t.x0M + t.widthM).toBeLessThanOrEqual(pack.area.widthM);
+      expect(t.y0M + t.heightM).toBeLessThanOrEqual(pack.area.heightM);
+      const size = fs.statSync(new URL(`../../public/data/${t.file}`, import.meta.url)).size;
+      expect(size).toBeGreaterThan(100_000);
+      expect(size).toBeLessThan(1_500_000); // keep the optional download small
+    }
+    // Cabin in the map frame: metres from the north-west corner (east + 3700, 2400 - north).
+    const cab = pack.crashedLander!.cabinLocation;
+    const cx = cab.eastingM + 3700, cy = 2400 - cab.northingM;
+    const fine = file.tiles[1];
+    expect(fine.x0M + fine.widthM / 2).toBe(cx);
+    expect(fine.y0M + fine.heightM / 2).toBe(cy);
+    // The wide tile reaches every spot where the rover can be parked.
+    const pois = load<PoiFile>('pois.json');
+    const wide = file.tiles[0];
+    for (const p of pois.pois.filter((q) => q.kind === 'rover_candidate')) {
+      expect(p.xM).toBeGreaterThan(wide.x0M);
+      expect(p.xM).toBeLessThan(wide.x0M + wide.widthM);
+      expect(p.yM).toBeGreaterThan(wide.y0M);
+      expect(p.yM).toBeLessThan(wide.y0M + wide.heightM);
     }
   });
 });

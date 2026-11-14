@@ -192,6 +192,25 @@ export interface RelayFile {
   };
 }
 
+/** terrain_tiles.json: sharper HiRISE photo tiles for the 3D view, drawn over jezero_base_2m.jpg (built by tools/data/bake_tiles.py). */
+export interface TerrainTilesFile {
+  source: string;
+  use: string;
+  frame: string;
+  credit: string;
+  tiles: {
+    file: string;
+    metresPerPixel: number;
+    /** North-west corner of the tile in the jezero_pack.json frame (metres from the map's NW corner, x east, y south). */
+    x0M: number;
+    y0M: number;
+    widthM: number;
+    heightM: number;
+    cols: number;
+    rows: number;
+  }[];
+}
+
 /** dustdevils.json: dust devil (vortex) timing and size at Jezero from MEDA. */
 export interface DustDevilFile {
   source: string;
