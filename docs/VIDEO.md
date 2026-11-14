@@ -6,7 +6,7 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 
 **App link** on the last card: https://aer-black.vercel.app (test it in a private window).
 
-**This is the team's only video script** (the shorter draft in `SUBMISSION.md` was removed, issue #34). It was written for the 2D HUD: if #27 makes the 3D view the main screen, re-plan rows 3-5 for the 3D view with the minimap and a route, and keep the captions. Record from the deployed build after the freeze, not a local branch.
+**This is the team's only video script** (the shorter draft in `SUBMISSION.md` was removed, issue #34). It was written for the 2D HUD. **TODO:** #27 made the 3D view the main screen, so re-plan rows 3-5 for the 3D view with the minimap and a route, and keep the captions. Fix the on-camera bugs in #40 (points 1-4) first. Record from the deployed build after the freeze, not a local branch.
 
 ---
 

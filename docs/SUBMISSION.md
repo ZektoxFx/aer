@@ -2,7 +2,7 @@
 
 Each `##` section below matches a field on the Space Apps project page. Paste them in as written. Lines marked **TODO** still need a teammate before we submit, and lines marked **CHECK** depend on something not merged yet: delete or update them at the hour-40 feature freeze, so the page only claims what judges can open.
 
-**Status (Data, November 14, issue #34):** drafted against `main` at 165 tests. Open team decisions: team name (confirm), storm strength, partner data, the SI wording, and the 3D view if #27 merges.
+**Status (Data, November 14, issue #34):** updated against `main` at 192 tests, with the 3D view (#27) merged. Open team decisions: team name (confirm), storm strength, partner data and the SI wording.
 
 Deadline: **Sunday, November 15, 11:59 p.m.** local time. Everything must be in English.
 
@@ -44,15 +44,15 @@ AER helps a Mars astronaut answer one question before every surface walk: *can I
   - **Scrubber saturation:** on Mars, the danger is your own breath. Mars air is 95% CO₂ but too thin to poison you; in a sealed suit, every exhalation adds CO₂, and only the scrubber removes it.
   - **A dust storm:** a five-minute countdown, then a choice of where to shelter, with collapsing solar power and shrinking sight while it lasts.
   - Throughout, the suit simulation models **work hot, rest cold**: walking overheats the suit even at −55 °C, while resting at night brings on hypothermia.
-- **CHECK (if #27 merges): a 3D view** of Jezero built from the real HiRISE elevation, with the HiRISE photo draped over it and hills drawn 1.6 × taller so the gentle relief reads on screen (labelled on screen). The astronaut walks it in third person, and movement feeds the same suit simulation; the map becomes a minimap.
+- **A 3D view, the main game screen.** Jezero is built from the real HiRISE elevation, with the HiRISE photo draped over it. Hills are drawn 1.6 × taller so the gentle relief reads on screen, and the screen says so. The astronaut walks it in first or third person (V switches), movement feeds the same suit simulation, and the layered map becomes a minimap. The 2D map view is one click away.
 
 ### How it works
 
-- **Suit simulation (TypeScript, checked by automated tests: 165 project-wide on November 14; TODO update the count at the freeze).** Oxygen use, CO₂ production and scrubber use all come from one metabolic rate set by speed, slope and load.
+- **Suit simulation (TypeScript, checked by automated tests: 192 project-wide on November 14; TODO update the count at the freeze).** Oxygen use, CO₂ production and scrubber use all come from one metabolic rate set by speed, slope and load.
   - Rates follow NASA's ISS-era averages (0.84 kg O₂ and 1.0 kg CO₂ per person per day). A 300 W walk matches the Apollo moonwalk average.
   - Starting supplies match Apollo and ISS spacesuit figures: 0.6 kg O₂, 3.9 kg cooling water, an 80 W electronics load.
   - Body heat is balanced against the cold and the suit's evaporative cooler.
-- **Point of no return.** The planner simulates the walk out, minute by minute. At each minute it also simulates the walk back along the same path, with uphill and downhill swapped. The last minute that still gets the astronaut home safely is the point of no return. On a long flat walk it is about 3½ hours with a fresh suit. With the partly used scrubber the crash leaves behind, it is about 2 hours: then the scrubber, not the oxygen, sets the limit. **CHECK (Sim):** confirm "about 2 hours" against the Sol 1 canister in `src/ui/sol1.ts`.
+- **Point of no return.** The planner simulates the walk out, minute by minute. At each minute it also simulates the walk back along the same path, with uphill and downhill swapped. The last minute that still gets the astronaut home safely is the point of no return. On a long flat walk it is about 3½ hours with a fresh suit. With the partly used scrubber the crash leaves behind, it is about 1¼ hours: then the scrubber, not the oxygen, sets the limit.
 - **Weather and light.** Temperature, pressure and wind come from Perseverance MEDA data for the chosen sol, shaped over the day. The sun's position follows Jezero's latitude and the season. Sunlight under dust comes from NASA's Mars solar radiation model (TM-103623), which includes light scattered by dust, with the ground albedo Perseverance measured at Jezero (0.12).
 - **Dust storms.** Dust optical depth drives solar power and how fast dust coats the panels: 0.2% per sol in clear weather, capped at the 2% per sol highest ever observed. The game's storm is deliberately stronger than Jezero's real January 2022 storm (τ 1.38 at its peak, which the data pack includes). Its peak is based on the global storm that ended Opportunity in 2018 (τ 10.8). **TODO (team decision):** say so on screen while the storm runs (and stop crediting Mastcam-Z for the storm's τ, issue #16), or switch the storm to the real Jezero curve.
 - **The data pipeline.** Python scripts read only the needed parts of multi-gigabyte USGS HiRISE files and bake everything into static files. Nothing depends on a live service, and the app runs anywhere.
