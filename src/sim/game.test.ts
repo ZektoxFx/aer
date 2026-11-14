@@ -79,11 +79,47 @@ describe('game clock', () => {
     expect(g.suit.elapsedMin).toBeCloseTo(g.clockMin, 6);
   });
 
-  it('cabin loads draw on the cabin battery at night', () => {
+  it('cabin loads draw on the cabin battery at night, including the docked suit', () => {
     const g0 = newGame(sol13);
     const g = { ...g0, clockMin: at(23), suit: { ...g0.suit, elapsedMin: at(23) }, loads: [BASE_LOADS.moxie] };
     const r = tick(g, 60); // one game hour
-    expect(g.power.batteryWh - r.state.power.batteryWh).toBeCloseTo(300, 6);
+    expect(g.power.batteryWh - r.state.power.batteryWh).toBeCloseTo(380, 6); // MOXIE 300 W + suit electronics 80 W
+    expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh, 6);
+  });
+});
+
+describe('cabin charging', () => {
+  const atNight = (g: GameState): GameState => ({ ...g, clockMin: at(23), suit: { ...g.suit, elapsedMin: at(23) } });
+
+  it('docked in the cabin, the suit battery refills from cabin power', () => {
+    const g0 = atNight(newGame(sol13));
+    const g = { ...g0, suit: { ...g0.suit, batteryWh: 300 } };
+    const r = tick(g, 60); // one game hour: 200 W charger − 80 W electronics = +120 Wh
+    expect(r.state.suit.batteryWh).toBeCloseTo(420, 6);
+    expect(g.power.batteryWh - r.state.power.batteryWh).toBeCloseTo(200, 6);
+    expect(r.forecast.batteryMin).toBe(Infinity);
+  });
+
+  it('never charges past full', () => {
+    const g0 = atNight(newGame(sol13));
+    const r = tick({ ...g0, suit: { ...g0.suit, batteryWh: FULL_SUIT.batteryWh - 10 } }, 60);
+    expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh, 6);
+  });
+
+  it('with the cabin battery flat at night, the charger is cut and the suit drains', () => {
+    const g0 = atNight(newGame(sol13));
+    const r = tick({ ...g0, power: { ...g0.power, batteryWh: 0 } }, 60);
+    expect(r.power.shed).toContain('suitCharger');
+    expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh - 80, 6);
+    expect(Number.isFinite(r.forecast.batteryMin)).toBe(true);
+  });
+
+  it('outside the cabin nothing charges the suit', () => {
+    const g0 = atNight(newGame(sol13));
+    const r = tick({ ...g0, shelter: 'none' }, 60);
+    expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh - 80, 6);
+    expect(r.state.power.batteryWh).toBe(g0.power.batteryWh);
+    expect(Number.isFinite(r.forecast.batteryMin)).toBe(true);
   });
 });
 
