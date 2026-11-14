@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildLander, cssColor } from './astronaut3d';
+import { STORAGE_ROOM_AT } from './ship';
 
 // More built-in 3D models for the game view, from simple shapes (no downloaded assets, no logos):
 // the lander base with its storage room, solar array and life-support tanks, which change as the player stores
@@ -25,6 +26,8 @@ export interface BaseLook {
   materialsKg: number;
   repaired: string[];
   built: string[];
+  /** The storage room has been built from the blueprint (until then, storage is a locker inside the lander). */
+  room: boolean;
 }
 
 export interface BaseModel {
@@ -63,10 +66,10 @@ export function buildBase(groundAt: (dx: number, dz: number) => number): BaseMod
   const beaconMat = new THREE.MeshBasicMaterial({ color: alarm });
   part(lander, new THREE.SphereGeometry(0.16, 10, 8), beaconMat, 0, 3.65, 0);
 
-  // ---- Storage room: a prefab cargo module beside the lander ----
+  // ---- Storage room: built outside from the blueprint (hidden until then) ----
   const room = new THREE.Group();
   // North-east of the lander, open side facing west toward it (and in view from where the astronaut starts).
-  const RX = 13, RZ = -6;
+  const RX = STORAGE_ROOM_AT.dx, RZ = STORAGE_ROOM_AT.dy; // map metres east/south = world x/z
   room.position.set(RX, groundAt(RX, RZ), RZ);
   room.rotation.y = Math.PI / 2 - 0.25;
   g.add(room);
@@ -153,10 +156,11 @@ export function buildBase(groundAt: (dx: number, dz: number) => number): BaseMod
     patches.forEach((m) => { m.visible = hull; });
     const blink = Math.sin(t * 5) > 0;
     beaconMat.color.copy(hull && power ? ok : alarm).multiplyScalar(hull && power ? 1 : blink ? 1 : 0.15);
+    room.visible = look.room;
     crates.forEach((c, i) => { c.visible = i < look.stored; });
     const nBars = Math.min(BARS, Math.ceil(look.materialsKg / 2));
     bars.forEach((b, i) => { b.visible = i < nBars; });
-    const linkHere = look.built.length > 0;
+    const linkHere = look.built.includes('comms_link');
     linkBox.visible = linkHere; linkLed.visible = linkHere && blink;
     roomLight.color.copy(power ? warm : alarm);
     roomLight.intensity = power ? 9 : 2.2 + (blink ? 0.8 : 0);

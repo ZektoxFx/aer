@@ -31,13 +31,15 @@ import {
   pickupTarget, SALVAGE, usable, type Pack, type PackEntry,
 } from './inventory';
 import {
-  canBuild, canRepair, COMMS_LINK_ID, commsLinkEntry, commsLinkJob, doBuild, doRepair, EMPTY_SHIP, repairNeeds, REPAIRS, shipTopUp, store, storeAll, take,
+  aboard, atStorage, canBuild, canRepair, COMMS_LINK_ID, commsLinkEntry, commsLinkJob, doBuild, doRepair, EMPTY_SHIP, hasStorageRoom, repairNeeds, REPAIRS,
+  SHIP_LOCKER_KG, shipKg, shipTopUp, STORAGE_ROOM_JOB, store, storeAll, SUIT_LEAK, SUIT_PATCH_ID, SUIT_PATCH_JOB, suitLeaking, take,
   type Repair, type Ship,
 } from './ship';
 import { callStage, hasCommsLink, installLink, LIGHT_TIME_MIN, roverInReach, watchFailure, type FailCause, type FailWatch } from './ending';
 import { COVER_RADIUS_M, coverRocks, nearestCover, stormEffort, stormStrength, underCover, type NearCover } from './cover';
 import { compassPoint, sunPosition } from './sun';
 import { SunDial } from './SunDial';
+import { debrisItems } from './debris';
 import type { BaseLook } from './props3d';
 import './game3d.css';
 import './hud.css';
@@ -88,8 +90,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [ship, setShipState] = useState<Ship>(EMPTY_SHIP);
   const shipRef = useRef<Ship>(EMPTY_SHIP);
   const setShip = (x: Ship) => { shipRef.current = x; setShipState(x); };
-  const [atShip, setAtShip] = useState(true);
+  /** At the lander (the cabin zone): a repaired ship refills the suit here. */
   const atShipRef = useRef(true);
+  /** Where the storage can be used: inside the lander, or in the storage room once it is built (null = neither). */
+  const [storeAt, setStoreAt] = useState<'aboard' | 'room' | null>(null);
+  const inStore = storeAt !== null;
   const [readPage, setReadPage] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -106,10 +111,17 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   // Taken items leave the 3D world.
   // Taken items leave the 3D world; dropped ones lie where they were put down.
   // Perseverance is drawn by the UI's own rover model (props3d), so the map's simple one is left out of the 3D world.
+  // AER-1's own scattered parts and the storage-room blueprint (UI items, debris.ts) join the map's items in the 3D
+  // world and for picking up.
+  const debris = useMemo(() => debrisItems(base, pack.area), [base, pack.area]);
+  const pickWorld = useMemo(() => (mapWorld ? { ...mapWorld, items: [...mapWorld.items, ...debris] } : { items: debris, found: new Set<string>() }), [mapWorld, debris]);
+  const pickWorldRef = useRef(pickWorld);
+  useEffect(() => { pickWorldRef.current = pickWorld; }, [pickWorld]);
   const world3d = useMemo(() => {
     if (!mapWorld) return mapWorld;
-    return { ...mapWorld, items: [...mapWorld.items.filter((i) => i.kind !== 'rover' && !bag.taken.includes(i.id)), ...droppedItems(bag)] };
-  }, [mapWorld, bag]);
+    const items = [...mapWorld.items.filter((i) => i.kind !== 'rover'), ...debris].filter((i) => !bag.taken.includes(i.id));
+    return { ...mapWorld, items: [...items, ...droppedItems(bag)] };
+  }, [mapWorld, bag, debris]);
   const roverItem = mapWorld?.items.find((i) => i.kind === 'rover') ?? null;
   const roverSeen = !!roverItem && (!roverItem.hidden || !!mapWorld?.found.has(roverItem.id));
   // Rock overhangs to shelter under in a dust storm (the same ones the 3D view draws).
@@ -218,6 +230,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const holding = m !== null && (isHolding(m) || isOver(m));
     const r = tick(game.current, dt, isPaused || holding);
     let state = r.state;
+    // The suit was torn in the crash: until it is patched, it leaks extra O₂ on top of breathing (free play only).
+    if (!missionRef.current && suitLeaking(shipRef.current)) {
+      const used = game.current.suit.o2Kg - state.suit.o2Kg;
+      if (used > 0) state = { ...state, suit: { ...state.suit, o2Kg: Math.max(0, state.suit.o2Kg - used * SUIT_LEAK) } };
+    }
     if (m && !holding) {
       const fcNow = forecast(state.suit, shelterEnvironment(r.env, state.shelter), state.activity);
       const next = sol1Advance(m, state.clockMin, state.suit, fcNow);
@@ -327,10 +344,12 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const onMove3d = useCallback((m: MoveResult) => {
     moveRef.current = m;
     if (m.moving && hintOnRef.current) { hintOnRef.current = false; setHintOn(false); }
-    const target = pickupTarget(mapWorldRef.current, m.pos, bagRef.current);
+    const target = pickupTarget(pickWorldRef.current, m.pos, bagRef.current);
+    const where = aboard(m.pos, base) ? 'aboard' : atStorage(m.pos, base, shipRef.current) ? 'room' : null;
+    setStoreAt((old) => (old === where ? old : where));
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
     const here = inCabinZone(m.pos, base);
-    if (here !== atShipRef.current) { atShipRef.current = here; setAtShip(here); }
+    atShipRef.current = here;
     const nc = nearestCover(m.pos, coversRef.current);
     setCover((old) => (old && nc && old.rock.id === nc.rock.id && Math.abs(old.distM - nc.distM) < 5 && (old.distM <= 7) === (nc.distM <= 7) ? old : nc));
     const rover = !!roverInReach(mapWorldRef.current, m.pos);
@@ -343,7 +362,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base, setHintOn, setNear, setAtShip, setWalk, setNearRover, setCover]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, setHintOn, setNear, setWalk, setNearRover, setCover, setStoreAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; walkPosRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
@@ -439,7 +458,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     setBag(r.pack);
     nearRef.current = null; setNear(null);
     const e = r.entry;
-    setToast(e.kind === 'page' ? `Picked up ${e.name}. Press I to read it.`
+    setToast(e.blueprint ? `Found the ${e.name.toLowerCase()}. Build it beside the lander: PACK → REPAIRS.`
+      : e.kind === 'page' ? `Picked up ${e.name}. Press I to read it.`
       : e.kind === 'part' ? `Salvaged ${e.name} · ${e.massKg.toFixed(1)} kg · a NASA part for ship repairs`
       : `Picked up ${e.name} · ${e.massKg.toFixed(1)} kg${e.gives && usable(e) ? ` · ${givesLabel(e.gives)} when used` : ''}`);
   };
@@ -462,10 +482,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     setBag(drop(bagRef.current, id, moveRef.current?.pos ?? astronaut ?? base));
     if (e) setToast(`Put ${e.name} down here. Walk up to it and press F to take it again.`);
   };
+  const lockerFull = `The lander's locker is full (${SHIP_LOCKER_KG} kg). Find the storage-room blueprint and build the storage room, or use things up.`;
   const storeInShip = (id?: string) => {
     const r = id ? store(bagRef.current, shipRef.current, id) : storeAll(bagRef.current, shipRef.current);
+    const left = r.pack.entries.length;
     setBag(r.pack); setShip(r.ship);
-    setToast(id ? 'Stored in the ship.' : 'Everything is stored in the ship. Rocket pieces were broken down into materials.');
+    if (id) setToast(r.pack === bagRef.current ? lockerFull : 'Stored in the ship.');
+    else setToast(left ? `Stored what fits. ${lockerFull}` : 'Everything is stored in the ship. Rocket pieces were broken down into materials.');
   };
   const takeFromShip = (id: string) => {
     const r = take(bagRef.current, shipRef.current, id);
@@ -477,7 +500,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const baseLook = useMemo<BaseLook>(() => ({
     stored: ship.stored.length,
     materialsKg: Object.values(ship.materials).reduce((a, b) => a + b, 0),
-    repaired: ship.repaired, built: ship.built,
+    repaired: ship.repaired, built: ship.built, room: hasStorageRoom(ship),
   }), [ship]);
   const WORK_MS = 4200;
   /** Play the work animation, then do the job (the clock holds while it plays, then jumps by the job's minutes). */
@@ -493,18 +516,22 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       setWork(null);
     }, WORK_MS);
   };
-  const buildLink = () => {
-    if (!canBuild(commsJob, bagRef.current, shipRef.current)) return;
-    startWork(`BUILDING · ${commsJob.name.toUpperCase()}`, commsJob.minutes, buildLinkNow);
+  /** The workbench jobs, made from AER-1's scattered parts: patch the suit, the storage room, the rover radio kit. */
+  const jobs = [SUIT_PATCH_JOB, STORAGE_ROOM_JOB, commsJob];
+  const buildJob = (job: Repair) => {
+    if (!canBuild(job, bagRef.current, shipRef.current)) return;
+    startWork(`${job.id === SUIT_PATCH_ID ? 'PATCHING' : 'BUILDING'} · ${job.name.toUpperCase()}`, job.minutes, () => buildJobNow(job));
   };
-  const buildLinkNow = () => {
-    const r = doBuild(commsJob, bagRef.current, shipRef.current, commsLinkEntry(commsJob.name));
+  const buildJobNow = (job: Repair) => {
+    const kit = job.id === COMMS_LINK_ID;
+    const r = doBuild(job, bagRef.current, shipRef.current, kit ? commsLinkEntry(job.name) : undefined);
     if (!r) return;
     setBag(r.pack); setShip(r.ship);
-    passMinutes(commsJob.minutes);
-    setToast(r.inPack
-      ? `Built the ${commsJob.name.toLowerCase()} after ${commsJob.minutes} min. Take it to Perseverance, about 2 km west.`
-      : `Built the ${commsJob.name.toLowerCase()}. It is in the ship's storage: TAKE it once the backpack has room.`);
+    passMinutes(job.minutes);
+    if (!kit) setToast(`${job.name}: done after ${job.minutes} min. ${job.does}`);
+    else setToast(r.inPack
+      ? `Built the ${job.name.toLowerCase()} after ${job.minutes} min. Take it to Perseverance, about 2 km west.`
+      : `Built the ${job.name.toLowerCase()}. It is in the ship's storage: TAKE it once the backpack has room.`);
   };
   /** The next orbiter pass (without relay data, any time counts as a pass). */
   const passNow = (clockMin: number) => nextRelayPass(clockMin, data.relay) ?? (data.relay ? null : { orbiter: 'an orbiter', centre: '', inMin: 0 });
@@ -516,7 +543,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (stage === 'connect') {
       setBag(installLink(bagRef.current)); setLinked(true);
       passMinutes(5);
-      setToast("Comms link plugged into Perseverance's UHF radio. Now wait for an orbiter to pass overhead.");
+      setToast("Perseverance's radio link is repaired. Now wait for an orbiter to pass overhead.");
     } else if (stage === 'wait' && pass) {
       passMinutes(Math.ceil(pass.inMin) + 1);
     } else if (stage === 'send' && pass) {
@@ -575,7 +602,9 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   }, []);
 
   const s = frame.state;
-  const fc = frame.forecast; // from the sim, so it counts the suit charging in the cabin
+  // From the sim, so it counts the suit charging in the cabin; the crash leak (applied in step) shortens the O₂ time.
+  const leaking = !mission && suitLeaking(ship);
+  const fc = leaking ? { ...frame.forecast, o2Min: frame.forecast.o2Min / (1 + SUIT_LEAK) } : frame.forecast;
   const hero = firstToRunOut(fc);
   const clock = clockLabel(s.clockMin);
   const critical = frame.warnings.some((w) => w.level === 'critical');
@@ -745,7 +774,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     };
     // The mission under the minimap: why, the steps ticked off from what the map has found, and the next relay pass.
     const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken, { done: ship.repaired.length, of: REPAIRS.length },
-      { linkBuilt: ship.built.includes(COMMS_LINK_ID) || linked, called });
+      { linkBuilt: ship.built.includes(COMMS_LINK_ID) || linked, called, suitPatched: !suitLeaking(ship) });
     const nextStep = steps.findIndex((x) => !x.done);
     const goalPanel = (
       <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
@@ -863,7 +892,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             {vbar('batteryMin', 'BAT', s.suit.batteryWh, FULL_SUIT.batteryWh)}
           </div>
           <span className="v-where">
-            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : underRock ? 'UNDER ROCK COVER' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
+            {storeAt === 'aboard' ? 'ABOARD AER-1 · ' : storeAt === 'room' ? 'IN THE STORAGE ROOM · ' : ''}
+            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : underRock ? 'UNDER ROCK COVER' : 'OUTSIDE'}{leaking ? ' · SUIT LEAKING' : ''} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
           </span>
           <button className="v-menu-btn v-pack-btn" aria-expanded={packOpen} onClick={() => { setPackOpen((o) => !o); setMenuOpen(false); }}
             title="Backpack, ship storage and repairs (I)">▣ PACK {carriedKg(bag).toFixed(1)}/{BACKPACK_MAX_KG} kg</button>
@@ -915,12 +945,12 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
               {called ? (
                 <p>Distress call sent. Earth will answer on a later pass.</p>
               ) : stage === 'need-link' ? (
-                <p>Its radio can still reach Earth through the orbiters, but you need the <b>rover comms link</b> to use it: find manual page 4 and build it at the ship.</p>
+                <p>Its radio link was damaged in the dust. It can still reach Earth through the orbiters once repaired: find manual page 4 and build the <b>rover radio repair kit</b> at the ship from AER-1's parts.</p>
               ) : stage === 'connect' ? (
-                <button className="v-pickup-btn" onClick={roverAction}><kbd>F</kbd> PLUG THE COMMS LINK INTO THE RADIO</button>
+                <button className="v-pickup-btn" onClick={roverAction}><kbd>F</kbd> REPAIR THE ROVER'S RADIO</button>
               ) : stage === 'wait' ? (
                 <>
-                  <p>Linked to the UHF radio. {pass ? <>Next orbiter pass: <b>{pass.orbiter} ≈{pass.centre}</b>, in {formatMinutes(pass.inMin)}.</> : 'No pass times known.'} The rover's nuclear power keeps your battery charged.</p>
+                  <p>Radio repaired. {pass ? <>Next orbiter pass: <b>{pass.orbiter} ≈{pass.centre}</b>, in {formatMinutes(pass.inMin)}.</> : 'No pass times known.'} The rover's nuclear power keeps your battery charged.</p>
                   {pass && <button className="v-pickup-btn" onClick={roverAction}><kbd>F</kbd> WAIT FOR THE PASS</button>}
                 </>
               ) : (
@@ -958,16 +988,16 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                   {e.kind === 'supply' && (usable(e) ? givesLabel(e.gives) : e.repairs ? 'tools for repairs' : '')}
                   {e.kind === 'scrap' && Object.entries(e.yields ?? {}).map(([m, v]) => `${matName(m).toLowerCase()} ${v} kg`).join(' · ')}
                   {e.kind === 'part' && 'NASA part for ship repairs'}
-                  {e.kind === 'page' && 'read to learn how'}
+                  {e.kind === 'page' && (e.blueprint ? 'build it in REPAIRS' : 'read to learn how')}
                   {e.massKg > 0 && ` · ${e.massKg.toFixed(1)} kg`}
                 </em>
               </span>
               <span className="v-pack-acts">
-                {usable(e) && (where === 'pack' || atShip) && <button onClick={() => applyFrom(where, e.id)}>USE</button>}
-                {e.kind === 'page' && <button onClick={() => openPage(e.page)}>READ</button>}
-                {where === 'pack' && atShip && <button onClick={() => storeInShip(e.id)} title="Keep it in the ship">STORE</button>}
+                {usable(e) && (where === 'pack' || inStore) && <button onClick={() => applyFrom(where, e.id)}>USE</button>}
+                {e.kind === 'page' && !e.blueprint && <button onClick={() => openPage(e.page)}>READ</button>}
+                {where === 'pack' && inStore && <button onClick={() => storeInShip(e.id)} title="Keep it in the ship">STORE</button>}
                 {where === 'pack' && e.kind !== 'page' && <button onClick={() => dropFromBag(e.id)} title="Put it down here">DROP</button>}
-                {where === 'ship' && atShip && <button onClick={() => takeFromShip(e.id)} title="Into the backpack">TAKE</button>}
+                {where === 'ship' && inStore && <button onClick={() => takeFromShip(e.id)} title="Into the backpack">TAKE</button>}
               </span>
             </li>
           );
@@ -1000,9 +1030,9 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                     <p className="v-pack-empty">Empty. Walk up to supplies, rocket pieces, manual pages or NASA hardware you have spotted and press <kbd>F</kbd>.</p>
                   )}
                   {groups(bag.entries, 'pack')}
-                  {atShip && bag.entries.length > 0 && <button className="v-pack-wide" onClick={() => storeInShip()}>STORE EVERYTHING IN THE SHIP</button>}
+                  {inStore && bag.entries.length > 0 && <button className="v-pack-wide" onClick={() => storeInShip()}>STORE EVERYTHING IN THE SHIP</button>}
                   <p className="v-pack-note">
-                    {atShip ? 'You are at the ship: store things here to free the backpack.' : 'Carried mass raises your effort. Bring things back to the ship to store them.'}
+                    {inStore ? 'You are inside: store things here to free the backpack.' : 'Carried mass raises your effort. Go inside the lander (through the hatch) to store things.'}
                     {' '}DROP puts an item down where you stand.
                   </p>
                 </>
@@ -1010,7 +1040,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
               {packTab === 'ship' && (
                 <>
-                  {!atShip && <p className="v-pack-note warning">You are away from the ship. Walk back to the lander to store or take things.</p>}
+                  <p className="v-pack-note">
+                    {hasStorageRoom(ship)
+                      ? `STORAGE ROOM · ${shipKg(ship).toFixed(1)} kg stored · no weight limit`
+                      : `LOCKER INSIDE THE LANDER · ${shipKg(ship).toFixed(1)}/${SHIP_LOCKER_KG} kg · ${[...bag.entries, ...ship.stored].some((x) => x.blueprint)
+                        ? 'build the storage room (REPAIRS) for more room'
+                        : 'find the storage-room blueprint among the AER-1 debris to build more room'}`}
+                  </p>
+                  {!inStore && <p className="v-pack-note warning">The storage is inside the lander{hasStorageRoom(ship) ? ' and in the storage room' : ''}. Go in to store or take things.</p>}
                   {Object.keys(ship.materials).length > 0 && (
                     <div className="v-pack-group">
                       <h3>MATERIALS (FROM SCRAP)</h3>
@@ -1019,7 +1056,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                   )}
                   {groups(ship.stored, 'ship')}
                   {ship.stored.length === 0 && Object.keys(ship.materials).length === 0 && (
-                    <p className="v-pack-empty">The ship's storage is empty. Bring supplies, scrap and parts back to the lander and STORE them. There is no weight limit here.</p>
+                    <p className="v-pack-empty">The ship's storage is empty. Bring supplies, scrap and parts back inside the lander and STORE them.</p>
                   )}
                 </>
               )}
@@ -1041,34 +1078,36 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                           </ul>
                         )}
                         {!done && (
-                          <button className="v-pack-wide" disabled={!ready || !atShip} onClick={() => repairShip(rp)}>
-                            {!atShip ? 'GO TO THE SHIP TO REPAIR' : ready ? `REPAIR (${rp.minutes} MIN)` : 'MISSING PARTS'}
+                          <button className="v-pack-wide" disabled={!ready || !inStore} onClick={() => repairShip(rp)}>
+                            {!inStore ? 'GO INSIDE THE LANDER TO REPAIR' : ready ? `REPAIR (${rp.minutes} MIN)` : 'MISSING PARTS'}
                           </button>
                         )}
                       </div>
                     );
                   })}
-                  {(() => {
-                    const done = ship.built.includes(COMMS_LINK_ID) || linked;
-                    const needs = repairNeeds(commsJob, bag, ship, matName, partName);
-                    const ready = canBuild(commsJob, bag, ship);
+                  <p className="v-pack-note">WORKBENCH · made from AER-1's scattered parts (hull panels, straps, blankets, wiring, boxes)</p>
+                  {jobs.map((job) => {
+                    const done = ship.built.includes(job.id) || (job.id === COMMS_LINK_ID && linked);
+                    const needs = repairNeeds(job, bag, ship, matName, partName);
+                    const ready = canBuild(job, bag, ship);
+                    const verb = job.id === SUIT_PATCH_ID ? 'PATCH' : 'BUILD';
                     return (
-                      <div className={done ? 'v-repair v-build done' : 'v-repair v-build'}>
-                        <h3>{done ? '✓ ' : ''}BUILD: {commsJob.name.toUpperCase()} <span>{commsJob.minutes} min</span></h3>
-                        <p className="v-repair-does">{commsJob.does} Take it to Perseverance and call Earth during an orbiter pass.</p>
+                      <div key={job.id} className={done ? 'v-repair v-build done' : 'v-repair v-build'}>
+                        <h3>{done ? '✓ ' : ''}{verb}: {job.name.toUpperCase()} <span>{job.minutes} min</span></h3>
+                        <p className="v-repair-does">{job.does}{job.id === COMMS_LINK_ID ? ' Take it to Perseverance, fix its radio, and call Earth during an orbiter pass.' : ''}</p>
                         {!done && (
                           <ul className="v-needs">
                             {needs.map((n) => <li key={n.label} className={n.have ? 'have' : undefined}>{n.have ? '✓' : '○'} {n.label}</li>)}
                           </ul>
                         )}
                         {!done && (
-                          <button className="v-pack-wide" disabled={!ready || !atShip} onClick={buildLink}>
-                            {!atShip ? 'GO TO THE SHIP TO BUILD' : ready ? `BUILD (${commsJob.minutes} MIN)` : 'MISSING PARTS'}
+                          <button className="v-pack-wide" disabled={!ready || !inStore} onClick={() => buildJob(job)}>
+                            {!inStore ? `GO INSIDE THE LANDER TO ${verb}` : ready ? `${verb} (${job.minutes} MIN)` : 'MISSING PARTS'}
                           </button>
                         )}
                       </div>
                     );
-                  })()}
+                  })}
                 </>
               )}
             </section>
@@ -1101,7 +1140,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <div className="g3-overlay">
             <section className="howto" aria-label="How to play">
               <h2>HOW TO PLAY</h2>
-              <p className="howto-goal">You crash-landed in Jezero Crater. Stay alive, repair your ship, build the rover comms link, then find Perseverance (about 2 km west) and call Earth while an orbiter passes overhead. Watch your oxygen, and get under cover when a dust storm comes.</p>
+              <p className="howto-goal">You crash-landed in Jezero Crater and your suit is leaking. Collect AER-1's scattered parts to patch the suit, repair your ship and build the rover radio repair kit, then find Perseverance (about 2 km west), fix its radio and call Earth while an orbiter passes overhead. Watch your oxygen, and get under cover when a dust storm comes.</p>
               <dl>
                 <dt>Walk</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hold <kbd>Shift</kbd> to run</dd>
                 <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>

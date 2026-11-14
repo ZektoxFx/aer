@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { SuitState } from '../sim/types';
 import { EMPTY_PACK, type Pack, type PackEntry } from './inventory';
-import { canRepair, doRepair, EMPTY_SHIP, repairNeeds, REPAIRS, shipTopUp, store, storeAll, take, type Ship } from './ship';
+import {
+  aboard, atStorage, canBuild, canRepair, commsLinkJob, doBuild, doRepair, EMPTY_SHIP, repairNeeds, REPAIRS, SHIP_LOCKER_KG, shipKg, shipRoomKg,
+  shipTopUp, store, storeAll, STORAGE_ROOM_AT, STORAGE_ROOM_ID, STORAGE_ROOM_JOB, SUIT_PATCH_JOB, suitLeaking, take, type Ship,
+} from './ship';
 
 const e = (id: string, kind: PackEntry['kind'], massKg: number, extra: Partial<PackEntry> = {}): PackEntry => ({ id, kind, name: id, massKg, ...extra });
 const pack = (...entries: PackEntry[]): Pack => ({ ...EMPTY_PACK, entries });
@@ -61,5 +64,49 @@ describe('ship repairs', () => {
     expect(shipTopUp(EMPTY_SHIP, suit, full)).toBe(suit);
     expect(shipTopUp({ ...EMPTY_SHIP, repaired: ['power'] }, suit, full)).toMatchObject({ batteryWh: 640, o2Kg: 0.1 });
     expect(shipTopUp({ ...EMPTY_SHIP, repaired: ['power', 'life'] }, suit, full)).toMatchObject({ batteryWh: 640, o2Kg: 0.6, liohKg: 0.8, waterKg: 3.9 });
+  });
+});
+
+describe('storage inside the lander, then the storage room', () => {
+  const base = { x: 1000, y: 1000 };
+  const kit = e('repair_kit', 'supply', 1, { repairs: 1 });
+  const blueprint = e('blueprint:storage_room', 'page', 0, { blueprint: STORAGE_ROOM_ID });
+
+  it('is only usable aboard the lander, or in the storage room once built', () => {
+    expect(aboard({ x: 1003, y: 1002 }, base)).toBe(true);
+    expect(aboard({ x: 1010, y: 1000 }, base)).toBe(false);
+    const room = { x: base.x + STORAGE_ROOM_AT.dx, y: base.y + STORAGE_ROOM_AT.dy };
+    expect(atStorage(room, base, EMPTY_SHIP)).toBe(false);
+    expect(atStorage(room, base, { ...EMPTY_SHIP, built: [STORAGE_ROOM_ID] })).toBe(true);
+  });
+
+  it(`holds ${SHIP_LOCKER_KG} kg in the locker, counting materials, and stores what fits`, () => {
+    const p = pack(e('a', 'scrap', 6, { yields: { metal: 6 } }), e('b', 'part', 8), e('c', 'part', 8), e('d', 'supply', 4));
+    const r = storeAll(p, EMPTY_SHIP);
+    expect(shipKg(r.ship)).toBeLessThanOrEqual(SHIP_LOCKER_KG);
+    expect(r.pack.entries.map((x) => x.id)).toEqual(['d']);
+    expect(store(r.pack, r.ship, 'd').pack).toBe(r.pack); // full: nothing changes
+  });
+
+  it('has no limit once the storage room is built from the blueprint and AER-1 parts', () => {
+    const ship: Ship = { ...EMPTY_SHIP, materials: { metal: 8, fabric: 3, wiring: 1 } };
+    expect(canBuild(STORAGE_ROOM_JOB, pack(kit), ship)).toBe(false); // no blueprint
+    const built = doBuild(STORAGE_ROOM_JOB, pack(kit, blueprint), ship)!;
+    expect(built.ship.built).toContain(STORAGE_ROOM_ID);
+    expect(built.ship.materials).toEqual({});
+    expect(built.pack.entries).toHaveLength(2); // tools and blueprint are kept
+    expect(shipRoomKg(built.ship)).toBe(Infinity);
+    expect(store(pack(e('big', 'part', 40)), built.ship, 'big').pack.entries).toHaveLength(0);
+  });
+
+  it('patches the suit leak with fabric and insulation', () => {
+    const ship: Ship = { ...EMPTY_SHIP, materials: { fabric: 1, insulation: 1 } };
+    expect(suitLeaking(ship)).toBe(true);
+    const r = doBuild(SUIT_PATCH_JOB, pack(kit), ship)!;
+    expect(suitLeaking(r.ship)).toBe(false);
+  });
+
+  it('calls the comms link the rover radio repair kit', () => {
+    expect(commsLinkJob().name).toBe('Rover radio repair kit');
   });
 });
