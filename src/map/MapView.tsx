@@ -40,6 +40,12 @@ export interface MapViewProps {
   /** Supply fraction that must be left on return (the safe-zone edge). */
   reserve?: number;
   crashPath?: Pt[];
+  /** The rover's traverse from the archive maps (always shown). */
+  archiveTraverse?: Pt[][];
+  /** Wheel tracks to the rover's real position (shown only where explored; erased by a storm). */
+  roverTracks?: Pt[][];
+  /** The rover's last known area. */
+  searchArea?: { at: Pt; r: number };
   /** Where the astronaut has walked. */
   tracks?: Pt[];
   /** Expanding rings where items were just found (t0 = performance.now()). */
@@ -65,6 +71,9 @@ const ITEM_STYLE: Record<ItemKind, { code: string; color: string }> = {
   manual: { code: 'PAGE', color: '#e8f5ec' },
   shelter: { code: 'SHLT', color: '#9fe0b4' },
   rover: { code: 'ROVER', color: '#ff6bd6' },
+  clue: { code: 'NASA', color: '#9fd0ff' },
+  sample: { code: '', color: '#d6c6ff' },
+  science: { code: 'SCIENCE', color: '#b8ffcf' },
 };
 
 const RAMP: [number, [number, number, number]][] = [
@@ -202,6 +211,24 @@ function renderRange(el: Elevation, range: RangeField, reserve: number): HTMLCan
   return cv;
 }
 
+/** Cell-based hazard zones (from Data's terrain classes) drawn once: dots for sand, hatching for rocks. */
+function renderMasks(zones: HazardZone[]): HTMLCanvasElement | null {
+  const masked = zones.filter((z) => z.mask);
+  if (!masked.length) return null;
+  const m0 = masked[0].mask!;
+  const k = 6;
+  const [cv, ctx] = canvas(m0.cols * k, m0.rows * k);
+  if (!ctx) return cv;
+  for (const z of masked) {
+    const m = z.mask!;
+    const pat = makePattern(ctx, z.kind);
+    ctx.fillStyle = pat ?? (z.kind === 'sand' ? 'rgba(255,176,0,0.3)' : 'rgba(255,77,77,0.3)');
+    const s = (k * m.cellM) / m0.cellM;
+    for (let r = 0; r < m.rows; r++) for (let c = 0; c < m.cols; c++) if (m.on[r * m.cols + c]) ctx.fillRect(c * s, r * s, s, s);
+  }
+  return cv;
+}
+
 function makePattern(ctx: CanvasRenderingContext2D, kind: HazardZone['kind']): CanvasPattern | null {
   const [p, g] = canvas(10, 10);
   if (!g) return null;
@@ -240,8 +267,10 @@ export function MapView(props: MapViewProps) {
 
   const el = pack.elevation;
   const W = pack.area.widthM, H = pack.area.heightM;
-  const terrain = useMemo(() => renderTerrain(el), [el]);
-  const contours = useMemo(() => renderContours(el), [el]);
+  // Large real grids are already detailed; render them at 2× instead of 3× to keep start-up quick.
+  const terrain = useMemo(() => renderTerrain(el, el.cols * el.rows > 100_000 ? 2 : 3), [el]);
+  const contours = useMemo(() => renderContours(el, el.cols * el.rows > 100_000 ? 2 : 3), [el]);
+  const masks = useMemo(() => renderMasks(props.zones), [props.zones]);
   const slope = useMemo(() => renderSlope(el), [el]);
   // exploredVersion signals that the grid inside `explored` changed.
   const fog = useMemo(() => renderFog(explored), [explored, exploredVersion]);
@@ -255,14 +284,15 @@ export function MapView(props: MapViewProps) {
     };
   }, [el, range, reserve]);
   const scar = useMemo(() => (crashPath ?? []).flatMap((p, i, a) => (i ? samplePath(a[i - 1], p, 12).slice(1) : [p])), [crashPath]);
+  const imageUrl = pack.imageUrl && !pack.imageUrl.startsWith('/') && !/^[a-z]+:/i.test(pack.imageUrl) ? `/${pack.imageUrl}` : pack.imageUrl;
 
   useEffect(() => {
-    if (!pack.imageUrl) return;
+    if (!imageUrl) return;
     const img = new Image();
     img.onload = () => setPhoto(img);
-    img.src = pack.imageUrl;
+    img.src = imageUrl;
     return () => { img.onload = null; setPhoto(null); };
-  }, [pack.imageUrl]);
+  }, [imageUrl]);
 
   useEffect(() => {
     const node = wrapRef.current;
@@ -285,7 +315,7 @@ export function MapView(props: MapViewProps) {
   const toMap = (sx: number, sy: number): Pt => { const v = getView(); return { x: (sx - v.ox) / v.scale, y: (sy - v.oy) / v.scale }; };
 
   // Everything the draw loop needs, refreshed after every render so the loop always sees the latest props.
-  const live = { props, size, getView, terrain, contours, slope, fog, rangeImg, rangeEdges, scar, photo, reserve };
+  const live = { props, size, getView, terrain, contours, slope, fog, rangeImg, rangeEdges, scar, photo, reserve, masks };
   const liveRef = useRef(live);
   useEffect(() => { liveRef.current = live; });
 
@@ -322,8 +352,13 @@ export function MapView(props: MapViewProps) {
       if (lay.slope) ctx.drawImage(L.slope, v.ox, v.oy, mapW, mapH);
       if (lay.range && L.rangeImg) ctx.drawImage(L.rangeImg, v.ox, v.oy, mapW, mapH);
 
+      if (lay.hazards && L.masks) {
+        const m = zones.find((z) => z.mask)?.mask;
+        if (m) { ctx.globalAlpha = 0.8; ctx.drawImage(L.masks, v.ox, v.oy, m.cols * m.cellM * v.scale, m.rows * m.cellM * v.scale); ctx.globalAlpha = 1; }
+      }
       if (lay.hazards) {
         for (const z of zones) {
+          if (z.mask) continue;
           ctx.beginPath();
           z.poly.forEach((p, i) => { const s = S(p); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
           ctx.closePath();
@@ -347,6 +382,29 @@ export function MapView(props: MapViewProps) {
         ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
         ctx.strokeStyle = 'rgba(255,150,90,0.35)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+      }
+
+      // The rover: archive traverse (dim, always), last known area, and wheel tracks once seen (gone in a storm).
+      const poly = (pts: Pt[]) => { ctx.beginPath(); pts.forEach((p, i) => { const s = S(p); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); }); ctx.stroke(); };
+      ctx.strokeStyle = 'rgba(255,107,214,0.45)'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+      for (const seg of P.archiveTraverse ?? []) poly(seg);
+      ctx.setLineDash([]);
+      if (P.searchArea) {
+        const c = S(P.searchArea.at), r = P.searchArea.r * v.scale;
+        ctx.setLineDash([10, 6]); ctx.strokeStyle = 'rgba(255,107,214,0.7)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,107,214,0.9)'; ctx.font = 'bold 10px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center';
+        ctx.fillText('ROVER: LAST KNOWN AREA', c.x, c.y - r - 6);
+      }
+      if (!P.storm) {
+        ctx.strokeStyle = 'rgba(255,107,214,0.95)'; ctx.lineWidth = 2;
+        for (const seg of P.roverTracks ?? []) {
+          for (let i = 1; i < seg.length; i++) {
+            if (!isSeen(P.explored, seg[i]) && !lay.allItems) continue;
+            const a = S(seg[i - 1]), b = S(seg[i]);
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          }
+        }
       }
 
       // Night: the land goes dark except around the astronaut's lamp.
@@ -432,6 +490,23 @@ export function MapView(props: MapViewProps) {
           line(leg.path);
         });
         ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        // Sim's point of no return: the route turns red after it.
+        const tb = route.turnBackByMin;
+        if (tb !== null && tb < route.minutes - 0.5) {
+          const k = route.samples.findIndex((p) => p.t >= tb);
+          if (k >= 0) {
+            ctx.strokeStyle = 'rgba(255,77,77,0.9)'; ctx.lineWidth = 3;
+            line(route.samples.slice(k).map((p) => p.at));
+            const s = S(route.samples[k].at);
+            ctx.fillStyle = '#ff4d4d'; ctx.strokeStyle = '#070b08'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.font = 'bold 10px ui-monospace, Consolas, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            const label = `TURN BACK BY ${Math.round(tb)} MIN`;
+            const tw = ctx.measureText(label).width + 8;
+            ctx.fillStyle = 'rgba(7,11,8,0.85)'; ctx.fillRect(s.x + 9, s.y - 8, tw, 16);
+            ctx.fillStyle = '#ff4d4d'; ctx.fillText(label, s.x + 13, s.y);
+          }
+        }
       }
 
       ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
@@ -457,6 +532,11 @@ export function MapView(props: MapViewProps) {
         if (!shown && !lay.allItems) continue;
         const s = S(it.at);
         const st = it.required ? { code: 'COMMS', color: '#ffffff' } : ITEM_STYLE[it.kind];
+        if (it.kind === 'sample') {
+          ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.strokeStyle = st.color; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.arc(s.x, s.y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          continue;
+        }
         if (P.storm && shown && (it.kind === 'shelter' || it.kind === 'base') && P.range && P.range.reach[cellOf(P.pack.elevation, it.at)] >= 0) {
           const k = (now % 1400) / 1400;
           ctx.strokeStyle = `rgba(255,176,0,${1 - k})`; ctx.lineWidth = 2;

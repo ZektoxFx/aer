@@ -3,12 +3,15 @@ import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { createRoot } from 'react-dom/client';
 import '../index.css';
 import './map.css';
+import type { PoiFile, TerrainLayers } from '../data/files';
 import type { DataPack } from '../data/types';
 import type { Environment, SuitState } from '../sim/types';
 import { FULL_SUIT } from '../sim/simulate';
 import { makeDevPack } from './devPack';
 import type { Pt } from './geo';
 import { buildLayout } from './layout';
+import { buildJezeroLayout } from './realData';
+import type { MapContent } from './realData';
 import type { MapItem } from './layout';
 import type { MapLayers, Ping } from './MapView';
 import { MapView } from './MapView';
@@ -47,12 +50,23 @@ function Gauge({ label, now, end, full, unit }: { label: string; now: number; en
 function foundMessage(t: number, f: MapItem): string {
   if (f.required) return `★ +${fmtMin(t)}: found the ROVER COMMS LINK page. Now find the rover.`;
   if (f.kind === 'rover') return `★ +${fmtMin(t)}: found the rover. Its radio can reach Earth.`;
-  return `+${fmtMin(t)}: found ${f.label}${f.yields ? ` (${f.yields.join(', ')})` : ''}`;
+  return `+${fmtMin(t)}: found ${f.label}${f.yields ? ` (${f.yields.join(', ')})` : ''}${f.fiction ? ' · game fiction' : ''}`;
 }
+
+/** Short chart caption naming mission, instrument and sol (team rule). */
+function profileTitle(pack: DataPack, sol: number): string {
+  if (pack.source.startsWith('SYNTHETIC')) return `elevation: synthetic test terrain · Sol ${sol}`;
+  return `elevation: MRO HiRISE DTM (USGS Mars 2020 TRN) · weather: Perseverance MEDA · archived Sol ${sol}`;
+}
+
+const getJson = <T,>(url: string): Promise<T> => fetch(url).then((r) => { if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json() as Promise<T>; });
 
 function MapDemo() {
   const [dataPack, setDataPack] = useState<DataPack | null>(null);
-  const [useSynthetic, setUseSynthetic] = useState(true);
+  const [pois, setPois] = useState<PoiFile | null>(null);
+  const [terrainLayers, setTerrainLayers] = useState<TerrainLayers | null>(null);
+  const [content, setContent] = useState<MapContent | null>(null);
+  const [useSynthetic, setUseSynthetic] = useState(false);
   const [seed, setSeed] = useState(1);
   const [solIdx, setSolIdx] = useState(0);
   const [night, setNight] = useState(false);
@@ -70,17 +84,28 @@ function MapDemo() {
   const [tracks, setTracks] = useState<Pt[]>([]);
   const [pings, setPings] = useState<Ping[]>([]);
   const [exVersion, setExVersion] = useState(0);
+  /** NASA sites already reached this game (their clue is logged once). */
+  const visitedRef = useRef(new Set<string>());
 
   useEffect(() => {
-    fetch('/data/fake.json').then((r) => r.json()).then((p: DataPack) => setDataPack(p)).catch(() => setDataPack(null));
+    // The Data role's real Jezero pack; fake.json only if it is missing.
+    getJson<DataPack>('/data/jezero_pack.json').catch(() => getJson<DataPack>('/data/fake.json')).then(setDataPack).catch(() => setDataPack(null));
+    getJson<PoiFile>('/data/pois.json').then(setPois).catch(() => setPois(null));
+    getJson<TerrainLayers>('/data/layers_20m.json').then(setTerrainLayers).catch(() => setTerrainLayers(null));
+    // content.json arrives with Data's PR #11; until then items use built-in names.
+    getJson<MapContent>('/data/content.json').then(setContent).catch(() => setContent(null));
   }, []);
 
   const realUsable = !!dataPack && dataPack.elevation.cols >= MIN_REAL_CELLS;
+  const real = realUsable && !useSynthetic && !!pois;
   const pack = useMemo<DataPack>(
     () => (realUsable && !useSynthetic && dataPack ? dataPack : makeDevPack(dataPack ?? undefined)),
     [dataPack, realUsable, useSynthetic],
   );
-  const layout = useMemo(() => buildLayout(pack.area, seed), [pack.area, seed]);
+  const layout = useMemo(
+    () => (real && dataPack && pois ? buildJezeroLayout({ pack: dataPack, pois, layers: terrainLayers, content }, seed) : buildLayout(pack.area, seed)),
+    [real, dataPack, pois, terrainLayers, content, pack.area, seed],
+  );
   const explored = useMemo(() => createExplored(pack.area), [pack.area]);
   const grid = useMemo(() => makeGrid(pack.elevation, layout.zones), [pack.elevation, layout.zones]);
   const [astronaut, setAstronaut] = useState<Pt>(layout.base);
@@ -107,6 +132,7 @@ function MapDemo() {
   const reset = useCallback(() => {
     const { sightM, suitStartPct, sol: solNo } = settings.current;
     explored.seen.fill(0);
+    visitedRef.current.clear();
     const have = new Set<string>();
     const first = reveal(layout.base, sightM, layout.items, have);
     setFound(have);
@@ -114,7 +140,7 @@ function MapDemo() {
     setWaypoints([]);
     setTracks([]);
     setSuit(scaledSuit(suitStartPct / 100));
-    setLog([...first.map((f) => `Nearby: ${f.label}`), `Sol ${solNo}: you wake in the lander cabin. The radio is dead. Find the comms link page, then the rover.`]);
+    setLog([...first.map((f) => `Nearby: ${f.label}`), `Sol ${solNo}: you wake in the lander cabin (game fiction). The radio is dead. Find the comms link page, then Perseverance.`]);
     setExVersion((v) => v + 1);
   }, [explored, layout, reveal]);
   useEffect(() => { reset(); }, [reset]);
@@ -150,6 +176,7 @@ function MapDemo() {
     setWalking(r);
     const samples = r.samples;
     const have = new Set(found);
+    const visited = visitedRef.current;
     const msPerSample = Math.max(8, Math.min(40, 5000 / samples.length));
     let i = 0, last = performance.now();
     const step = (now: number) => {
@@ -159,6 +186,12 @@ function MapDemo() {
         const s = samples[i];
         trail.push(s.at);
         const fresh = reveal(s.at, sightM, layout.items, have);
+        for (const c of layout.items) {
+          if ((c.kind === 'clue' || c.kind === 'science') && !visited.has(c.id) && Math.hypot(c.at.x - s.at.x, c.at.y - s.at.y) < 60) {
+            visited.add(c.id);
+            setLog((l) => [`◆ +${fmtMin(s.t)}: reached ${c.label} (NASA site).${c.note ? ` ${c.note}` : ''}`, ...l]);
+          }
+        }
         if (fresh.length) {
           setLog((l) => [...fresh.map((f) => foundMessage(s.t, f)), ...l]);
           setPings((p) => [...p.filter((x) => now - x.t0 < 2000), ...fresh.map((f) => ({ at: f.at, t0: now }))]);
@@ -213,6 +246,7 @@ function MapDemo() {
               explored={explored} exploredVersion={exVersion} base={layout.base}
               astronaut={astronaut} sightM={sightM} waypoints={waypoints} route={route} layers={layers}
               range={shownRange} reserve={RESERVE} crashPath={layout.crashPath} tracks={tracks} pings={pings}
+              archiveTraverse={layout.archiveTraverse} roverTracks={layout.roverTracks} searchArea={layout.searchArea}
               night={night} storm={storm}
               onAddWaypoint={(p) => !walking && setWaypoints((w) => [...w, p])}
               onRemoveWaypoint={(i) => !walking && setWaypoints((w) => w.filter((_, j) => j !== i))}
@@ -222,7 +256,7 @@ function MapDemo() {
           {route && (
             <div className="md-profile">
               <RouteProfile el={pack.elevation} route={route} full={FULL_SUIT} progress={walking ? progress : undefined}
-                title={`elevation: ${pack.source} · weather: ${dataPack?.source ?? 'none'} · Sol ${sol.sol}`} />
+                title={profileTitle(pack, sol.sol)} />
             </div>
           )}
         </section>
@@ -270,7 +304,9 @@ function MapDemo() {
                 <div className="small" style={{ color: route.home.ok ? 'var(--fg)' : 'var(--critical)' }}>
                   Walk home from last point: {fmtMin(route.home.minutes)} · {route.home.ok ? 'OK with reserve' : 'NOT ENOUGH SUPPLIES'}
                 </div>
-                {route.pnrIndex !== null && <div className="small" style={{ color: 'var(--critical)' }}>Point of no return at waypoint {route.pnrIndex + 1}.</div>}
+                {route.turnBackByMin === null
+                  ? <div className="small" style={{ color: 'var(--critical)' }}>Point of no return: turning back is already unsafe.</div>
+                  : route.pnrIndex !== null && <div className="small" style={{ color: 'var(--critical)' }}>Point of no return after {fmtMin(route.turnBackByMin)}, before waypoint {route.pnrIndex + 1} (Sim's check: walk back the same way).</div>}
                 {route.legs.some((l) => l.zones.length) && <div className="dim small">Crosses: {[...new Set(route.legs.flatMap((l) => l.zones))].map((id) => layout.zones.find((z) => z.id === id)?.label).join(', ')}</div>}
                 {route.legs.flatMap((l) => l.warnings).slice(-2).map((w, i) => <div key={i} className="small" style={{ color: w.level === 'critical' ? 'var(--critical)' : 'var(--warning)' }}>⚠ {w.message}</div>)}
               </>
@@ -293,10 +329,10 @@ function MapDemo() {
               <span><i style={{ background: 'transparent', borderColor: '#4dff88' }} />safe return</span>
               <span><i style={{ background: 'rgba(24,12,0,.6)', borderColor: '#ffb000' }} />one-way</span><span><i style={{ background: 'rgba(30,0,0,.8)' }} />out of reach</span>
               <span><i style={{ background: 'rgba(255,200,0,.5)' }} />&gt;10°</span>
-              <span><i style={{ background: 'rgba(255,140,0,.7)' }} />&gt;18°</span>
+              <span><i style={{ background: 'rgba(255,140,0,.7)' }} />&gt;15°</span>
               <span><i style={{ background: 'rgba(255,60,60,.8)' }} />&gt;25° blocked</span>
-              <span><i className="dots" />soft sand</span>
-              <span><i className="hatch" />boulders</span>
+              <span><i className="dots" />{real ? 'loose sand likely (THEMIS)' : 'soft sand'}</span>
+              <span><i className="hatch" />{real ? 'rocky (HiRISE)' : 'boulders'}</span>
             </div>
             <div className="dim small">Safe zone: estimate from steady walking rates of the team's suit model, {Math.round(RESERVE * 100)}% reserve. Route numbers are simulated step by step.</div>
             <div className="small">Explored {(exploredFraction(explored) * 100).toFixed(1)}%</div>

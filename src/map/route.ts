@@ -1,7 +1,9 @@
 // Route costing: walks a waypoint route in short steps and runs the team's suit model on each step,
-// so the map shows what a route really costs in O₂, water and battery.
-import type { Activity, Environment, SimWarning, SuitState } from '../sim/types';
+// so the map shows what a route really costs in O₂, water and battery. The map turns the route into the
+// Sim role's RouteLeg list, and the point of no return comes from Sim's assessRoute (src/sim/route.ts).
+import type { Activity, Environment, RouteLeg, SimWarning, SuitState } from '../sim/types';
 import { simulate } from '../sim/simulate';
+import { assessRoute } from '../sim/route';
 import type { Elevation, Pt } from './geo';
 import { dist, heightAt, samplePath, stepSlope } from './geo';
 import type { HazardZone } from './layout';
@@ -56,8 +58,12 @@ export interface RouteResult {
   minutes: number;
   end: SuitState;
   status: Status;
-  /** Index of the first waypoint from which a straight walk back to base fails; null if every waypoint is safe. */
+  /** Index of the first waypoint reached after the point of no return; null if you could turn back at the end. */
   pnrIndex: number | null;
+  /** The route as Sim's legs (about one per minute walked), ready for assessRoute or the game loop. */
+  simLegs: RouteLeg[];
+  /** Sim's point of no return: last minute after setting out when turning back still reaches the start safely. null = unsafe already. */
+  turnBackByMin: number | null;
   /** Walk back to base from the last waypoint (smart path if a router is set). */
   home: Home;
 }
@@ -70,7 +76,28 @@ const statusOf = (ws: SimWarning[]): Status => ws.reduce<Status>((s, w) => worst
 /** Walking slows on steep ground, uphill or down (simple game rule [verify]). */
 export const slopeSpeedFactor = (slopeDeg: number): number => Math.max(0.25, 1 - Math.abs(slopeDeg) / 35);
 
-interface Walk { end: SuitState; minutes: number; warnings: SimWarning[]; samples: RouteSample[]; climbM: number; descentM: number; maxSlopeDeg: number; blocked: boolean; zones: Set<string> }
+interface Walk { end: SuitState; minutes: number; warnings: SimWarning[]; samples: RouteSample[]; climbM: number; descentM: number; maxSlopeDeg: number; blocked: boolean; zones: Set<string>; steps: RouteLeg[] }
+
+/**
+ * Merge short steps into legs of about `minLegMin` minutes (time-weighted speed and slope), so Sim's
+ * minute-by-minute point-of-no-return check stays fast on long routes.
+ */
+export function mergeLegs(steps: RouteLeg[], minLegMin = 1): RouteLeg[] {
+  const out: RouteLeg[] = [];
+  let t = 0, distM = 0, slopeT = 0, loadKg = 0;
+  const flush = () => {
+    if (t <= 0) return;
+    out.push({ minutes: t, activity: { speedMS: distM / (t * 60), slopeDeg: slopeT / t, loadKg } });
+    t = 0; distM = 0; slopeT = 0;
+  };
+  for (const s of steps) {
+    if (s.activity.loadKg !== loadKg) { flush(); loadKg = s.activity.loadKg; }
+    t += s.minutes; distM += s.activity.speedMS * s.minutes * 60; slopeT += s.activity.slopeDeg * s.minutes;
+    if (t >= minLegMin) flush();
+  }
+  flush();
+  return out;
+}
 
 const pathLength = (path: Pt[]) => path.reduce((sum, p, i) => (i ? sum + dist(path[i - 1], p) : 0), 0);
 
@@ -84,6 +111,7 @@ function walkLeg(el: Elevation, zones: HazardZone[], path: Pt[], start: SuitStat
   let warnings: SimWarning[] = [];
   const seen = new Set<string>();
   const samples: RouteSample[] = [];
+  const steps: RouteLeg[] = [];
   for (let i = 1; i < pts.length; i++) {
     const p = pts[i - 1], q = pts[i];
     const slope = stepSlope(el, p, q);
@@ -101,8 +129,9 @@ function walkLeg(el: Elevation, zones: HazardZone[], path: Pt[], start: SuitStat
     warnings = step.warnings;
     minutes += dt;
     samples.push({ at: q, t: t0 + minutes, state });
+    steps.push({ activity, minutes: dt });
   }
-  return { end: state, minutes, warnings, samples, climbM, descentM, maxSlopeDeg, blocked, zones: seen };
+  return { end: state, minutes, warnings, samples, climbM, descentM, maxSlopeDeg, blocked, zones: seen, steps };
 }
 
 export interface Home { minutes: number; ok: boolean; end: SuitState; path: Pt[] }
@@ -119,14 +148,16 @@ export function canReturn(el: Elevation, zones: HazardZone[], from: Pt, base: Pt
 
 /**
  * Cost a route that starts where the astronaut stands (`start`) and visits `waypoints` in order.
- * The point of no return and the walk home are measured back to `base`.
+ * The point of no return is Sim's (turning back along the same path to `start`); `home` is the walk
+ * from the last waypoint to `base`.
  */
 export function planRoute(el: Elevation, zones: HazardZone[], start: Pt, base: Pt, waypoints: Pt[], suit: SuitState, opt: RouteOptions): RouteResult {
   const legs: LegResult[] = [];
   const samples: RouteSample[] = [{ at: start, t: 0, state: suit }];
-  let state = suit, minutes = 0, distM = 0, status: Status = 'nominal', pnrIndex: number | null = null;
+  const steps: RouteLeg[] = [];
+  let state = suit, minutes = 0, distM = 0, status: Status = 'nominal';
   let from = start;
-  waypoints.forEach((to, i) => {
+  waypoints.forEach((to) => {
     const path = legPath(from, to, opt);
     const w = walkLeg(el, zones, path, state, minutes, opt);
     const legStatus = worst(statusOf(w.warnings), w.blocked ? 'critical' : w.maxSlopeDeg > SLOPE_CAUTION ? 'warning' : 'nominal');
@@ -135,10 +166,19 @@ export function planRoute(el: Elevation, zones: HazardZone[], start: Pt, base: P
       minutes: w.minutes, blocked: w.blocked, zones: [...w.zones], end: w.end, warnings: w.warnings, status: legStatus,
     });
     samples.push(...w.samples);
+    steps.push(...w.steps);
     state = w.end; minutes += w.minutes; distM += pathLength(path); status = worst(status, legStatus);
-    if (pnrIndex === null && !canReturn(el, zones, to, base, state, opt).ok) pnrIndex = i;
     from = to;
   });
   const home = canReturn(el, zones, from, base, state, opt);
-  return { legs, samples, distM, minutes, end: state, status, pnrIndex, home };
+  const simLegs = mergeLegs(steps);
+  const { turnBackByMin } = assessRoute(suit, simLegs, () => opt.env);
+  let pnrIndex: number | null = null;
+  if (turnBackByMin === null) pnrIndex = 0;
+  else if (turnBackByMin < minutes - 0.5) {
+    let t = 0;
+    const i = legs.findIndex((l) => (t += l.minutes) > turnBackByMin);
+    pnrIndex = i >= 0 ? i : null;
+  }
+  return { legs, samples, distM, minutes, end: state, status, pnrIndex, home, simLegs, turnBackByMin };
 }

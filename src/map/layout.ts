@@ -7,11 +7,16 @@ import { inPolygon } from './geo';
 
 export type HazardKind = 'rocks' | 'sand';
 
+/** A zone given cell by cell (e.g. from the Data role's layers_20m.json) instead of as a polygon. */
+export interface CellMask { cols: number; rows: number; cellM: number; on: Uint8Array }
+
 export interface HazardZone {
   id: string;
   kind: HazardKind;
   label: string;
+  /** Outline of the zone. Empty when `mask` is set. */
   poly: Pt[];
+  mask?: CellMask;
   /** Walking speed is multiplied by this inside the zone. */
   speedFactor: number;
   /** Extra effort, as degrees of "virtual uphill" added to the suit model's slope. */
@@ -19,7 +24,10 @@ export interface HazardZone {
 }
 
 /** Item kinds from proposal §4.1: supplies (o2, lioh, water, battery, repair), rocket pieces (scrap), manual pages. */
-export type ItemKind = 'base' | 'o2' | 'lioh' | 'water' | 'battery' | 'repair' | 'scrap' | 'manual' | 'shelter' | 'rover';
+export type ItemKind =
+  | 'base' | 'o2' | 'lioh' | 'water' | 'battery' | 'repair' | 'scrap' | 'manual' | 'shelter' | 'rover'
+  /** Real NASA sites from the Data role's pois.json: hardware clue sites, sample sites and the science target. */
+  | 'clue' | 'sample' | 'science';
 
 export interface MapItem {
   id: string;
@@ -28,6 +36,14 @@ export interface MapItem {
   at: Pt;
   /** Hidden items appear only once the astronaut has seen them. */
   hidden: boolean;
+  /** Id in the Data role's content.json (supplies and rocket pieces) or manual page number. */
+  contentId?: string;
+  /** Id in pois.json, for history cards and photos. */
+  poiId?: string;
+  /** Clue text or note shown when the astronaut reaches it. */
+  note?: string;
+  /** Game fiction (lander, supplies, pages), labelled so it is not mistaken for NASA data. */
+  fiction?: boolean;
   /** Rocket pieces: scrap materials they break down into (§4.1 table). */
   yields?: string[];
   /** Manual pages: the build the page unlocks. */
@@ -43,7 +59,7 @@ export const HAZARD_EFFECT: Record<HazardKind, { speedFactor: number; extraSlope
 
 /** Slope bands (degrees). Above BLOCKED the astronaut cannot walk. */
 export const SLOPE_CAUTION = 10;
-export const SLOPE_STEEP = 18;
+export const SLOPE_STEEP = 15; // matches the Data role's slope overlay bands (10 / 15 / 25 / 35°)
 export const SLOPE_BLOCKED = 25;
 
 type F = [number, number];
@@ -115,6 +131,12 @@ export interface Layout {
   base: Pt;
   /** The crash scar, base last. */
   crashPath: Pt[];
+  /** The rover's traverse as far as the cabin's archive maps go (always visible). */
+  archiveTraverse?: Pt[][];
+  /** Wheel tracks from the archive's end to where the rover really is (shown once seen). */
+  roverTracks?: Pt[][];
+  /** Last known area: a wide circle around the possible rover positions. */
+  searchArea?: { at: Pt; r: number };
 }
 
 export function buildLayout(area: DataPack['area'], seed = 1): Layout {
@@ -130,5 +152,10 @@ export function buildLayout(area: DataPack['area'], seed = 1): Layout {
 
 /** The hazard zone at a point, if any (the first listed wins where zones overlap). */
 export function zoneAt(zones: HazardZone[], p: Pt): HazardZone | undefined {
-  return zones.find((z) => inPolygon(p, z.poly));
+  return zones.find((z) => (z.mask ? maskAt(z.mask, p) : inPolygon(p, z.poly)));
+}
+
+export function maskAt(m: CellMask, p: Pt): boolean {
+  const c = Math.floor(p.x / m.cellM), r = Math.floor(p.y / m.cellM);
+  return c >= 0 && r >= 0 && c < m.cols && r < m.rows && m.on[r * m.cols + c] === 1;
 }
