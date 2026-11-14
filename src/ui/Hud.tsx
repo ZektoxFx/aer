@@ -20,6 +20,7 @@ import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
 import { World3D } from './World3D';
 import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
+import { missionSteps, nextRelayPass } from './mission';
 import './game3d.css';
 import './hud.css';
 
@@ -45,6 +46,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [mapWorld, setMapWorld] = useState<MapWorldState | null>(null);
   const [placeKey, setPlaceKey] = useState(0);
   const [suitOpen, setSuitOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
   // How to play: shown once per browser on the first 3D visit (the clock holds while it is open); MENU reopens it.
@@ -426,6 +428,29 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         </div>
       );
     };
+    // The mission under the minimap: why, the steps ticked off from what the map has found, and the next relay pass.
+    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes);
+    const nextStep = steps.findIndex((x) => !x.done);
+    const goalPanel = (
+      <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
+        <button className="v-mission-head" aria-expanded={goalOpen} onClick={() => setGoalOpen((o) => !o)}>
+          <span>MISSION · CALL EARTH</span><span>{steps.filter((x) => x.done).length}/{steps.length} {goalOpen ? '▴' : '▾'}</span>
+        </button>
+        {goalOpen && (
+          <>
+            <p className="v-mission-why">Your lander's radio died in the crash. Perseverance's radio can still reach Earth through the orbiters.</p>
+            <ol className="v-mission-steps">
+              {steps.map((st, i) => (
+                <li key={st.id} className={st.done ? 'done' : i === nextStep ? 'next' : undefined}>
+                  <span className="v-check" aria-hidden="true">{st.done ? '✓' : i === nextStep ? '▸' : '○'}</span>
+                  <span>{st.label}{st.detail && <em>{st.detail}</em>}</span>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+      </section>
+    );
     return (
       <div className="game3d">
         <World3D
@@ -484,6 +509,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
             astronaut={astronaut} onRoute={onRoute} onWorld={setMapWorld}
           />
+          {goalPanel}
           <button className="v-toggle" aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
             SUIT DETAILS {suitOpen ? '▴' : '▾'}
           </button>

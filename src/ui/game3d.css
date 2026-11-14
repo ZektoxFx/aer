@@ -192,3 +192,26 @@
 @media (prefers-reduced-motion: reduce) {
   .v-menu, .v-details, .howto, .g3-overlay, .g3-overlay > *, .v-status > p, .v-pill { animation: none; }
 }
+
+/* ---- Mission card under the minimap ---- */
+.v-mission {
+  padding: 8px 12px 10px; font-size: 11px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.v-mission.closed { padding-bottom: 8px; }
+.v-mission-head {
+  width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 0; cursor: pointer;
+  font: inherit; font-size: 11px; letter-spacing: 0.12em; color: var(--fg); background: none; border: 0;
+}
+.v-mission-head:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.v-mission-why { margin: 6px 0 6px; line-height: 1.4; color: color-mix(in srgb, var(--fg) 72%, transparent); }
+.v-mission-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.v-mission-steps li { display: grid; grid-template-columns: 14px 1fr; gap: 6px; line-height: 1.35; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+.v-mission-steps li.next { color: var(--fg); }
+.v-mission-steps li.next .v-check { color: var(--warning); }
+.v-mission-steps li.done { color: color-mix(in srgb, var(--fg) 50%, transparent); }
+.v-mission-steps li.done > span:last-child { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--fg) 35%, transparent); }
+.v-mission-steps em { display: block; font-style: normal; font-size: 10px; color: color-mix(in srgb, var(--fg) 60%, transparent); font-variant-numeric: tabular-nums; }
+.v-mission-steps li.next em { color: var(--warning); }
+@media (max-width: 760px) { .v-mission-why { display: none; } }

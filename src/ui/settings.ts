@@ -6,9 +6,11 @@ export interface Settings {
   reducedMotion: boolean;
   /** Scale the game interface up for readability. */
   largeText: boolean;
+  /** Intro sound effects and the radio voice (captions are always shown). */
+  sound: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { skipIntro: false, reducedMotion: false, largeText: false };
+export const DEFAULT_SETTINGS: Settings = { skipIntro: false, reducedMotion: false, largeText: false, sound: true };
 
 const KEY = 'aer.settings.v1';
 

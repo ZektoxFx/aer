@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createIntroAudio, RADIO, readingMs, type IntroAudio, type RadioLine } from './introAudio';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -9,15 +10,26 @@ export const TEAM_NAME = 'PerformativeLarper';
 
 /**
  * The intro, one continuous sequence:
- * title (Earth) → cruise (leaving Earth) → fault (engine alarm, tumbling) → crash (Mars rushes up, impact)
- * → pov (the astronaut comes to at the wreck) → blur (dissolves into the game).
+ * title (Earth) → cruise (leaving Earth) → meteor (a meteor strikes the engine) → fault (master alarm, Control radios
+ * to divert to Mars) → crash (Mars rushes up, impact) → door (the cabin hatch opens onto Jezero, the astronaut looks
+ * around; a stored radio message says to find Perseverance) → blur (dissolves into the game).
  */
-type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'blur';
-const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
-  cruise: { to: 'fault', ms: 2600 },
-  fault: { to: 'crash', ms: 2200 },
-  crash: { to: 'pov', ms: 2000 },
-  pov: { to: 'blur', ms: 5600 },
+type Phase = 'title' | 'cruise' | 'meteor' | 'fault' | 'crash' | 'door' | 'blur';
+interface Step {
+  to: Phase;
+  /** Longest the phase lasts (a radio call still talking is cut off). */
+  ms: number;
+  /** A radio call starts `radioAt` ms into the phase; the phase then ends when it finishes, but not before `minMs`. */
+  radio?: RadioLine;
+  radioAt?: number;
+  minMs?: number;
+}
+const NEXT: Partial<Record<Phase, Step>> = {
+  cruise: { to: 'meteor', ms: 2600 },
+  meteor: { to: 'fault', ms: 1700 },
+  fault: { to: 'crash', ms: 11000, minMs: 5000, radio: RADIO.mayday, radioAt: 700 },
+  crash: { to: 'door', ms: 2200 },
+  door: { to: 'blur', ms: 15500, minMs: 9000, radio: RADIO.rover, radioAt: 3800 },
 };
 const BLUR_MS = 1200;
 
@@ -44,30 +56,63 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const [phase, setPhase] = useState<Phase>('title');
   const [panel, setPanel] = useState<Panel>('menu');
   const [quitTried, setQuitTried] = useState(false);
+  const [radio, setRadio] = useState<RadioLine | null>(null);
+  const audio = useRef<IntroAudio | null>(null);
   const still = settings.reducedMotion;
 
   useEffect(() => {
     const step = NEXT[phase];
-    if (step) {
-      const t = setTimeout(() => {
-        setPhase(step.to);
-        if (step.to === 'blur') onReveal();
-      }, step.ms);
-      return () => clearTimeout(t);
-    }
     if (phase === 'blur') {
+      audio.current?.stop(BLUR_MS / 1000);
+      audio.current = null;
       const t = setTimeout(onDone, BLUR_MS);
       return () => clearTimeout(t);
     }
+    if (!step) return;
+    if (phase !== 'title') audio.current?.cue(phase as Exclude<Phase, 'title' | 'blur'>);
+    const started = performance.now();
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let over = false;
+    const next = () => {
+      if (over) return;
+      over = true;
+      setPhase(step.to);
+      if (step.to === 'blur') onReveal();
+    };
+    timers.push(setTimeout(next, step.ms));
+    const line = step.radio;
+    if (line) {
+      // Leave the phase once the call ends (and the phase has run its minimum), with a beat of silence after.
+      const afterCall = () => {
+        if (over) return;
+        timers.push(setTimeout(next, Math.max(700, (step.minMs ?? 0) - (performance.now() - started))));
+      };
+      timers.push(setTimeout(() => {
+        if (over) return;
+        setRadio(line);
+        if (audio.current) audio.current.radio(line.text, afterCall);
+        else timers.push(setTimeout(afterCall, readingMs(line.text)));
+      }, step.radioAt ?? 0));
+    }
+    return () => { over = true; timers.forEach(clearTimeout); setRadio(null); };
   }, [phase, onReveal, onDone]);
+
+  // Leaving the intro any other way (unmount) silences it.
+  useEffect(() => () => { audio.current?.stop(0.2); audio.current = null; }, []);
 
   const start = () => {
     const osReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (settings.skipIntro || settings.reducedMotion || osReduced) { onReveal(); onDone(); return; }
+    if (settings.sound) audio.current = createIntroAudio(); // made on the click, so the browser allows sound
     setPhase('cruise');
   };
   const skip = () => {
-    if (phase !== 'title' && phase !== 'blur') { setPhase('blur'); onReveal(); }
+    if (phase !== 'title' && phase !== 'blur') {
+      audio.current?.stop(0.3);
+      audio.current = null;
+      setPhase('blur');
+      onReveal();
+    }
   };
   const quit = () => {
     // Browsers only let a page close tabs that a script opened, so this usually does nothing.
@@ -89,26 +134,45 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         </div>
         <div className="mars" aria-hidden="true" />
         <Rocket className="rocket" />
+        <div className="meteor" aria-hidden="true" />
+        <div className="meteor-hit" aria-hidden="true" />
         <div className="alarm-wash" aria-hidden="true" />
         <div className="impact" aria-hidden="true" />
       </div>
 
-      {/* POV: the astronaut wakes at the wreck */}
-      <div className="pov" aria-hidden={phase !== 'pov'}>
-        <img className="pov-scene" src="/data/crashed_lander_aer1.jpg" alt="The crashed AER-1 lander on the Martian surface" />
+      {/* Door: the cabin hatch opens onto Jezero and the astronaut looks around (real Perseverance photos). */}
+      <div className="door" aria-hidden={phase !== 'door'}>
+        <div className="door-view">
+          <img src="/data/photos/landing_site_1.jpg" alt="" />
+          <img src="/data/photos/landing_site_2.jpg" alt="" />
+        </div>
+        <div className="door-glare" />
+        <div className="cabin">
+          <div className="hatch left"><span>AER-1</span></div>
+          <div className="hatch right"><span>HATCH 2</span></div>
+          <div className="cabin-wall" />
+          <div className="cabin-light" />
+        </div>
         <div className="pov-visor" />
-        <div className="eyelid top" />
-        <div className="eyelid bottom" />
+        <p className="hatch-msg">HATCH RELEASE ▸ CABIN DEPRESSURIZED</p>
         <div className="pov-hud">
           <p>SUIT PRESSURE ········ OK</p>
           <p>O₂ ··················· OK</p>
-          <p className="alert">LANDER AER-1 ········ DESTROYED</p>
-          <p className="alert">RADIO ················ NO SIGNAL</p>
+          <p className="alert">LANDER AER-1 ········ WRECKED</p>
+          <p className="alert">SHIP RADIO ·········· NO SIGNAL</p>
+          <p className="goal">OBJECTIVE ▸ FIND PERSEVERANCE · ~2 KM W</p>
         </div>
-        <p className="ai-mark">AER SIMULATION // AI GENERATED ASSET</p>
+        <p className="door-credit">View: Perseverance Mastcam-Z, Sol 4, near the landing site (NASA/JPL-Caltech/ASU)</p>
       </div>
 
-      {phase === 'fault' && <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT</p>}
+      {radio && (
+        <div className="radio" role="status" aria-live="polite">
+          <p className="radio-from"><span className="radio-bars" aria-hidden="true"><i /><i /><i /><i /></span>{radio.from}</p>
+          <p className="radio-text">{radio.text}</p>
+        </div>
+      )}
+
+      {(phase === 'fault' || phase === 'crash') && <p className="fault-msg" role="alert">▲ MASTER ALARM · METEOR STRIKE · ENGINE FAILURE</p>}
 
       <div className="title-content">
         <p className="title-kicker">TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS 2026</p>
@@ -130,6 +194,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
             <label className="opt"><input type="checkbox" checked={settings.skipIntro} onChange={() => toggle('skipIntro')} /> Skip the intro on START</label>
             <label className="opt"><input type="checkbox" checked={settings.reducedMotion} onChange={() => toggle('reducedMotion')} /> Reduce animations</label>
             <label className="opt"><input type="checkbox" checked={settings.largeText} onChange={() => toggle('largeText')} /> Larger interface</label>
+            <label className="opt"><input type="checkbox" checked={settings.sound} onChange={() => toggle('sound')} /> Intro sound and radio voice</label>
             <h3>CONTROLS</h3>
             <dl className="controls-list">
               {CONTROLS.map((c) => <div key={c.keys}><dt>{c.keys}</dt><dd>{c.action}</dd></div>)}
@@ -155,7 +220,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
 
       <div className="title-meta">
         <p>Simulated astronaut · real archived NASA data · not live</p>
-        <p>Earth: Apollo 17 (NASA, AS17-148-22727) · Mars: HiRISE, Jezero (NASA/JPL/UArizona, USGS)</p>
+        <p>Earth: Apollo 17 (NASA, AS17-148-22727) · Mars: HiRISE, Jezero (NASA/JPL/UArizona, USGS) · Surface: Perseverance Mastcam-Z</p>
       </div>
 
       {phase !== 'title' && phase !== 'blur' && <p className="intro-skip">CLICK TO SKIP</p>}
