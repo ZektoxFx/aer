@@ -1,4 +1,4 @@
-import type { DustDevilFile, RelayFile, SunlightTable, WeatherFile } from '../data/files';
+import type { ContentFile, DustDevilFile, RelayFile, SunlightTable, WeatherFile } from '../data/files';
 import type { DataPack, SolWeather } from '../data/types';
 import type { GameState } from '../sim/types';
 
@@ -11,6 +11,8 @@ export interface GameData {
   devils?: DustDevilFile | null;
   /** Orbiter relay windows for calling Earth from the rover (Data role's relay.json); optional. */
   relay?: RelayFile | null;
+  /** Supplies, rocket pieces and recipes (Data role's content.json): masses and refills for pickups; optional. */
+  content?: ContentFile | null;
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -24,14 +26,15 @@ async function getJson<T>(url: string): Promise<T> {
  * to its built-in sun shortcut, so a failure there doesn't block the game.
  */
 export async function loadGameData(): Promise<GameData> {
-  const [pack, sunlight, weather, devils, relay] = await Promise.all([
+  const [pack, sunlight, weather, devils, relay, content] = await Promise.all([
     getJson<DataPack>('/data/jezero_pack.json'),
     getJson<SunlightTable>('/data/sunlight.json').catch(() => null),
     getJson<WeatherFile>('/data/weather.json').catch(() => null),
     getJson<DustDevilFile>('/data/dustdevils.json').catch(() => null),
     getJson<RelayFile>('/data/relay.json').catch(() => null),
+    getJson<ContentFile>('/data/content.json').catch(() => null),
   ]);
-  return { pack, sunlight, weather, devils, relay };
+  return { pack, sunlight, weather, devils, relay, content };
 }
 
 /** NASA sun position and sunlight for this sol's season, or undefined when the data isn't there. */

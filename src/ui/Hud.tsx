@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { HudMap, type MapWorldState, type Pt, type RouteResult } from '../map';
+import { HudMap, type MapItem, type MapWorldState, type Pt, type RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
@@ -21,6 +21,9 @@ import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement
 import { World3D } from './World3D';
 import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
 import { missionSteps, nextRelayPass } from './mission';
+import {
+  applySupply, carriedKg, drop, EMPTY_PACK, givesLabel, HEAVY_KG, manualPage, packEntryFor, pickUp, pickupTarget, usable, type Pack,
+} from './inventory';
 import './game3d.css';
 import './hud.css';
 
@@ -47,6 +50,27 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [placeKey, setPlaceKey] = useState(0);
   const [suitOpen, setSuitOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(true);
+  // Pickups and the pack (3D): what is in reach, what is carried, and which manual page is open.
+  const [bag, setBagState] = useState<Pack>(EMPTY_PACK);
+  const bagRef = useRef<Pack>(EMPTY_PACK);
+  const setBag = (b: Pack) => { bagRef.current = b; setBagState(b); };
+  const [near, setNear] = useState<MapItem | null>(null);
+  const nearRef = useRef<MapItem | null>(null);
+  const [packOpen, setPackOpen] = useState(false);
+  const [readPage, setReadPage] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const mapWorldRef = useRef<MapWorldState | null>(null);
+  useEffect(() => { mapWorldRef.current = mapWorld; }, [mapWorld]);
+  // Taken items leave the 3D world.
+  const world3d = useMemo(
+    () => (mapWorld && bag.taken.length ? { ...mapWorld, items: mapWorld.items.filter((i) => !bag.taken.includes(i.id)) } : mapWorld),
+    [mapWorld, bag.taken],
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
   // How to play: shown once per browser on the first 3D visit (the clock holds while it is open); MENU reopens it.
@@ -150,7 +174,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     }
     const mv = moveRef.current;
     if (modeRef.current === '3d' && mv && !walkRef.current && !missionRef.current && !flowRef.current) {
-      state = { ...state, activity: activityFor(mv), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
+      state = { ...state, activity: activityFor(mv, carriedKg(bagRef.current)), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
     }
     const wk = walkRef.current;
     if (wk && wk.stoppedAt === null) {
@@ -199,13 +223,15 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const onMove3d = useCallback((m: MoveResult) => {
     moveRef.current = m;
     if (m.moving && hintOnRef.current) { hintOnRef.current = false; setHintOn(false); }
+    const target = pickupTarget(mapWorldRef.current, m.pos, bagRef.current.taken);
+    if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
     if (walkRef.current) return; // the route walker owns the position
     const atCabin = inCabinZone(m.pos, base);
     if (atCabin ? postedRef.current !== null : !postedRef.current || distM(postedRef.current, m.pos) > 20) {
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base, setHintOn]);
+  }, [base, setHintOn, setNear]);
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
@@ -247,6 +273,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const restart = (i = solIndex) => {
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
+    setBag(EMPTY_PACK); nearRef.current = null; setNear(null); setReadPage(null);
     const forecast = stormForecastAt(game.current.clockMin);
     stormAtRef.current = forecast; setStormAt(forecast);
   };
@@ -288,12 +315,49 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     setFrame(r);
   };
 
+  // Pickups: take what is in reach; use a supply on the suit; leave something behind; read a manual page.
+  const pickUpNear = () => {
+    const it = nearRef.current;
+    if (!it) return;
+    const next = pickUp(bagRef.current, it, data.content);
+    setBag(next);
+    nearRef.current = null; setNear(null);
+    const e = next.entries[next.entries.length - 1];
+    setToast(e.kind === 'page'
+      ? `Picked up ${e.name}. Press I to read it.`
+      : `Picked up ${e.name} · ${e.massKg.toFixed(1)} kg${e.gives && usable(e) ? ` · ${givesLabel(e.gives)} when used` : ''}`);
+  };
+  const applyFromBag = (id: string) => {
+    const e = bagRef.current.entries.find((x) => x.id === id);
+    const r = applySupply(bagRef.current, id, game.current.suit, FULL_SUIT);
+    if (!e || !r) return;
+    const got = givesLabel(r.added);
+    if (!got) { setToast(`The suit is already full. Kept the ${e.name.toLowerCase()} for later.`); return; }
+    game.current = { ...game.current, suit: r.suit };
+    setBag(r.pack);
+    const rest = r.pack.entries.find((x) => x.id === id);
+    setToast(`Used ${e.name}: ${got}${rest ? ` · ${givesLabel(rest.gives).replace(/\+/g, '')} left in the pack` : ''}`);
+  };
+  const dropFromBag = (id: string) => {
+    const e = bagRef.current.entries.find((x) => x.id === id);
+    setBag(drop(bagRef.current, id));
+    if (e) setToast(`Left ${e.name} behind`);
+  };
+  const openPage = (n: number | undefined) => { if (n === undefined) return; setPackOpen(false); setReadPage(n); setPaused(true); };
+  const closePage = () => { setReadPage(null); setPaused(false); };
+
   // Keyboard controls (listed in Settings). The ref always holds this render's handlers.
   const onKey = (e: KeyboardEvent) => {
     const t = e.target;
     if (e.metaKey || e.ctrlKey || e.altKey || (t instanceof Element && t.closest('input, select, textarea'))) return;
     // Space on a focused button presses that button, as browsers do; don't also pause.
     if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
+    if (modeRef.current === '3d') {
+      const k = e.key.toLowerCase();
+      if (k === 'f') { pickUpNear(); return; }
+      if (k === 'i') { setPackOpen((o) => !o); setMenuOpen(false); return; }
+      if (k === 'escape' && readPage !== null) { closePage(); return; }
+    }
     const action = hudKeyAction(e.key);
     if (!action) return;
     if (modeRef.current === '3d' && action !== 'pause') return;
@@ -429,7 +493,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       );
     };
     // The mission under the minimap: why, the steps ticked off from what the map has found, and the next relay pass.
-    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes);
+    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken);
     const nextStep = steps.findIndex((x) => !x.done);
     const goalPanel = (
       <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
@@ -457,7 +521,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
-          map={mapWorld}
+          map={world3d}
         />
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
@@ -500,6 +564,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           {mission && !missionCard && <div className="v-pill">{sol1Panel}</div>}
           {walkLine && <div className="v-pill">{walkLine}</div>}
           {frame.warnings.map((w) => <p key={w.code} className={w.level}>▲ {w.message}</p>)}
+          {toast && <p className="v-toast" role="status">{toast}</p>}
         </div>
 
         {/* Top right: the minimap, with suit details under it. */}
@@ -536,10 +601,12 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <span className="v-where">
             {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
           </span>
+          <button className="v-menu-btn v-pack-btn" aria-expanded={packOpen} onClick={() => { setPackOpen((o) => !o); setMenuOpen(false); }}
+            title="Pack (I)">▣ PACK {bag.entries.length ? `${bag.entries.length} · ${carriedKg(bag).toFixed(1)} kg` : ''}</button>
           {/* LOCAL DRAFT: camera switch. */}
           <button className="v-menu-btn v-view-btn" aria-pressed={view === 'first'} onClick={() => { viewPicked.current = true; setView((v) => (v === 'first' ? 'third' : 'first')); }}
             title="Switch camera (V)">{view === 'first' ? '◉ 1ST PERSON' : '◎ 3RD PERSON'}</button>
-          <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
+          <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => { setMenuOpen((o) => !o); setPackOpen(false); }}>☰ MENU</button>
         </footer>
         <p className={hintOn ? 'v-hint' : 'v-hint off'} aria-hidden={!hintOn}>
           {lookLocked
@@ -568,6 +635,80 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {overlay && <div className="g3-overlay">{overlay}</div>}
 
+        {near && readPage === null && (
+          <button className="v-pickup" onClick={pickUpNear}>
+            <kbd>F</kbd> {near.kind === 'manual' ? 'TAKE' : 'PICK UP'} {near.label.toUpperCase()}
+            {(() => { const kg = packEntryFor(near, data.content, () => 0).massKg; return kg ? <span> · {kg.toFixed(1)} kg</span> : null; })()}
+          </button>
+        )}
+
+        {packOpen && (
+          <section className="v-pack" aria-label="Pack">
+            <h2>
+              <span>PACK</span>
+              <span className={carriedKg(bag) > HEAVY_KG ? 'warning' : undefined}>
+                {carriedKg(bag).toFixed(1)} kg{carriedKg(bag) > HEAVY_KG ? ' · HEAVY' : ''}
+                <button className="v-pack-close" onClick={() => setPackOpen(false)} aria-label="Close the pack">×</button>
+              </span>
+            </h2>
+            {bag.entries.length === 0 && (
+              <p className="v-pack-empty">Empty. Walk up to supplies, rocket pieces and manual pages you have spotted and press <kbd>F</kbd>.</p>
+            )}
+            {(['supply', 'scrap', 'page'] as const).map((kind) => {
+              const list = bag.entries.filter((e) => e.kind === kind);
+              if (!list.length) return null;
+              return (
+                <div key={kind} className="v-pack-group">
+                  <h3>{kind === 'supply' ? 'SUPPLIES' : kind === 'scrap' ? 'SCRAP' : 'MANUAL PAGES'}</h3>
+                  <ul>
+                    {list.map((e) => (
+                      <li key={e.id}>
+                        <span className="v-pack-name">
+                          {e.name}
+                          <em>
+                            {e.kind === 'supply' && (usable(e) ? givesLabel(e.gives) : e.repairs ? `fixes ${e.repairs} fault` : '')}
+                            {e.kind === 'scrap' && Object.entries(e.yields ?? {}).map(([m, kg]) => `${m} ${kg} kg`).join(' · ')}
+                            {e.kind === 'page' && 'read to learn the build'}
+                            {e.massKg > 0 && ` · ${e.massKg.toFixed(1)} kg`}
+                          </em>
+                        </span>
+                        <span className="v-pack-acts">
+                          {usable(e) && <button onClick={() => applyFromBag(e.id)}>USE</button>}
+                          {e.kind === 'page' && <button onClick={() => openPage(e.page)}>READ</button>}
+                          {e.kind !== 'page' && <button onClick={() => dropFromBag(e.id)} title="Leave it here">DROP</button>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            <p className="v-pack-note">Carried mass raises your effort, so O₂, scrubber and water go faster. Masses and refills are design values.</p>
+          </section>
+        )}
+
+        {readPage !== null && (() => {
+          const pg = manualPage(pack.fieldManualPages, readPage);
+          const recipe = data.content?.recipes.find((r) => r.id === pg?.unlocksRecipe);
+          return (
+            <div className="g3-overlay">
+              <article className="howto v-manual" aria-label="Field manual page">
+                <p className="v-manual-kicker">FIELD MANUAL · PAGE {readPage}{pg?.category ? ` · ${pg.category.toUpperCase()}` : ''}</p>
+                <h2>{pg?.title ?? 'Page'}</h2>
+                {pg?.sciencePrinciple && <p className="howto-goal">{pg.sciencePrinciple}</p>}
+                {pg?.diagram && <pre className="v-manual-diagram">{pg.diagram}</pre>}
+                {recipe && (
+                  <p className="v-manual-build">
+                    <b>Unlocks: {recipe.name}.</b> {recipe.does}. Needs {Object.entries(recipe.needs).map(([m, kg]) => `${m} ${kg} kg`).join(', ')}.
+                  </p>
+                )}
+                {pg?.source && <p className="v-manual-source">Source: {pg.source}</p>}
+                <button className="choice-btn howto-go" onClick={closePage} autoFocus>CLOSE</button>
+              </article>
+            </div>
+          );
+        })()}
+
         {howToOpen && (
           <div className="g3-overlay">
             <section className="howto" aria-label="How to play">
@@ -578,6 +719,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                 <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>
                 <dt>Map</dt><dd>Top right. Click it to plan a route, then press WALK ROUTE. Stay inside the green line to get home.</dd>
                 <dt>Suit</dt><dd>Bars along the bottom; the big countdown top left is what runs out first. Stand at the lander to recharge.</dd>
+                <dt>Pick up</dt><dd>Walk up to something you have spotted and press <kbd>F</kbd> · <kbd>I</kbd> opens your pack to use supplies or read manual pages</dd>
                 <dt>Weather</dt><dd>Top-left forecast: dust devils, the storm warning, nightfall.</dd>
                 <dt>Menu</dt><dd>☰ MENU: start the Sol 1 mission, pause, or switch to the 2D view.</dd>
               </dl>

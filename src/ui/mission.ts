@@ -41,15 +41,18 @@ export function nextRelayPass(clockMin: number, relay: RelayFile | null | undefi
 const km = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
 
 /** The four mission steps, ticked off from what the map has found. */
-export function missionSteps(world: MapWorldState | null, astronaut: Pt, pass: RelayPass | null, fmtMin: (m: number) => string): MissionStep[] {
+export function missionSteps(
+  world: MapWorldState | null, astronaut: Pt, pass: RelayPass | null, fmtMin: (m: number) => string, taken: readonly string[] = [],
+): MissionStep[] {
   const page = world?.items.find((i) => i.required);
   const rover = world?.items.find((i) => i.kind === 'rover');
-  const pageFound = !!(page && world?.found.has(page.id));
+  const pageSeen = !!(page && world?.found.has(page.id));
+  const pageFound = !!(page && taken.includes(page.id));
   const roverFound = !!(rover && world?.found.has(rover.id));
   const dist = (p: Pt) => km(Math.hypot(p.x - astronaut.x, p.y - astronaut.y));
   return [
     { id: 'crash', label: 'Survive the crash landing', done: true },
-    { id: 'page', label: 'Find the manual page: rover comms link', done: pageFound, detail: pageFound && page ? dist(page.at) : undefined },
+    { id: 'page', label: 'Find the manual page: rover comms link', done: pageFound, detail: !pageFound && pageSeen && page ? `spotted · ${dist(page.at)}` : undefined },
     { id: 'rover', label: 'Find Perseverance', done: roverFound, detail: roverFound && rover ? dist(rover.at) : 'last seen ~2 km W' },
     {
       id: 'call', label: 'Call Earth during an orbiter pass', done: false,
