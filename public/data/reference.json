@@ -1,0 +1,150 @@
+{
+ "about": "Numbers the Simulation, Map and UI roles can cite. 'verify' = still a working assumption from the proposal (§9); do not present as fact until checked.",
+ "jezeroMeasured": {
+  "source": "Computed from public/data/weather.json and dust.json (Perseverance MEDA + Mastcam-Z, 118 sols sampled across ~2.6 Mars years)",
+  "dailyMeanPressurePa": {
+   "min": 587.4,
+   "median": 668.3,
+   "max": 796.5
+  },
+  "airTempC": {
+   "coldestNight": -84.04,
+   "medianNightMin": -75.3,
+   "medianDayMax": -15.3,
+   "warmestDay": -4.56
+  },
+  "windMS": {
+   "medianDailyMean": 3.3,
+   "highest99thPercentile": 13.72,
+   "note": "Wind data only up to sol 313 (sensor damaged)"
+  },
+  "dustTau630nm": {
+   "median": 0.518,
+   "min": 0.23,
+   "max": 1.985,
+   "measuredSols": 1358
+  },
+  "landingSiteElevationM": -2569.91
+ },
+ "mars": {
+  "gravityMS2": {
+   "value": 3.71,
+   "source": "NASA Mars Fact Sheet"
+  },
+  "solSeconds": {
+   "value": 88775.244,
+   "source": "MEDA PDS readme (24 h 39 min 35.244 s)"
+  },
+  "meanTopOfAtmosphereSolarWm2": {
+   "value": 590,
+   "source": "NASA TM-103623"
+  },
+  "orbitEccentricity": {
+   "value": 0.093377,
+   "source": "NASA TM-103623"
+  },
+  "obliquityDeg": {
+   "value": 25.19,
+   "source": "NASA Mars Fact Sheet"
+  },
+  "armstrongLimitKPa": {
+   "value": 6.3,
+   "source": "proposal §3.1"
+  },
+  "lightTimeOneWayMin": {
+   "value": [
+    3,
+    22
+   ],
+   "verify": true,
+   "source": "proposal §3.6 (4-24 min); geometry gives ~3-22 min"
+  }
+ },
+ "human": {
+  "o2KgPerDay": {
+   "value": 0.84,
+   "verify": true,
+   "source": "NASA BVAD (NASA/TP-2015-218570 Rev 2), proposal §5"
+  },
+  "co2KgPerDay": {
+   "value": 1.0,
+   "verify": true,
+   "source": "NASA BVAD Rev 2, proposal §5"
+  },
+  "waterLPerDay": {
+   "value": 2.5,
+   "verify": true,
+   "source": "NASA BVAD Rev 2, proposal §5"
+  },
+  "o2GramsPerHourPerWatt": {
+   "value": 0.255,
+   "source": "proposal §3.4"
+  },
+  "co2PerO2MassRatio": {
+   "value": 1.19,
+   "source": "proposal §3.4 (RQ ~0.87)"
+  },
+  "metabolicW": {
+   "rest": 100,
+   "heavyTraverse": 400,
+   "source": "proposal §3.3"
+  }
+ },
+ "suit": {
+  "pressureKPa": {
+   "nominal": 29.6,
+   "lowOperating": 20.7,
+   "source": "proposal §3.1"
+  },
+  "lioHKgPerKgCO2": {
+   "value": 1.088,
+   "source": "stoichiometry 2 LiOH + CO2 -> Li2CO3 + H2O (47.90 / 44.01)"
+  },
+  "evaporatorLatentHeatMJPerKg": {
+   "value": 2.45,
+   "source": "proposal §3.3"
+  },
+  "avionicsW": {
+   "value": 150,
+   "source": "proposal §3.3"
+  },
+  "co2SymptomTiersKPa": {
+   "warning": 1.0,
+   "cognitive": 3.0,
+   "panic": 5.0,
+   "clearanceStops": 6.0,
+   "unconscious": 8.0,
+   "source": "proposal §3.1"
+  }
+ },
+ "hardware": {
+  "perseveranceMmrtgW": {
+   "value": 110,
+   "note": "at mission start, declining a few % per year",
+   "source": "proposal §6.2 / NASA"
+  },
+  "moxieO2GramsPerHour": {
+   "value": [
+    6,
+    12
+   ],
+   "powerW": 300,
+   "verify": true,
+   "source": "proposal §4"
+  }
+ },
+ "designValues": {
+  "note": "Game tuning, not data",
+  "sightRadiusM": {
+   "clearDay": 300,
+   "night": 50,
+   "storm": 20
+  },
+  "stormWarningRealMinutes": 5,
+  "softSandThermalInertia": {
+   "below": 200,
+   "verify": true,
+   "note": "Used for terrainClass 2 in layers_20m.json"
+  }
+ }
+}
