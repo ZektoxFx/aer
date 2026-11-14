@@ -97,6 +97,40 @@ export function World3D(props: World3DProps) {
     body.add(astro.group);
     scene.add(body);
 
+    // ---- Rocks for scale: scattered boulders and cobbles within ~700 m of the cabin (seeded, so stable) ----
+    let seed = 7;
+    const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const ROCKS = 900;
+    const rocks = new THREE.InstancedMesh(
+      new THREE.DodecahedronGeometry(1, 0),
+      new THREE.MeshStandardMaterial({ color: cssColor('--mars-rust').lerp(cssColor('--mars-sky'), 0.45), roughness: 1, flatShading: true }),
+      ROCKS,
+    );
+    rocks.castShadow = true; rocks.receiveShadow = true;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    for (let i = 0; i < ROCKS; i++) {
+      const r = 14 + Math.pow(rand(), 1.3) * 700, a = rand() * Math.PI * 2;
+      const p = { x: base.x + Math.cos(a) * r, y: base.y + Math.sin(a) * r };
+      const size = 0.06 + Math.pow(rand(), 4) * 0.9; // mostly cobbles, the odd boulder
+      q.setFromEuler(new THREE.Euler(rand() * 3, rand() * 3, rand() * 3));
+      sc.set(size * (0.8 + rand() * 0.6), size * (0.5 + rand() * 0.4), size * (0.8 + rand() * 0.6));
+      m4.compose(toWorld(p, groundY(p) + size * 0.25), q, sc);
+      rocks.setMatrixAt(i, m4);
+    }
+    scene.add(rocks);
+
+    // ---- Blowing dust, shown when the air is dusty: a cloud of motes that follows the camera ----
+    const DUST = 1400;
+    const dustPos = new Float32Array(DUST * 3);
+    for (let i = 0; i < DUST; i++) {
+      dustPos[i * 3] = (rand() - 0.5) * 80; dustPos[i * 3 + 1] = rand() * 20; dustPos[i * 3 + 2] = (rand() - 0.5) * 80;
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    const dustMat = new THREE.PointsMaterial({ color: cssColor('--mars-dust'), size: 0.08, transparent: true, opacity: 0, depthWrite: false });
+    const dustCloud = new THREE.Points(dustGeo, dustMat);
+    scene.add(dustCloud);
+
     // ---- Player state ----
     const start = { x: base.x + 8, y: base.y + 6 };
     let me: Pt = start;
@@ -175,7 +209,7 @@ export function World3D(props: World3DProps) {
       // Pose and place the astronaut.
       moveBlend += ((m.moving ? 1 : 0) - moveBlend) * Math.min(1, dt * 8);
       if (m.moving) phase += dt * (m.speedMS > 1.5 ? 13 : 8);
-      astro.pose(phase, moveBlend);
+      astro.pose(phase, moveBlend, now / 1000);
       body.position.copy(toWorld(me));
       body.rotation.y = -heading;
 
@@ -202,6 +236,21 @@ export function World3D(props: World3DProps) {
       fog.color.copy(skyNow);
       fog.far = THREE.MathUtils.lerp(3200, 140, dust);
       fog.near = THREE.MathUtils.lerp(300, 10, dust);
+      // Helmet lamp at night and in thick dust.
+      astro.lamp.intensity = 30 * Math.max(1 - day, dust * 0.6);
+      // Dust motes drift with the wind and wrap around the astronaut.
+      dustMat.opacity = THREE.MathUtils.clamp((P.tau - 1) / 3, 0, 0.85);
+      if (dustMat.opacity > 0) {
+        const arr = dustGeo.attributes.position.array as Float32Array;
+        for (let i = 0; i < DUST; i++) {
+          arr[i * 3] += dt * (8 + (i % 7));
+          arr[i * 3 + 1] -= dt * 0.6;
+          if (arr[i * 3] > 40) arr[i * 3] -= 80;
+          if (arr[i * 3 + 1] < 0) arr[i * 3 + 1] += 20;
+        }
+        dustGeo.attributes.position.needsUpdate = true;
+        dustCloud.position.set(body.position.x, body.position.y, body.position.z);
+      }
 
       renderer.render(scene, camera);
       raf = requestAnimationFrame(frame);
@@ -216,6 +265,8 @@ export function World3D(props: World3DProps) {
       renderer.dispose();
       geo.dispose();
       tex.dispose();
+      rocks.geometry.dispose();
+      dustGeo.dispose();
       el.removeChild(renderer.domElement);
     };
   }, [pack, base]);

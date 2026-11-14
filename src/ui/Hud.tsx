@@ -33,7 +33,7 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
 const SHELTER_NAME: Record<Shelter, string> = { cabin: 'CABIN', wreck: 'WRECK', builtShelter: 'BUILT SHELTER', none: 'OPEN GROUND' };
 
 /** In-suit HUD: a visor frame of readouts around an open centre (map and photos go there later). */
-export function Hud({ data, mode = '2d' }: { data: GameData; mode?: '2d' | '3d' }) {
+export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d' | '3d'; onView?: (v: 'hud' | 'telemetry') => void }) {
   const { pack } = data;
   const base = useMemo(() => basePoint(pack), [pack]);
   const modeRef = useRef(mode);
@@ -42,6 +42,7 @@ export function Hud({ data, mode = '2d' }: { data: GameData; mode?: '2d' | '3d' 
   const moveRef = useRef<MoveResult | null>(null);
   const [placeKey, setPlaceKey] = useState(0);
   const [suitOpen, setSuitOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
@@ -258,6 +259,14 @@ export function Hud({ data, mode = '2d' }: { data: GameData; mode?: '2d' | '3d' 
   const stormActive = phase === 'warning' || phase === 'building' || phase === 'peak' || phase === 'clearing';
   const showChoices = stormActive && !flow && s.shelter !== 'cabin' && (phase === 'warning' || phase === 'building');
 
+  const menuAction = (id: string) => {
+    if (id === 'pause') setPaused((p) => !p);
+    else if (id === 'sol1') startSol1();
+    else if (id === 'storm') triggerStorm();
+    else if (id === 'skip') skipHour();
+    else if (id === 'restart') restart();
+    else if ((id === 'hud' || id === 'telemetry') && onView) onView(id);
+  };
   const missionCard = mission !== null && (isHolding(mission) || isOver(mission));
   const sol1Panel = mission && (
     <Sol1Panel
@@ -336,86 +345,116 @@ export function Hud({ data, mode = '2d' }: { data: GameData; mode?: '2d' | '3d' 
   if (mode === '3d') {
     const holding = paused || (mission !== null && (isHolding(mission) || isOver(mission)));
     const timeScale = holding ? 0 : SPEED_X[frame.speed];
-    const lowest = Math.min(
-      s.suit.o2Kg / FULL_SUIT.o2Kg, s.suit.liohKg / FULL_SUIT.liohKg, s.suit.waterKg / FULL_SUIT.waterKg, s.suit.batteryWh / FULL_SUIT.batteryWh,
-    );
+    // A slim bar along the visor edge: see-through track, soft glow, minutes left.
+    const vbar = (key: Consumable, label: string, value: number, full: number) => {
+      const pct = Math.max(0, Math.min(100, (value / full) * 100));
+      return (
+        <div className={fc[key] < 30 ? 'vbar warning' : 'vbar'} key={key} title={`${CONSUMABLE_LABEL[key]} ${pct.toFixed(0)}%`}>
+          <span className="vbar-label">{label}</span>
+          <span className="vbar-track" role="meter" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}
+            aria-label={`${CONSUMABLE_LABEL[key]} remaining`}><span style={{ width: `${pct}%` }} /></span>
+          <span className="vbar-time">{formatMinutes(fc[key])}</span>
+        </div>
+      );
+    };
     return (
-      <div className={critical ? 'game3d critical-frame' : 'game3d'}>
+      <div className="game3d">
         <World3D
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
         />
+        <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
-        <div className="g3-topleft glass">
-          <span>DAY {clock.sol} · {clock.time} LTST · MEDA SOL {s.weather.sol}</span>
-          <span className={frame.speed === 'emergency' ? 'critical' : frame.speed === 'storm' ? 'warning' : undefined}>
-            {SPEED_LABEL[frame.speed]} · OUT {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
-          </span>
-          {hero && (
-            <span className={hero.min < 30 ? 'g3-hero warning' : 'g3-hero'}>
-              {CONSUMABLE_LABEL[hero.key]} OUT IN <b>{formatMinutes(hero.min)}</b>
+        {/* Top left: time, conditions, oxygen and the first thing to run out. */}
+        <header className="v-top">
+          <div className="v-clock">
+            <span className="v-time">{clock.time}</span>
+            <span className="v-sub">LTST · DAY {clock.sol} · MEDA SOL {s.weather.sol}</span>
+            <span className={frame.speed === 'emergency' ? 'v-sub critical' : frame.speed === 'storm' ? 'v-sub warning' : 'v-sub'}>
+              {SPEED_LABEL[frame.speed]} · {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
             </span>
-          )}
-          <span className="g3-where">{s.shelter === 'cabin' ? 'IN CABIN · SUIT CHARGING' : 'OUTSIDE'}</span>
-        </div>
+          </div>
+          <div className="v-o2">
+            {vbar('o2Min', 'O₂', s.suit.o2Kg, FULL_SUIT.o2Kg)}
+            {hero && (
+              <span className={hero.min < 30 ? 'v-hero warning' : 'v-hero'}>
+                {CONSUMABLE_LABEL[hero.key]} OUT IN <b>{formatMinutes(hero.min)}</b>
+              </span>
+            )}
+          </div>
+        </header>
 
-        <div className="g3-center">
+        {/* Top centre: what is happening right now. */}
+        <div className="v-status">
           {phase === 'warning' && (
-            <p className="storm warning">DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}</p>
+            <p className="warning">DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}</p>
           )}
-          {stormActive && phase !== 'warning' && <p className="storm warning">DUST STORM: {phase.toUpperCase()}</p>}
+          {stormActive && phase !== 'warning' && <p className="warning">DUST STORM: {phase.toUpperCase()}</p>}
           {flow && !flow.arrived && (
             <p className="warning">EN ROUTE: {SHELTER_NAME[flow.choice.shelter]} · {formatMinutes(flow.choice.travelMin - (s.clockMin - flow.chosenAtMin))} TO COVER</p>
           )}
           {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
-          {mission && !missionCard && <div className="glass g3-mission">{sol1Panel}</div>}
-          {walkLine && <div className="glass g3-walk">{walkLine}</div>}
+          {mission && !missionCard && <div className="v-pill">{sol1Panel}</div>}
+          {walkLine && <div className="v-pill">{walkLine}</div>}
+          {frame.warnings.map((w) => <p key={w.code} className={w.level}>▲ {w.message}</p>)}
         </div>
 
-        <aside className="g3-right">
-          <div className="glass g3-map">
-            <HudMap
-              pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
-              night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
-              astronaut={astronaut} onRoute={onRoute}
-            />
-          </div>
-          <button className={lowest < 0.3 ? 'glass g3-suit-toggle warning' : 'glass g3-suit-toggle'}
-            aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
-            SUIT · LOWEST {Math.round(Math.max(0, lowest) * 100)}% {suitOpen ? '▴' : '▾'}
+        {/* Top right: the minimap, with suit details under it. */}
+        <aside className="v-map">
+          <HudMap
+            pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
+            night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
+            astronaut={astronaut} onRoute={onRoute}
+          />
+          <button className="v-toggle" aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
+            SUIT DETAILS {suitOpen ? '▴' : '▾'}
           </button>
           {suitOpen && (
-            <div className="glass g3-suit">
-              {gauge('o2Min', s.suit.o2Kg * 1000, FULL_SUIT.o2Kg * 1000, 'g')}
-              {gauge('scrubberMin', s.suit.liohKg * 1000, FULL_SUIT.liohKg * 1000, 'g')}
-              {gauge('waterMin', s.suit.waterKg, FULL_SUIT.waterKg, 'kg', 2)}
-              {gauge('batteryMin', s.suit.batteryWh, FULL_SUIT.batteryWh, 'Wh')}
-              <div className="readouts">
-                <span className={s.suit.inspiredPCO2KPa > 1 ? 'warning' : undefined}>pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} kPa</span>
-                <span className={s.suit.coreTempC > 38 || s.suit.coreTempC < 36 ? 'warning' : undefined}>CORE {s.suit.coreTempC.toFixed(1)} °C</span>
-              </div>
-            </div>
-          )}
-          {frame.warnings.length > 0 && (
-            <div className="glass g3-alarms" aria-live="polite">
-              {frame.warnings.map((w) => <span key={w.code} className={w.level}>▲ {w.message}</span>)}
-            </div>
+            <dl className="v-details">
+              <dt>O₂</dt><dd>{(s.suit.o2Kg * 1000).toFixed(0)} g · {formatMinutes(fc.o2Min)}</dd>
+              <dt>Scrubber</dt><dd>{(s.suit.liohKg * 1000).toFixed(0)} g · {formatMinutes(fc.scrubberMin)}</dd>
+              <dt>Water</dt><dd>{s.suit.waterKg.toFixed(2)} kg · {formatMinutes(fc.waterMin)}</dd>
+              <dt>Battery</dt><dd>{s.suit.batteryWh.toFixed(0)} Wh · {formatMinutes(fc.batteryMin)}</dd>
+              <dt>Inspired pCO₂</dt><dd className={s.suit.inspiredPCO2KPa > 1 ? 'warning' : undefined}>{s.suit.inspiredPCO2KPa.toFixed(2)} kPa</dd>
+              <dt>Core temp</dt><dd className={s.suit.coreTempC > 38 || s.suit.coreTempC < 36 ? 'warning' : undefined}>{s.suit.coreTempC.toFixed(1)} °C</dd>
+              <dt>Effort</dt><dd>{Math.round(metabolicW(s.activity))} W</dd>
+            </dl>
           )}
         </aside>
 
-        {overlay && <div className="g3-overlay">{overlay}</div>}
-
-        <footer className="g3-bottom glass">
-          <span className="dim">WASD move · SHIFT run · Q/E or drag to look · scroll to zoom · SPACE pause</span>
-          <div className="controls" role="group" aria-label="Game controls">
-            <button className="start-sol1" onClick={startSol1}>{mission ? 'RESTART SOL 1' : 'START SOL 1'}</button>
-            <button aria-pressed={paused} onClick={() => setPaused((p) => !p)}>{paused ? 'RESUME' : 'PAUSE'}</button>
-            <button onClick={triggerStorm} disabled={stormActive || mission !== null}>TRIGGER STORM</button>
-            <button onClick={skipHour}>SKIP +1 H</button>
-            <button onClick={() => restart()}>RESTART</button>
+        {/* Bottom edge: the other consumables, where you are, and the menu. */}
+        <footer className="v-bottom">
+          <div className="v-bars">
+            {vbar('scrubberMin', 'SCRUB', s.suit.liohKg, FULL_SUIT.liohKg)}
+            {vbar('waterMin', 'H₂O', s.suit.waterKg, FULL_SUIT.waterKg)}
+            {vbar('batteryMin', 'BAT', s.suit.batteryWh, FULL_SUIT.batteryWh)}
           </div>
-          <span className="dim g3-source">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</span>
+          <span className="v-where">
+            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
+          </span>
+          <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
         </footer>
+        <p className="v-hint">WASD move · SHIFT run · Q/E or drag to look · scroll to zoom · SPACE pause</p>
+        <p className="v-credit">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</p>
+
+        {menuOpen && (
+          <nav className="v-menu" aria-label="Game menu">
+            <h2>MENU</h2>
+            {([
+              [paused ? 'RESUME' : 'PAUSE', 'pause', false],
+              [mission ? 'RESTART SOL 1' : 'START SOL 1: SCRUBBER SATURATION', 'sol1', false],
+              ['TRIGGER DUST STORM', 'storm', stormActive || mission !== null],
+              ['SKIP +1 HOUR (TEST)', 'skip', false],
+              ['RESTART AT THE CABIN', 'restart', false],
+              ...(onView ? [['SWITCH TO 2D HUD', 'hud', false], ['TELEMETRY CHARTS', 'telemetry', false]] as const : []),
+            ] as const).map(([label, id, disabled]) => (
+              <button key={id} disabled={disabled} onClick={() => { menuAction(id); setMenuOpen(false); }}>{label}</button>
+            ))}
+            <button className="v-menu-close" onClick={() => setMenuOpen(false)}>CLOSE</button>
+          </nav>
+        )}
+
+        {overlay && <div className="g3-overlay">{overlay}</div>}
       </div>
     );
   }

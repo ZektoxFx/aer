@@ -29,12 +29,12 @@ export default function App() {
           {!error && !data && <p>LOADING DATA PACK…</p>}
           {data && (
             <>
-              <nav className="view-nav" aria-label="Views">
+              {view !== 'game3d' && <nav className="view-nav" aria-label="Views">
                 {([['game3d', '3D GAME'], ['hud', '2D HUD'], ['telemetry', 'TELEMETRY']] as const).map(([v, label]) => (
                   <button key={v} aria-pressed={view === v} onClick={() => setView(v)}>{label}</button>
                 ))}
-              </nav>
-              {view === 'telemetry' ? <Shell data={data} /> : <Hud data={data} mode={view === 'game3d' ? '3d' : '2d'} />}
+              </nav>}
+              {view === 'telemetry' ? <Shell data={data} /> : <Hud data={data} mode={view === 'game3d' ? '3d' : '2d'} onView={setView} />}
             </>
           )}
         </div>
