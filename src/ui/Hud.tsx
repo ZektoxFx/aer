@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { HudMap, type Pt, type RouteResult } from '../map';
+import { HudMap, type MapWorldState, type Pt, type RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
@@ -41,17 +41,27 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   useEffect(() => { modeRef.current = mode; }, [mode]);
   // 3D free walking: the latest movement from the 3D view, and a key to put the astronaut back at the cabin.
   const moveRef = useRef<MoveResult | null>(null);
+  // LOCAL DRAFT (Map): the map's items, zones, safe zone and route, so the 3D world shows the same world.
+  const [mapWorld, setMapWorld] = useState<MapWorldState | null>(null);
   const [placeKey, setPlaceKey] = useState(0);
   const [suitOpen, setSuitOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
   // LOCAL DRAFT (Map/Aiman): first- or third-person camera in the 3D view; V switches.
-  const [view, setView] = useState<'first' | 'third'>('third');
+  // LOCAL DRAFT: start in first person (the eyes open through the visor at the end of the intro), then the camera
+  // pulls back to third person after a few seconds, unless the player has already picked a view.
+  const [view, setView] = useState<'first' | 'third'>(mode === '3d' ? 'first' : 'third');
+  const viewPicked = useRef(false);
+  useEffect(() => {
+    const id = setTimeout(() => { if (!viewPicked.current) setView('third'); }, 8000);
+    return () => clearTimeout(id);
+  }, []);
   useEffect(() => {
     if (mode !== '3d') return;
     const onV = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== 'v' || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof Element && e.target.closest('input, select, textarea')) return;
+      viewPicked.current = true;
       setView((v) => (v === 'first' ? 'third' : 'first'));
     };
     window.addEventListener('keydown', onV);
@@ -397,6 +407,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={dustDevilsActive(s.clockMin) && !stormActive}
+          map={mapWorld}
         />
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
@@ -446,7 +457,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <HudMap
             pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
             night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
-            astronaut={astronaut} onRoute={onRoute}
+            astronaut={astronaut} onRoute={onRoute} onWorld={setMapWorld}
           />
           <button className="v-toggle" aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
             SUIT DETAILS {suitOpen ? '▴' : '▾'}
@@ -475,7 +486,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
           </span>
           {/* LOCAL DRAFT: camera switch. */}
-          <button className="v-menu-btn v-view-btn" aria-pressed={view === 'first'} onClick={() => setView((v) => (v === 'first' ? 'third' : 'first'))}
+          <button className="v-menu-btn v-view-btn" aria-pressed={view === 'first'} onClick={() => { viewPicked.current = true; setView((v) => (v === 'first' ? 'third' : 'first')); }}
             title="Switch camera (V)">{view === 'first' ? '◉ 1ST PERSON' : '◎ 3RD PERSON'}</button>
           <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
         </footer>

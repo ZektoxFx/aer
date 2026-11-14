@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { BlackHole } from './BlackHole';
+import { CrashSequence } from './CrashSequence';
+import { CRASH_MS } from './edl';
 import { EarthGlobe } from './EarthGlobe';
 import { MarsGlobe } from './MarsGlobe';
 import { SolarSystem } from './SolarSystem';
@@ -19,7 +22,7 @@ type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'blur';
 const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
   cruise: { to: 'fault', ms: 2600 },
   fault: { to: 'crash', ms: 2200 },
-  crash: { to: 'pov', ms: 2000 },
+  crash: { to: 'pov', ms: CRASH_MS }, // LOCAL DRAFT: the physics crash (CrashSequence) instead of 2 s
   pov: { to: 'blur', ms: 5600 },
 };
 const BLUR_MS = 1200;
@@ -60,7 +63,8 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
     if (step) {
       const t = setTimeout(() => {
         setPhase(step.to);
-        if (step.to === 'blur') onReveal();
+        // LOCAL DRAFT: the game mounts as the eyes open, so they open onto the live 3D world (not a picture).
+        if (step.to === 'pov' || step.to === 'blur') onReveal();
       }, step.ms);
       return () => clearTimeout(t);
     }
@@ -90,6 +94,8 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
       {/* Space: Earth with satellites, the rocket, Mars */}
       <div className="space">
         <div className="stars" aria-hidden="true" />
+        {/* LOCAL DRAFT: a black hole in the distance (AURIS style); its pull throws the ship off course. */}
+        <BlackHole active={phase === 'cruise' || phase === 'fault'} still={still} />
         {TITLE_BACKDROP === 'solar' && <SolarSystem frozen={phase !== 'title'} still={still} />}
         <div className="earth-wrap" aria-hidden="true">
           {/* LOCAL DRAFT: 3D globe (EarthGlobe) instead of the flat photo + CSS night/atmosphere layers. */}
@@ -114,9 +120,13 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <div className="impact" aria-hidden="true" />
       </div>
 
+      {/* LOCAL DRAFT: entry, parachute, retro failure and impact, played from the physics in edl.ts. */}
+      <CrashSequence active={phase === 'crash'} />
+
       {/* POV: the astronaut wakes at the wreck */}
       <div className="pov" aria-hidden={phase !== 'pov'}>
-        <img className="pov-scene" src="/data/crashed_lander_aer1.jpg" alt="The crashed AER-1 lander on the Martian surface" />
+        {/* LOCAL DRAFT: no picture: the live 3D world is underneath, coming into focus as the eyes open. */}
+        <div className="pov-blur" />
         <div className="pov-visor" />
         <div className="eyelid top" />
         <div className="eyelid bottom" />
@@ -126,10 +136,9 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
           <p className="alert">LANDER AER-1 ········ DESTROYED</p>
           <p className="alert">RADIO ················ NO SIGNAL</p>
         </div>
-        <p className="ai-mark">AER SIMULATION // AI GENERATED ASSET</p>
       </div>
 
-      {phase === 'fault' && <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT</p>}
+      {phase === 'fault' && <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT<br /><span className="fault-sub">GRAVITATIONAL ANOMALY · TRAJECTORY LOST</span></p>}
 
       <div className="title-content">
         <p className="title-kicker">TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS 2026</p>

@@ -14,3 +14,7 @@ export { contourSegments } from './contours';
 export { makeDevPack, DEV_SOURCE } from './devPack';
 export { buildJezeroLayout, rockFor } from './realData';
 export type { JezeroFiles, MapContent } from './realData';
+// LOCAL DRAFT: the map's rules and content for the 3D world.
+export * from './world';
+export { buildMapWorld } from './world3d';
+export type { MapWorld3D } from './world3d';

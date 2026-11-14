@@ -1,11 +1,12 @@
 import type { DataPack } from '../data/types';
-import { slopeSpeedFactor, stepSlope, type Elevation, type Pt } from '../map';
+import { MAP_WALK_MS, slopeSpeedFactor, stepSlope, type Elevation, type Pt } from '../map';
 import type { Activity } from '../sim/types';
 
 // Free walking for the 3D view. Positions are map metres (x east, y south from the north-west corner), the same
 // frame as the Map role's HudMap, so the minimap and the suit costs stay in step with the 3D world.
 
-export const WALK_MS = 1;
+/** LOCAL DRAFT (Map/Aiman): the route planner's pace (0.8 m/s with 10 kg), so free walking matches the route ETA. */
+export const WALK_MS = MAP_WALK_MS;
 export const RUN_MS = 2;
 /** Carried load while exploring on foot (tools and salvage), a design value. */
 export const EXPLORE_LOAD_KG = 10;

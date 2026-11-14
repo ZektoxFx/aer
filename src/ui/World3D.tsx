@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { DataPack } from '../data/types';
-import type { Pt } from '../map';
+import { buildMapWorld, groundStep, type MapWorldState, type Pt } from '../map';
 import { buildAstronaut, buildLander, cssColor } from './astronaut3d';
 import { moveStep, type MoveInput, type MoveResult } from './movement';
 import { buildContactShadow, buildDustDevils, buildFootprints, buildSky, buildTerrain } from './terrain3d';
@@ -32,6 +32,8 @@ export interface World3DProps {
   onLookChange?: (locked: boolean) => void;
   /** LOCAL DRAFT (Map/Aiman): 'first' = through the helmet visor, 'third' = behind the astronaut (default). */
   view?: 'first' | 'third';
+  /** LOCAL DRAFT (Map/Aiman): the map's items, zones, safe zone and route, built into this world. */
+  map?: MapWorldState | null;
 }
 
 /** Mouse-look sensitivity, radians per pixel. */
@@ -120,6 +122,10 @@ export function World3D(props: World3DProps) {
       }
     }
     scene.add(rocks);
+
+    // LOCAL DRAFT (Map/Aiman): the map in 3D (items, danger zones, route, safe-return wall) plus denser ground.
+    const mapWorld = buildMapWorld({ W2, H2, surfaceY: terrain.surfaceY, base });
+    scene.add(mapWorld.group);
 
     const astro = buildAstronaut();
     const body = new THREE.Group();
@@ -269,6 +275,13 @@ export function World3D(props: World3DProps) {
         if (!pressing && ramp < 0.03) ramp = 0;
         const input = ramp > 0 ? lastInput : { forward: 0, right: 0, run: false };
         m = moveStep(me, heading, input, yaw, dt * P.timeScale * ramp, elev, area);
+        // LOCAL DRAFT (Map/Aiman): the map's ground rules, the same ones a planned route is costed with. Slopes over
+        // 25° stop you; soft sand and boulder fields slow you and cost extra effort (more O₂) in the suit model.
+        if (m.moving && P.map) {
+          const g = groundStep(P.map.zones, me, m.slopeDeg);
+          if (g.blocked) m = { ...m, pos: me, moving: false, speedMS: 0 };
+          else m = { ...m, pos: { x: me.x + (m.pos.x - me.x) * g.speedFactor, y: me.y + (m.pos.y - me.y) * g.speedFactor }, speedMS: m.speedMS * g.speedFactor, slopeDeg: g.effortSlopeDeg };
+        }
         me = m.pos; heading = m.heading;
       }
       P.onMove(m);
@@ -359,6 +372,7 @@ export function World3D(props: World3DProps) {
         dustCloud.position.copy(body.position);
       }
       devils.update(dt, body.position, !!P.dustDevils && P.tau < 3, terrain.surfaceY);
+      mapWorld.update(P.map ?? null, me, now, dt);
 
       renderer.render(scene, camera);
       raf = requestAnimationFrame(frame);
@@ -379,6 +393,7 @@ export function World3D(props: World3DProps) {
       rocks.geometry.dispose();
       dustGeo.dispose();
       devils.dispose();
+      mapWorld.dispose();
       el.removeChild(renderer.domElement);
     };
   }, [pack, base]);

@@ -426,3 +426,42 @@
   100% { opacity: 1; transform: translate(10vw, -5vh) rotate(55deg) scale(0.9); }
 }
 
+
+/* ---- LOCAL DRAFT: black hole in the distance (BlackHole.tsx). It fades in during the cruise and looms during the fault. ---- */
+.blackhole { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0; transform-origin: 24% 30%; }
+.phase-cruise .blackhole { animation: bh-in 2.6s ease-in forwards; }
+.phase-fault .blackhole { opacity: 1; animation: bh-pull 2.2s ease-in forwards; }
+@keyframes bh-in { 0%, 25% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes bh-pull { from { transform: scale(1); } to { transform: scale(1.6); } }
+.fault-sub { font-size: 0.7em; letter-spacing: 0.24em; color: var(--mars-dust); }
+
+/* ---- LOCAL DRAFT: the physics crash (CrashSequence.tsx) covers the screen during the crash phase. ---- */
+.crash-seq { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; opacity: 0; }
+.crash-seq canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.crash-hud {
+  position: absolute; left: 14px; top: 14px; margin: 0; padding: 8px 12px; z-index: 1;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--mars-dust);
+  background: color-mix(in srgb, var(--space) 55%, transparent);
+}
+.crash-cap { position: absolute; top: 9%; left: 0; right: 0; margin: 0; z-index: 1; text-align: center; font: 600 15px ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--mars-dust); text-shadow: 0 1px 6px var(--space); }
+.crash-cap[data-alert='1'] { color: var(--alarm); }
+.crash-note { position: absolute; top: calc(9% + 24px); left: 0; right: 0; margin: 0; z-index: 1; text-align: center; font: 10px ui-monospace, Consolas, monospace; color: var(--mars-dust); opacity: 0.6; }
+.crash-flash { position: absolute; inset: 0; z-index: 2; background: var(--mars-dust); opacity: 0; pointer-events: none; }
+.crash-dark { position: absolute; inset: 0; z-index: 3; background: var(--space); opacity: 0; pointer-events: none; }
+.phase-crash .crash-seq { opacity: 1; animation: crash-in 0.35s ease-out; }
+@keyframes crash-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- LOCAL DRAFT: the eyes open onto the live 3D game underneath (no picture). ---- */
+.intro.phase-pov, .intro.phase-blur { background: transparent; }
+.phase-pov .space, .phase-blur .space { opacity: 0; }
+.pov { background: transparent; }
+.pov-blur {
+  position: absolute; inset: 0;
+  -webkit-backdrop-filter: blur(14px) brightness(0.5); backdrop-filter: blur(14px) brightness(0.5);
+}
+.phase-pov .pov-blur, .phase-blur .pov-blur { animation: pov-unblur 5.6s ease-out forwards; }
+@keyframes pov-unblur {
+  0% { -webkit-backdrop-filter: blur(14px) brightness(0.5); backdrop-filter: blur(14px) brightness(0.5); }
+  45% { -webkit-backdrop-filter: blur(6px) brightness(0.8); backdrop-filter: blur(6px) brightness(0.8); }
+  100% { -webkit-backdrop-filter: blur(0) brightness(1); backdrop-filter: blur(0) brightness(1); }
+}

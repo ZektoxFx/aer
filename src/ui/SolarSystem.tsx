@@ -188,8 +188,28 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
       const bow = Math.hypot(ma.x - e.x, ma.y - e.y) * 0.35;
       g.setLineDash([5, 7]); g.lineDashOffset = st ? 0 : -now / 60;
       g.strokeStyle = rgba(sunHot, 0.6); g.lineWidth = 1.2;
-      g.beginPath(); g.moveTo(e.x, e.y); g.quadraticCurveTo(mx + (ox / ol) * bow, my + (oy / ol) * bow, ma.x, ma.y); g.stroke();
+      const cx = mx + (ox / ol) * bow, cy = my + (oy / ol) * bow;
+      g.beginPath(); g.moveTo(e.x, e.y); g.quadraticCurveTo(cx, cy, ma.x, ma.y); g.stroke();
       g.setLineDash([]);
+      // How long the trip takes: a ship marker runs the path counting the days, and a tag at the top of the arc.
+      // Mars 2020 (Perseverance): launched 30 Jul 2020, landed 18 Feb 2021 = 203 days, about 472 million km flown.
+      {
+        const TRIP_DAYS = 203, k = st ? 0.5 : ((now / 1000) % 7) / 6; // 6 s run, 1 s pause at Mars
+        const f = Math.min(1, k), u = 1 - f;
+        const px = u * u * e.x + 2 * u * f * cx + f * f * ma.x, py = u * u * e.y + 2 * u * f * cy + f * f * ma.y;
+        g.fillStyle = rgba(sunHot, 1); g.shadowColor = rgba(sunHot, 1); g.shadowBlur = 10;
+        g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+        g.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.textBaseline = 'middle'; g.textAlign = 'center';
+        g.fillStyle = rgba(sunHot, 0.9); g.fillText(`DAY ${Math.round(f * TRIP_DAYS)}`, px, py - 11);
+        const tx = 0.25 * e.x + 0.5 * cx + 0.25 * ma.x, ty = 0.25 * e.y + 0.5 * cy + 0.25 * ma.y;
+        const away = ty < sy ? -1 : 1, ly = ty + away * 26;
+        g.strokeStyle = rgba(sunHot, 0.5); g.lineWidth = 1; g.beginPath(); g.moveTo(tx, ty + away * 4); g.lineTo(tx, ly - away * 10); g.stroke();
+        g.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = rgba(sunHot, 0.95);
+        g.fillText('EARTH → MARS ≈ 7 MONTHS', tx, ly);
+        g.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = rgba(dust, 0.75);
+        g.fillText('Perseverance: 203 days · ~472 million km', tx, ly + away * 14);
+        g.textAlign = 'left';
+      }
 
       // In front of the Sun.
       order.filter((i) => pos[i].depth >= 0).forEach(drawPlanet);
