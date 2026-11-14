@@ -8,6 +8,7 @@
 .view-nav button[aria-pressed='true'] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
 .view-nav button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .dim { color: var(--dim); }
+.hud-note { margin: 0 0 10px; color: var(--dim); font-size: 12px; letter-spacing: 0.08em; }
 
 .visor {
   display: grid; gap: 12px 24px;
@@ -43,6 +44,25 @@
 .storm { margin: 0; font-size: 18px; letter-spacing: 0.1em; }
 .centre-note { margin: 0; color: var(--dim); font-size: 12px; }
 
+.shelter-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 560px; }
+.shelter-card, .choice-btn {
+  font: inherit; text-align: left; cursor: pointer;
+  background: transparent; color: var(--fg); border: 1px solid var(--warning); padding: 10px 12px;
+}
+.shelter-card { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.shelter-card strong { font-size: 13px; letter-spacing: 0.08em; color: var(--warning); }
+.shelter-card:hover, .choice-btn:hover { background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.shelter-card:focus-visible, .choice-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+.storm-summary { width: 100%; max-width: 420px; border: 1px solid var(--fg); padding: 14px 16px; text-align: left; }
+.storm-summary h2 { margin: 0 0 6px; font-size: 16px; letter-spacing: 0.14em; }
+.storm-summary p { margin: 0 0 10px; }
+.storm-summary dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; margin: 0 0 12px; }
+.storm-summary dt { color: var(--dim); }
+.storm-summary dd { margin: 0; text-align: right; }
+
+@media (max-width: 520px) { .shelter-choices { grid-template-columns: 1fr; } }
+
 .alarms { display: flex; flex-wrap: wrap; gap: 4px 18px; min-height: 1.5em; }
 .controls { display: flex; flex-wrap: wrap; gap: 6px; }
 .controls button {
@@ -53,7 +73,12 @@
 .controls button:disabled { opacity: 0.4; cursor: default; }
 .controls button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .source { margin: 0; font-size: 11px; }
+.scenario { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; max-width: 100%; }
+.scenario select {
+  font: inherit; max-width: 100%; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--dim); padding: 3px 6px;
+}
+.scenario select:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
 @media (max-width: 760px) {
-  .visor { grid-template: 'top' 'centre' 'left' 'right' 'bottom' / 1fr; min-height: 0; }
+  .visor { grid-template: 'top' 'centre' 'left' 'right' 'bottom' / minmax(0, 1fr); min-height: 0; }
 }
