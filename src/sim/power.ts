@@ -2,7 +2,7 @@ import type { Environment, Load, PowerResult, PowerState } from './types';
 
 // Power model (§3.5): P_solar = S · A · η · f(τ, sun angle) · (1 − soiling).
 // env.solarWm2 already carries S · f(τ, sun angle); this file applies area, efficiency and dust.
-const PANEL_EFFICIENCY = 0.25;            // [verify]
+const PANEL_EFFICIENCY = 0.25;            // a little under the ~27% triple-junction cells on Mars rovers, for wear
 const MARS_SOLAR_CONSTANT_WM2 = 586;      // top of atmosphere at Mars' mean distance from the Sun
 
 /** Starting power system in the crashed cabin. Design values to tune in playtesting [verify]. */
