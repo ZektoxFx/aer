@@ -66,7 +66,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [mapWorld, setMapWorld] = useState<MapWorldState | null>(null);
   const [placeKey, setPlaceKey] = useState(0);
   const [suitOpen, setSuitOpen] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(true);
+  // The mission card shows only the next step; the full list opens on demand (keeps the view clear).
+  const [goalOpen, setGoalOpen] = useState(false);
+  /** The low-O₂ alert was closed: at which level, and until which game minute (it comes back if things get worse). */
+  const [o2Hidden, setO2Hidden] = useState<{ level: 'low' | 'critical'; untilMin: number } | null>(null);
   // Pickups and the pack (3D): what is in reach, what is carried, and which manual page is open.
   const [bag, setBagState] = useState<Pack>(EMPTY_PACK);
   const bagRef = useRef<Pack>(EMPTY_PACK);
@@ -405,7 +408,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
     setBag(EMPTY_PACK); setShip(EMPTY_SHIP); nearRef.current = null; setNear(null); setReadPage(null);
-    setLinked(false); setCalled(false); setEndCard(null); endRef.current = false; failRef.current = null;
+    setLinked(false); setCalled(false); setEndCard(null); endRef.current = false; failRef.current = null; setO2Hidden(null);
     runStartRef.current = game.current.clockMin; setPaused(false);
     const forecast = stormForecastAt(game.current.clockMin);
     stormAtRef.current = forecast; setStormAt(forecast);
@@ -759,6 +762,16 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   if (mode === '3d') {
     const holding = paused || work !== null || endCard !== null || (mission !== null && (isHolding(mission) || isOver(mission)));
     const sun = sunPosition(s.clockMin, s.sky);
+    // Low-oxygen alert: pops up under 30 min left (critical under 10 or when empty). Closing it hides it for 20 game
+    // minutes, unless it gets worse.
+    const o2Level: 'low' | 'critical' | null = s.suit.o2Kg <= 0 || fc.o2Min < 10 ? 'critical' : fc.o2Min < 30 ? 'low' : null;
+    const o2Shown = !!o2Level && !endCard && !(o2Hidden && o2Hidden.untilMin > s.clockMin && (o2Hidden.level === 'critical' || o2Level === 'low'));
+    const o2Bottle = bag.entries.find((e) => !!e.gives?.o2Kg && usable(e));
+    const atLander = s.shelter === 'cabin';
+    const o2Advice = o2Bottle ? 'Use the O₂ bottle in your pack now.'
+      : ship.stored.some((e) => !!e.gives?.o2Kg) ? 'There is an O₂ bottle in the ship: go aboard, TAKE it or USE it.'
+      : ship.repaired.includes('life') ? (atLander ? 'Stay at the lander: life support is refilling your suit.' : 'Head back to the lander: life support refills your suit.')
+      : 'Find an O₂ bottle, or restart the ship\'s life support (PACK → REPAIRS) so it refills your suit.';
     const timeScale = holding ? 0 : SPEED_X[frame.speed];
     // A slim bar along the visor edge: see-through track, soft glow, minutes left.
     const vbar = (key: Consumable, label: string, value: number, full: number) => {
@@ -776,11 +789,19 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken, { done: ship.repaired.length, of: REPAIRS.length },
       { linkBuilt: ship.built.includes(COMMS_LINK_ID) || linked, called, suitPatched: !suitLeaking(ship) });
     const nextStep = steps.findIndex((x) => !x.done);
+    const next = steps[nextStep];
     const goalPanel = (
-      <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
-        <button className="v-mission-head" aria-expanded={goalOpen} onClick={() => setGoalOpen((o) => !o)}>
-          <span>MISSION · CALL EARTH</span><span>{steps.filter((x) => x.done).length}/{steps.length} {goalOpen ? '▴' : '▾'}</span>
+      <section className={goalOpen ? 'v-mission open' : 'v-mission'} aria-label="Mission">
+        <button className="v-mission-head" aria-expanded={goalOpen} onClick={() => setGoalOpen((o) => !o)}
+          title={goalOpen ? 'Hide the steps' : 'Show every step'}>
+          <span>MISSION {steps.filter((x) => x.done).length}/{steps.length}</span><span className="v-mission-more">{goalOpen ? 'LESS ▴' : 'ALL STEPS ▾'}</span>
         </button>
+        {!goalOpen && (
+          <p className="v-mission-next">
+            <span className="v-check" aria-hidden="true">▸</span>
+            <span>{next ? next.label : 'Mission complete'}{next?.detail && <em>{next.detail}</em>}</span>
+          </p>
+        )}
         {goalOpen && (
           <>
             <p className="v-mission-why">Your lander's radio died in the crash. Perseverance's radio can still reach Earth through the orbiters.</p>
@@ -826,7 +847,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             </div>
           </div>
           <ul className="v-forecast" aria-label="Environment forecast">
-            {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky, data.devils).map((e) => (
+            {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky, data.devils).filter((e, i) => i === 0 || e.hazard).map((e) => (
               <li key={e.id} className={e.hazard ? 'warning' : undefined}>
                 <span>{e.label}</span><b>{e.inMin === 0 ? 'NOW' : formatMinutes(e.inMin)}</b>
               </li>
@@ -834,7 +855,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           </ul>
           <div className="v-o2">
             {vbar('o2Min', 'O₂', s.suit.o2Kg, FULL_SUIT.o2Kg)}
-            {hero && (
+            {hero && hero.key !== 'o2Min' && hero.min < 180 && (
               <span className={hero.min < 30 ? 'v-hero warning' : 'v-hero'}>
                 {CONSUMABLE_LABEL[hero.key]} OUT IN <b>{formatMinutes(hero.min)}</b>
               </span>
@@ -860,7 +881,22 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
           {mission && !missionCard && <div className="v-pill">{sol1Panel}</div>}
           {walkLine && <div className="v-pill">{walkLine}</div>}
-          {frame.warnings.map((w) => <p key={w.code} className={w.level}>▲ {w.message}</p>)}
+          {o2Shown && o2Level && (
+            <div className={`v-alert ${o2Level}`} role="alert">
+              <p className="v-alert-title">⚠ OXYGEN {o2Level === 'critical' ? 'CRITICAL' : 'LOW'}</p>
+              <p>
+                {s.suit.o2Kg <= 0 ? 'Your suit is out of O₂.' : <><b>{formatMinutes(fc.o2Min)}</b> of O₂ left at this pace.</>} {o2Advice}
+                {leaking ? ' The suit leak makes it worse.' : ''}
+              </p>
+              <div className="v-alert-acts">
+                {o2Bottle && <button onClick={() => applyFrom('pack', o2Bottle.id)}>USE {o2Bottle.name.toUpperCase()}</button>}
+                <button onClick={() => setO2Hidden({ level: o2Level, untilMin: s.clockMin + 20 })}>OK</button>
+              </div>
+            </div>
+          )}
+          {/* After closing the alert, a one-line reminder with the same (leak-aware) number replaces the sim's O₂ line. */}
+          {o2Level && !o2Shown && <p className={o2Level === 'critical' ? 'critical' : 'warning'}>▲ O₂ {s.suit.o2Kg <= 0 ? 'EXHAUSTED' : `LOW · ${formatMinutes(fc.o2Min)} LEFT`}</p>}
+          {frame.warnings.filter((w) => !w.code.startsWith('O2')).map((w) => <p key={w.code} className={w.level}>▲ {w.message}</p>)}
           {toast && <p className="v-toast" role="status">{toast}</p>}
         </div>
 
@@ -893,7 +929,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           </div>
           <span className="v-where">
             {storeAt === 'aboard' ? 'ABOARD AER-1 · ' : storeAt === 'room' ? 'IN THE STORAGE ROOM · ' : ''}
-            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : underRock ? 'UNDER ROCK COVER' : 'OUTSIDE'}{leaking ? ' · SUIT LEAKING' : ''} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
+            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : underRock ? 'UNDER ROCK COVER' : 'OUTSIDE'}{leaking ? ' · SUIT LEAKING' : ''}
           </span>
           <button className="v-menu-btn v-pack-btn" aria-expanded={packOpen} onClick={() => { setPackOpen((o) => !o); setMenuOpen(false); }}
             title="Backpack, ship storage and repairs (I)">▣ PACK {carriedKg(bag).toFixed(1)}/{BACKPACK_MAX_KG} kg</button>
