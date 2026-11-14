@@ -69,11 +69,11 @@ describe('storm effects', () => {
     expect(inside.solarWm2).toBe(0);
   });
 
-  it('dust coats panels much faster in a storm, never past fully covered', () => {
+  it('dust coats panels 10× faster in a storm, capped at the highest observed rate', () => {
     const clearSol = soilingAfter(0.1, 0.5, 1477.6);
     const stormSol = soilingAfter(0.1, 8, 1477.6);
-    expect(clearSol - 0.1).toBeCloseTo(0.9 * 0.002, 6); // ~0.2%/sol in clear weather
-    expect(stormSol - 0.1).toBeGreaterThan(10 * (clearSol - 0.1));
+    expect(clearSol - 0.1).toBeCloseTo(0.9 * 0.002, 6); // 0.2%/sol in clear weather
+    expect(stormSol - 0.1).toBeCloseTo(0.9 * 0.02, 6);  // capped at 2%/sol
     expect(soilingAfter(0.9, 1000, 1e6)).toBeLessThanOrEqual(1);
   });
 
