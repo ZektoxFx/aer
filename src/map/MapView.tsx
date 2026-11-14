@@ -1,16 +1,24 @@
-// The Mars map canvas: terrain, hazards, explored ground, items, route and astronaut.
-// Click = add waypoint, right-click a waypoint = remove it, wheel = zoom, drag = pan.
+// The Mars map canvas. Static layers (terrain, contours, slope, explored ground, safe zone) are rendered once
+// into offscreen canvases; an animation loop composites them with the live parts (route, astronaut, storm).
+// Click = add waypoint, right-click a waypoint = remove it, wheel = zoom, drag = pan, double-click = fit.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as RMouseEvent, WheelEvent as RWheelEvent } from 'react';
 import type { DataPack } from '../data/types';
-import type { Pt } from './geo';
-import { dist, heightAt, slopeAt, toLatLon } from './geo';
+import { contourSegments } from './contours';
+import type { Segment } from './contours';
+import type { Elevation, Pt } from './geo';
+import { dist, heightAt, samplePath, slopeAt, toLatLon } from './geo';
 import type { HazardZone, ItemKind, MapItem } from './layout';
 import { SLOPE_BLOCKED, SLOPE_CAUTION, SLOPE_STEEP, zoneAt } from './layout';
+import type { RangeField } from './pathfind';
+import { cellOf } from './pathfind';
 import type { RouteResult, Status } from './route';
 import type { Explored } from './visibility';
+import { isSeen } from './visibility';
 
-export interface MapLayers { slope: boolean; hazards: boolean; fog: boolean; grid: boolean; allItems: boolean }
+export interface MapLayers { slope: boolean; hazards: boolean; fog: boolean; grid: boolean; contours: boolean; range: boolean; allItems: boolean }
+
+export interface Ping { at: Pt; t0: number }
 
 export interface MapViewProps {
   pack: DataPack;
@@ -19,7 +27,7 @@ export interface MapViewProps {
   items: MapItem[];
   found: ReadonlySet<string>;
   explored: Explored;
-  /** Bump this when `explored` changes so the fog redraws. */
+  /** Bump when `explored` changes so the fog redraws. */
   exploredVersion: number;
   base: Pt;
   astronaut: Pt;
@@ -27,6 +35,17 @@ export interface MapViewProps {
   waypoints: Pt[];
   route: RouteResult | null;
   layers: MapLayers;
+  /** Safe-return field from pathfind.rangeField. */
+  range?: RangeField | null;
+  /** Supply fraction that must be left on return (the safe-zone edge). */
+  reserve?: number;
+  crashPath?: Pt[];
+  /** Where the astronaut has walked. */
+  tracks?: Pt[];
+  /** Expanding rings where items were just found (t0 = performance.now()). */
+  pings?: Ping[];
+  night?: boolean;
+  storm?: boolean;
   onAddWaypoint?: (p: Pt) => void;
   onRemoveWaypoint?: (index: number) => void;
 }
@@ -41,28 +60,63 @@ const ITEM_STYLE: Record<ItemKind, { code: string; color: string }> = {
   lioh: { code: 'LiOH', color: '#c9a7ff' },
   water: { code: 'H₂O', color: '#4fa8ff' },
   battery: { code: 'BAT', color: '#ffe066' },
-  scrap: { code: 'PART', color: '#ff9a5c' },
+  repair: { code: 'KIT', color: '#ffb3a0' },
+  scrap: { code: 'SCRAP', color: '#ff9a5c' },
   manual: { code: 'PAGE', color: '#e8f5ec' },
   shelter: { code: 'SHLT', color: '#9fe0b4' },
   rover: { code: 'ROVER', color: '#ff6bd6' },
 };
 
-/** Terrain image: rust colour by height, lit by hillshade. Rendered at `k`× the grid for smooth light. */
-function renderTerrain(pack: DataPack, k = 3): HTMLCanvasElement {
-  const el = pack.elevation;
-  const w = el.cols * k, h = el.rows * k;
+const RAMP: [number, [number, number, number]][] = [
+  [0, [48, 34, 30]], [0.3, [112, 62, 38]], [0.65, [172, 104, 60]], [1, [224, 172, 114]],
+];
+function ramp(t: number): [number, number, number] {
+  for (let i = 1; i < RAMP.length; i++) {
+    if (t <= RAMP[i][0]) {
+      const [t0, a] = RAMP[i - 1], [t1, b] = RAMP[i];
+      const f = (t - t0) / (t1 - t0);
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    }
+  }
+  return RAMP[RAMP.length - 1][1];
+}
+
+/** Box-blurred copy of the heights (local relief = height minus this; brightens rims, darkens hollows). */
+function blurred(el: Elevation, rad: number): Elevation {
+  const { cols, rows, heightsM: h } = el;
+  const tmp = new Array<number>(cols * rows), out = new Array<number>(cols * rows);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    let s = 0, n = 0;
+    for (let k = -rad; k <= rad; k++) { const cc = c + k; if (cc >= 0 && cc < cols) { s += h[r * cols + cc]; n++; } }
+    tmp[r * cols + c] = s / n;
+  }
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    let s = 0, n = 0;
+    for (let k = -rad; k <= rad; k++) { const rr = r + k; if (rr >= 0 && rr < rows) { s += tmp[rr * cols + c]; n++; } }
+    out[r * cols + c] = s / n;
+  }
+  return { ...el, heightsM: out };
+}
+
+function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D | null] {
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d');
+  return [cv, cv.getContext('2d')];
+}
+
+/** Terrain image at k× the grid: Mars colour ramp × two-light hillshade × local relief, plus film grain. */
+function renderTerrain(el: Elevation, k = 3): HTMLCanvasElement {
+  const w = el.cols * k, h = el.rows * k;
+  const [cv, ctx] = canvas(w, h);
   if (!ctx) return cv;
   let lo = Infinity, hi = -Infinity;
   for (const v of el.heightsM) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
   const span = Math.max(1, hi - lo);
+  const soft = blurred(el, 4);
   const img = ctx.createImageData(w, h);
   const px = el.cellM / k;
-  // Sun from the north-west, 35° up; heights exaggerated ×3 so gentle relief reads on screen.
-  const L = { x: -0.5736 * 0.7071, y: -0.5736 * 0.7071, z: 0.8192 };
-  const ex = 5;
+  const ex = 5; // vertical exaggeration for shading only
+  const key = { x: -0.406, y: -0.406, z: 0.819 }, fill = { x: 0.5, y: 0.5, z: 0.707 };
   for (let r = 0; r < h; r++) {
     for (let c = 0; c < w; c++) {
       const p = { x: (c + 0.5) * px, y: (r + 0.5) * px };
@@ -70,15 +124,18 @@ function renderTerrain(pack: DataPack, k = 3): HTMLCanvasElement {
       const dzdx = ((heightAt(el, { x: p.x + px, y: p.y }) - heightAt(el, { x: p.x - px, y: p.y })) / (2 * px)) * ex;
       const dzdy = ((heightAt(el, { x: p.x, y: p.y + px }) - heightAt(el, { x: p.x, y: p.y - px })) / (2 * px)) * ex;
       const n = Math.hypot(dzdx, dzdy, 1);
-      const shade = Math.max(0, (-dzdx * L.x - dzdy * L.y + L.z) / n);
-      const t = (z - lo) / span;
-      // Low ground deep rust, high ground pale ochre.
-      const base = [62 + 120 * t, 30 + 70 * t, 20 + 42 * t];
-      const s = 0.12 + 1.2 * shade;
+      const sKey = Math.max(0, (-dzdx * key.x - dzdy * key.y + key.z) / n);
+      const sFill = Math.max(0, (-dzdx * fill.x - dzdy * fill.y + fill.z) / n);
+      const local = z - heightAt(soft, p);
+      const ao = Math.min(1.25, Math.max(0.65, 1 + local * 0.05));
+      const hash = Math.sin(c * 12.9898 + r * 78.233) * 43758.5453;
+      const grain = 1 + ((hash - Math.floor(hash)) - 0.5) * 0.07;
+      const s = (0.1 + 1.0 * sKey + 0.12 * sFill) * ao * grain;
+      const [R, G, B] = ramp((z - lo) / span);
       const i = (r * w + c) * 4;
-      img.data[i] = Math.min(255, base[0] * s);
-      img.data[i + 1] = Math.min(255, base[1] * s);
-      img.data[i + 2] = Math.min(255, base[2] * s);
+      img.data[i] = Math.min(255, R * s);
+      img.data[i + 1] = Math.min(255, G * s);
+      img.data[i + 2] = Math.min(255, B * s);
       img.data[i + 3] = 255;
     }
   }
@@ -86,95 +143,135 @@ function renderTerrain(pack: DataPack, k = 3): HTMLCanvasElement {
   return cv;
 }
 
-/** Slope bands as a transparent overlay, one pixel per grid cell. */
-function renderSlope(pack: DataPack): HTMLCanvasElement {
-  const el = pack.elevation;
-  const cv = document.createElement('canvas');
-  cv.width = el.cols; cv.height = el.rows;
-  const ctx = cv.getContext('2d');
+/** Contour lines every 5 m, thicker every 25 m, at k× the grid. */
+function renderContours(el: Elevation, k = 3): HTMLCanvasElement {
+  const [cv, ctx] = canvas(el.cols * k, el.rows * k);
+  if (!ctx) return cv;
+  let lo = Infinity, hi = -Infinity;
+  for (const v of el.heightsM) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  ctx.lineCap = 'round';
+  for (let lvl = Math.ceil(lo / 5) * 5; lvl <= hi; lvl += 5) {
+    const major = lvl % 25 === 0;
+    ctx.strokeStyle = major ? 'rgba(255,225,190,0.32)' : 'rgba(255,225,190,0.13)';
+    ctx.lineWidth = major ? 1.4 : 0.8;
+    ctx.beginPath();
+    for (const [x0, y0, x1, y1] of contourSegments(el.heightsM, el.cols, el.rows, lvl)) {
+      ctx.moveTo((x0 + 0.5) * k, (y0 + 0.5) * k); ctx.lineTo((x1 + 0.5) * k, (y1 + 0.5) * k);
+    }
+    ctx.stroke();
+  }
+  return cv;
+}
+
+function renderSlope(el: Elevation): HTMLCanvasElement {
+  const [cv, ctx] = canvas(el.cols, el.rows);
   if (!ctx) return cv;
   const img = ctx.createImageData(el.cols, el.rows);
-  for (let r = 0; r < el.rows; r++) {
-    for (let c = 0; c < el.cols; c++) {
-      const s = slopeAt(el, { x: (c + 0.5) * el.cellM, y: (r + 0.5) * el.cellM });
-      const rgba = s > SLOPE_BLOCKED ? [255, 60, 60, 170] : s > SLOPE_STEEP ? [255, 140, 0, 120] : s > SLOPE_CAUTION ? [255, 200, 0, 70] : [0, 0, 0, 0];
-      img.data.set(rgba, (r * el.cols + c) * 4);
-    }
+  for (let r = 0; r < el.rows; r++) for (let c = 0; c < el.cols; c++) {
+    const s = slopeAt(el, { x: (c + 0.5) * el.cellM, y: (r + 0.5) * el.cellM });
+    img.data.set(s > SLOPE_BLOCKED ? [255, 60, 60, 170] : s > SLOPE_STEEP ? [255, 140, 0, 110] : s > SLOPE_CAUTION ? [255, 200, 0, 55] : [0, 0, 0, 0], (r * el.cols + c) * 4);
   }
   ctx.putImageData(img, 0, 0);
   return cv;
 }
 
+/** Unexplored ground darkened, pre-blurred so the edge is soft. */
 function renderFog(ex: Explored): HTMLCanvasElement {
-  const cv = document.createElement('canvas');
-  cv.width = ex.cols; cv.height = ex.rows;
-  const ctx = cv.getContext('2d');
+  const [raw, rctx] = canvas(ex.cols, ex.rows);
+  const k = 4;
+  const [cv, ctx] = canvas(ex.cols * k, ex.rows * k);
+  if (!rctx || !ctx) return cv;
+  const img = rctx.createImageData(ex.cols, ex.rows);
+  for (let i = 0; i < ex.seen.length; i++) img.data.set(ex.seen[i] ? [0, 0, 0, 0] : [7, 11, 8, 135], i * 4);
+  rctx.putImageData(img, 0, 0);
+  ctx.filter = 'blur(5px)';
+  ctx.drawImage(raw, 0, 0, cv.width, cv.height);
+  return cv;
+}
+
+/** Safe-return zone: inside stays clear, one-way ground is tinted amber, out of reach is darkened. */
+function renderRange(el: Elevation, range: RangeField, reserve: number): HTMLCanvasElement {
+  const [cv, ctx] = canvas(el.cols, el.rows);
   if (!ctx) return cv;
-  const img = ctx.createImageData(ex.cols, ex.rows);
-  for (let i = 0; i < ex.seen.length; i++) img.data.set(ex.seen[i] ? [0, 0, 0, 0] : [7, 11, 8, 150], i * 4);
+  const img = ctx.createImageData(el.cols, el.rows);
+  for (let i = 0; i < range.safe.length; i++) {
+    const s = range.safe[i], r = range.reach[i];
+    img.data.set(s >= reserve ? [0, 0, 0, 0] : r >= 0 ? [24, 12, 0, 105] : [28, 0, 0, 170], i * 4);
+  }
   ctx.putImageData(img, 0, 0);
   return cv;
 }
 
 function makePattern(ctx: CanvasRenderingContext2D, kind: HazardZone['kind']): CanvasPattern | null {
-  const p = document.createElement('canvas');
-  p.width = p.height = 10;
-  const g = p.getContext('2d');
+  const [p, g] = canvas(10, 10);
   if (!g) return null;
   if (kind === 'sand') {
-    g.fillStyle = 'rgba(255,176,0,0.55)';
+    g.fillStyle = 'rgba(255,176,0,0.5)';
     g.fillRect(2, 2, 1.5, 1.5); g.fillRect(7, 7, 1.5, 1.5);
   } else {
-    g.strokeStyle = 'rgba(255,77,77,0.55)';
+    g.strokeStyle = 'rgba(255,77,77,0.5)';
     g.lineWidth = 1.2;
     g.beginPath(); g.moveTo(0, 10); g.lineTo(10, 0); g.stroke();
   }
   return ctx.createPattern(p, 'repeat');
 }
 
-/** A tidy scale-bar length (m) close to `target`. */
 function niceLength(target: number): number {
   const pow = 10 ** Math.floor(Math.log10(target));
   return [1, 2, 5, 10].map((m) => m * pow).reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
 }
 
+interface Mote { x: number; y: number; v: number; len: number }
+
 export function MapView(props: MapViewProps) {
-  const { pack, zones, items, found, explored, exploredVersion, base, astronaut, sightM, waypoints, route, layers } = props;
+  const { pack, explored, exploredVersion, range, crashPath } = props;
+  const reserve = props.reserve ?? 0.1;
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View | null>(null);
-  const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
-  /** True once the user zooms or pans; until then the map re-fits when the window resizes. */
   const userMovedRef = useRef(false);
+  const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const nightCvRef = useRef<HTMLCanvasElement | null>(null);
+  const motesRef = useRef<Mote[]>([]);
+  const patternsRef = useRef<Partial<Record<HazardZone['kind'], CanvasPattern | null>>>({});
   const [size, setSize] = useState({ w: 800, h: 600 });
-  const [viewTick, setViewTick] = useState(0);
   const [hover, setHover] = useState<Pt | null>(null);
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
 
-  const terrain = useMemo(() => renderTerrain(pack), [pack]);
-  const slope = useMemo(() => renderSlope(pack), [pack]);
-  // exploredVersion is the signal that the grid inside `explored` changed.
+  const el = pack.elevation;
+  const W = pack.area.widthM, H = pack.area.heightM;
+  const terrain = useMemo(() => renderTerrain(el), [el]);
+  const contours = useMemo(() => renderContours(el), [el]);
+  const slope = useMemo(() => renderSlope(el), [el]);
+  // exploredVersion signals that the grid inside `explored` changed.
   const fog = useMemo(() => renderFog(explored), [explored, exploredVersion]);
+  const rangeImg = useMemo(() => (range ? renderRange(el, range, reserve) : null), [el, range, reserve]);
+  const rangeEdges = useMemo(() => {
+    if (!range) return null;
+    const toM = (s: Segment): Segment => [(s[0] + 0.5) * el.cellM, (s[1] + 0.5) * el.cellM, (s[2] + 0.5) * el.cellM, (s[3] + 0.5) * el.cellM];
+    return {
+      safe: contourSegments(range.safe, el.cols, el.rows, reserve).map(toM),
+      reach: contourSegments(range.reach, el.cols, el.rows, 0).map(toM),
+    };
+  }, [el, range, reserve]);
+  const scar = useMemo(() => (crashPath ?? []).flatMap((p, i, a) => (i ? samplePath(a[i - 1], p, 12).slice(1) : [p])), [crashPath]);
 
-  // Real orbital photo from the Data role, when the pack names one.
   useEffect(() => {
-    if (!pack.imageUrl) { setPhoto(null); return; }
+    if (!pack.imageUrl) return;
     const img = new Image();
     img.onload = () => setPhoto(img);
-    img.onerror = () => setPhoto(null);
     img.src = pack.imageUrl;
+    return () => { img.onload = null; setPhoto(null); };
   }, [pack.imageUrl]);
 
   useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
+    const node = wrapRef.current;
+    if (!node) return;
     const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
-    ro.observe(el);
+    ro.observe(node);
     return () => ro.disconnect();
   }, []);
 
-  const W = pack.area.widthM, H = pack.area.heightM;
-  // Fit the whole area on first draw and whenever the area changes.
   useEffect(() => { viewRef.current = null; userMovedRef.current = false; }, [W, H]);
   useEffect(() => { if (!userMovedRef.current) viewRef.current = null; }, [size.w, size.h]);
 
@@ -187,195 +284,272 @@ export function MapView(props: MapViewProps) {
   };
   const toMap = (sx: number, sy: number): Pt => { const v = getView(); return { x: (sx - v.ox) / v.scale, y: (sy - v.oy) / v.scale }; };
 
+  // Everything the draw loop needs, refreshed after every render so the loop always sees the latest props.
+  const live = { props, size, getView, terrain, contours, slope, fog, rangeImg, rangeEdges, scar, photo, reserve };
+  const liveRef = useRef(live);
+  useEffect(() => { liveRef.current = live; });
+
   useEffect(() => {
-    const cv = canvasRef.current;
-    if (!cv) return;
-    const dpr = window.devicePixelRatio || 1;
-    cv.width = Math.round(size.w * dpr); cv.height = Math.round(size.h * dpr);
-    const ctx = cv.getContext('2d');
-    if (!ctx) return;
-    const v = getView();
-    const S = (p: Pt) => ({ x: v.ox + p.x * v.scale, y: v.oy + p.y * v.scale });
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#070b08';
-    ctx.fillRect(0, 0, size.w, size.h);
+    let raf = 0;
+    const draw = (now: number) => {
+      const L = liveRef.current;
+      const cv = canvasRef.current;
+      const ctx = cv?.getContext('2d');
+      if (!cv || !ctx) return;
+      const { props: P, size: sz } = L;
+      const { zones, items, found, astronaut, sightM, waypoints, route, layers: lay } = P;
+      const PW = P.pack.area.widthM, PH = P.pack.area.heightM;
+      const dpr = window.devicePixelRatio || 1;
+      const pw = Math.round(sz.w * dpr), ph = Math.round(sz.h * dpr);
+      if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+      const v = L.getView();
+      const S = (p: Pt) => ({ x: v.ox + p.x * v.scale, y: v.oy + p.y * v.scale });
+      const mapW = PW * v.scale, mapH = PH * v.scale;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#070b08';
+      ctx.fillRect(0, 0, sz.w, sz.h);
 
-    // Terrain (or the real photo, with relief shading on top).
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    if (photo) {
-      ctx.drawImage(photo, v.ox, v.oy, W * v.scale, H * v.scale);
-      ctx.globalAlpha = 0.35; ctx.globalCompositeOperation = 'multiply';
-    }
-    ctx.drawImage(terrain, v.ox, v.oy, W * v.scale, H * v.scale);
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-
-    if (layers.slope) ctx.drawImage(slope, v.ox, v.oy, W * v.scale, H * v.scale);
-
-    if (layers.hazards) {
-      for (const z of zones) {
-        ctx.beginPath();
-        z.poly.forEach((p, i) => { const s = S(p); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
-        ctx.closePath();
-        const pat = makePattern(ctx, z.kind);
-        if (pat) { ctx.fillStyle = pat; ctx.fill(); }
-        ctx.setLineDash([5, 4]);
-        ctx.strokeStyle = z.kind === 'sand' ? 'rgba(255,176,0,0.8)' : 'rgba(255,77,77,0.8)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
-    if (layers.fog) {
-      // Blur in screen pixels so the remembered-ground edge is soft, not stair-stepped.
       ctx.save();
-      ctx.beginPath(); ctx.rect(v.ox, v.oy, W * v.scale, H * v.scale); ctx.clip();
-      ctx.filter = `blur(${Math.max(2, Math.min(10, explored.cellM * v.scale * 0.6))}px)`;
-      ctx.drawImage(fog, v.ox, v.oy, explored.cols * explored.cellM * v.scale, explored.rows * explored.cellM * v.scale);
-      ctx.restore();
-    }
-
-    if (layers.grid) {
-      ctx.strokeStyle = 'rgba(77,255,136,0.12)';
-      ctx.fillStyle = 'rgba(77,255,136,0.55)';
-      ctx.font = '10px ui-monospace, Consolas, monospace';
-      ctx.lineWidth = 1;
-      for (let m = 0; m <= Math.max(W, H); m += 500) {
-        if (m <= W) { const a = S({ x: m, y: 0 }), b = S({ x: m, y: H }); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.fillText(`${m}`, a.x + 2, a.y + 11); }
-        if (m <= H) { const a = S({ x: 0, y: m }), b = S({ x: W, y: m }); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); if (m) ctx.fillText(`${m}`, a.x + 2, a.y - 2); }
+      ctx.beginPath(); ctx.rect(v.ox, v.oy, mapW, mapH); ctx.clip();
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      if (L.photo) {
+        ctx.drawImage(L.photo, v.ox, v.oy, mapW, mapH);
+        ctx.globalAlpha = 0.35; ctx.globalCompositeOperation = 'multiply';
       }
-    }
+      ctx.drawImage(L.terrain, v.ox, v.oy, mapW, mapH);
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      if (lay.contours) ctx.drawImage(L.contours, v.ox, v.oy, mapW, mapH);
+      if (lay.slope) ctx.drawImage(L.slope, v.ox, v.oy, mapW, mapH);
+      if (lay.range && L.rangeImg) ctx.drawImage(L.rangeImg, v.ox, v.oy, mapW, mapH);
 
-    // Map frame.
-    ctx.strokeStyle = 'rgba(77,255,136,0.45)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(v.ox, v.oy, W * v.scale, H * v.scale);
+      if (lay.hazards) {
+        for (const z of zones) {
+          ctx.beginPath();
+          z.poly.forEach((p, i) => { const s = S(p); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
+          ctx.closePath();
+          if (!(z.kind in patternsRef.current)) patternsRef.current[z.kind] = makePattern(ctx, z.kind);
+          const pat = patternsRef.current[z.kind];
+          if (pat) { ctx.fillStyle = pat; ctx.fill(); }
+          ctx.setLineDash([5, 4]);
+          ctx.strokeStyle = z.kind === 'sand' ? 'rgba(255,176,0,0.75)' : 'rgba(255,77,77,0.75)';
+          ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
+      if (lay.fog) ctx.drawImage(L.fog, v.ox, v.oy, P.explored.cols * P.explored.cellM * v.scale, P.explored.rows * P.explored.cellM * v.scale);
 
-    // Route legs, coloured by status; legs past the point of no return are dashed.
-    if (route) {
-      const pnr = route.pnrIndex;
-      route.legs.forEach((leg, i) => {
-        const a = S(leg.from), b = S(leg.to);
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 5; ctx.setLineDash([]);
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        ctx.strokeStyle = STATUS_COLOR[leg.status]; ctx.lineWidth = 2.5;
-        if (pnr !== null && i > pnr) ctx.setLineDash([8, 6]);
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      });
-      ctx.setLineDash([]);
-      // Straight walk home from the last waypoint.
-      if (route.legs.length) {
-        const a = S(route.legs[route.legs.length - 1].to), b = S(base);
-        ctx.setLineDash([2, 5]);
-        ctx.strokeStyle = route.home.ok ? 'rgba(77,255,136,0.7)' : 'rgba(255,77,77,0.85)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      // Crash scar: only the stretches the astronaut has seen (old orbital maps predate the crash).
+      ctx.lineCap = 'round';
+      for (let i = 1; i < L.scar.length; i++) {
+        const a = L.scar[i - 1], b = L.scar[i];
+        if (!isSeen(P.explored, b)) continue;
+        const sa = S(a), sb = S(b);
+        ctx.strokeStyle = 'rgba(20,12,10,0.55)'; ctx.lineWidth = Math.max(3, 14 * v.scale);
+        ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,150,90,0.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+      }
+
+      // Night: the land goes dark except around the astronaut's lamp.
+      if (P.night) {
+        let nc = nightCvRef.current;
+        if (!nc) { nc = document.createElement('canvas'); nightCvRef.current = nc; }
+        if (nc.width !== pw || nc.height !== ph) { nc.width = pw; nc.height = ph; }
+        const n = nc.getContext('2d');
+        if (n) {
+          n.setTransform(dpr, 0, 0, dpr, 0, 0);
+          n.globalCompositeOperation = 'source-over';
+          n.clearRect(0, 0, sz.w, sz.h);
+          n.fillStyle = 'rgba(3,6,22,0.68)'; n.fillRect(0, 0, sz.w, sz.h);
+          const a = S(astronaut), rad = Math.max(26, sightM * v.scale * 1.8);
+          const g = n.createRadialGradient(a.x, a.y, 0, a.x, a.y, rad);
+          g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.55, 'rgba(0,0,0,0.85)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+          n.globalCompositeOperation = 'destination-out';
+          n.fillStyle = g; n.beginPath(); n.arc(a.x, a.y, rad, 0, Math.PI * 2); n.fill();
+          ctx.drawImage(nc, 0, 0, sz.w, sz.h);
+        }
+      }
+
+      // Dust storm: brown haze and blowing dust.
+      if (P.storm) {
+        ctx.fillStyle = 'rgba(150,84,38,0.42)'; ctx.fillRect(v.ox, v.oy, mapW, mapH);
+        const motes = motesRef.current;
+        while (motes.length < 420) motes.push({ x: Math.random() * sz.w, y: Math.random() * sz.h, v: 2 + Math.random() * 5, len: 8 + Math.random() * 22 });
+        ctx.strokeStyle = 'rgba(225,165,110,0.28)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (const m of motes) {
+          m.x -= m.v; m.y += m.v * 0.25;
+          if (m.x < -30) { m.x = sz.w + 10; m.y = Math.random() * sz.h; }
+          if (m.y > sz.h + 10) m.y = -10;
+          ctx.moveTo(m.x, m.y); ctx.lineTo(m.x + m.len, m.y - m.len * 0.25);
+        }
+        ctx.stroke();
+      }
+
+      if (lay.grid) {
+        ctx.strokeStyle = 'rgba(77,255,136,0.12)'; ctx.fillStyle = 'rgba(77,255,136,0.55)';
+        ctx.font = '10px ui-monospace, Consolas, monospace'; ctx.lineWidth = 1;
+        for (let m = 500; m < Math.max(PW, PH); m += 500) {
+          if (m < PW) { const a = S({ x: m, y: 0 }), b = S({ x: m, y: PH }); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.fillText(`${m}`, a.x + 2, a.y + 11); }
+          if (m < PH) { const a = S({ x: 0, y: m }), b = S({ x: PW, y: m }); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.fillText(`${m}`, a.x + 2, a.y - 2); }
+        }
+      }
+
+      // Safe-return edge (glowing) and one-way edge (dashed).
+      if (lay.range && L.rangeEdges) {
+        const edge = (segs: Segment[]) => { ctx.beginPath(); for (const [x0, y0, x1, y1] of segs) { const a = S({ x: x0, y: y0 }), b = S({ x: x1, y: y1 }); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); } ctx.stroke(); };
+        ctx.setLineDash([4, 5]); ctx.strokeStyle = 'rgba(255,176,0,0.7)'; ctx.lineWidth = 1.2;
+        edge(L.rangeEdges.reach);
         ctx.setLineDash([]);
+        const glow = 0.75 + 0.25 * Math.sin(now / 420);
+        ctx.shadowColor = '#4dff88'; ctx.shadowBlur = 10;
+        ctx.strokeStyle = `rgba(77,255,136,${0.85 * glow})`; ctx.lineWidth = 2;
+        edge(L.rangeEdges.safe);
+        ctx.shadowBlur = 0;
       }
-    }
+      ctx.restore();
 
-    // Waypoints.
-    ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    waypoints.forEach((p, i) => {
-      const s = S(p);
-      const st: Status = route?.legs[i]?.status ?? 'nominal';
-      ctx.fillStyle = '#070b08'; ctx.strokeStyle = STATUS_COLOR[st]; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(s.x, s.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = STATUS_COLOR[st];
-      ctx.fillText(String(i + 1), s.x, s.y + 0.5);
-      if (route?.pnrIndex === i) {
-        ctx.fillStyle = '#ff4d4d';
-        ctx.beginPath(); ctx.moveTo(s.x, s.y - 26); ctx.lineTo(s.x - 8, s.y - 13); ctx.lineTo(s.x + 8, s.y - 13); ctx.closePath(); ctx.fill();
-        ctx.font = 'bold 10px ui-monospace, Consolas, monospace';
-        ctx.fillText('NO RETURN', s.x, s.y - 33);
-        ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
+      ctx.strokeStyle = 'rgba(77,255,136,0.45)'; ctx.lineWidth = 1;
+      ctx.strokeRect(v.ox + 0.5, v.oy + 0.5, mapW, mapH);
+
+      // Footprints.
+      const tracks = P.tracks ?? [];
+      ctx.fillStyle = 'rgba(232,255,240,0.55)';
+      for (let i = 0; i < tracks.length; i += 2) { const s = S(tracks[i]); ctx.fillRect(s.x - 1, s.y - 1, 2, 2); }
+
+      // Route: legs coloured by status with moving dashes, path home faint.
+      const line = (path: Pt[]) => { ctx.beginPath(); path.forEach((p, i) => { const s = S(p); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); }); ctx.stroke(); };
+      if (route) {
+        if (route.legs.length) {
+          ctx.setLineDash([2, 5]); ctx.lineWidth = 1.5;
+          ctx.strokeStyle = route.home.ok ? 'rgba(77,255,136,0.55)' : 'rgba(255,77,77,0.85)';
+          line(route.home.path);
+        }
+        route.legs.forEach((leg, i) => {
+          ctx.setLineDash([]); ctx.strokeStyle = 'rgba(0,0,0,0.65)'; ctx.lineWidth = 5; line(leg.path);
+          ctx.strokeStyle = STATUS_COLOR[leg.status]; ctx.lineWidth = 2.5;
+          const past = route.pnrIndex !== null && i > route.pnrIndex;
+          ctx.setLineDash(past ? [8, 6] : [14, 6]); ctx.lineDashOffset = -now / 45;
+          line(leg.path);
+        });
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
       }
-    });
 
-    // Items.
-    ctx.font = 'bold 9px ui-monospace, Consolas, monospace';
-    for (const it of items) {
-      const shown = !it.hidden || found.has(it.id);
-      if (!shown && !layers.allItems) continue;
-      const s = S(it.at);
-      const st = ITEM_STYLE[it.kind];
-      ctx.globalAlpha = shown ? 1 : 0.35;
-      ctx.strokeStyle = st.color; ctx.fillStyle = 'rgba(7,11,8,0.85)'; ctx.lineWidth = 1.5;
-      if (it.kind === 'base') {
-        ctx.fillRect(s.x - 8, s.y - 8, 16, 16); ctx.strokeRect(s.x - 8, s.y - 8, 16, 16);
-        ctx.beginPath(); ctx.moveTo(s.x - 4, s.y); ctx.lineTo(s.x + 4, s.y); ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x, s.y + 4); ctx.stroke();
-      } else {
-        ctx.beginPath(); ctx.moveTo(s.x, s.y - 8); ctx.lineTo(s.x + 8, s.y); ctx.lineTo(s.x, s.y + 8); ctx.lineTo(s.x - 8, s.y); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = st.color; ctx.beginPath(); ctx.arc(s.x, s.y, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      waypoints.forEach((p, i) => {
+        const s = S(p);
+        const st: Status = route?.legs[i]?.status ?? 'nominal';
+        ctx.fillStyle = '#070b08'; ctx.strokeStyle = STATUS_COLOR[st]; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = STATUS_COLOR[st]; ctx.fillText(String(i + 1), s.x, s.y + 0.5);
+        if (route?.pnrIndex === i) {
+          ctx.fillStyle = '#ff4d4d';
+          ctx.beginPath(); ctx.moveTo(s.x, s.y - 26); ctx.lineTo(s.x - 8, s.y - 13); ctx.lineTo(s.x + 8, s.y - 13); ctx.closePath(); ctx.fill();
+          ctx.font = 'bold 10px ui-monospace, Consolas, monospace'; ctx.fillText('NO RETURN', s.x, s.y - 33);
+          ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
+        }
+      });
+
+      // Items. In a storm, shelters still reachable pulse (proposal §6.3).
+      ctx.font = 'bold 9px ui-monospace, Consolas, monospace';
+      for (const it of items) {
+        const shown = !it.hidden || found.has(it.id);
+        if (!shown && !lay.allItems) continue;
+        const s = S(it.at);
+        const st = it.required ? { code: 'COMMS', color: '#ffffff' } : ITEM_STYLE[it.kind];
+        if (P.storm && shown && (it.kind === 'shelter' || it.kind === 'base') && P.range && P.range.reach[cellOf(P.pack.elevation, it.at)] >= 0) {
+          const k = (now % 1400) / 1400;
+          ctx.strokeStyle = `rgba(255,176,0,${1 - k})`; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(s.x, s.y, 10 + k * 22, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = shown ? 1 : 0.35;
+        ctx.strokeStyle = st.color; ctx.fillStyle = 'rgba(7,11,8,0.85)'; ctx.lineWidth = 1.5;
+        if (it.kind === 'base') {
+          ctx.fillRect(s.x - 8, s.y - 8, 16, 16); ctx.strokeRect(s.x - 8, s.y - 8, 16, 16);
+          ctx.beginPath(); ctx.moveTo(s.x - 4, s.y); ctx.lineTo(s.x + 4, s.y); ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x, s.y + 4); ctx.stroke();
+        } else {
+          ctx.beginPath(); ctx.moveTo(s.x, s.y - 8); ctx.lineTo(s.x + 8, s.y); ctx.lineTo(s.x, s.y + 8); ctx.lineTo(s.x - 8, s.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = st.color; ctx.beginPath(); ctx.arc(s.x, s.y, 2.2, 0, Math.PI * 2); ctx.fill();
+        }
+        const tw = ctx.measureText(st.code).width + 6;
+        ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(s.x - tw / 2, s.y + 11, tw, 12);
+        ctx.fillStyle = st.color; ctx.fillText(st.code, s.x, s.y + 17.5);
+        ctx.globalAlpha = 1;
       }
-      const tw = ctx.measureText(st.code).width + 6;
-      ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(s.x - tw / 2, s.y + 11, tw, 12);
-      ctx.fillStyle = st.color; ctx.fillText(st.code, s.x, s.y + 17.5);
-      ctx.globalAlpha = 1;
-    }
 
-    // Astronaut and sight circle.
-    const a = S(astronaut);
-    ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,255,136,0.75)'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(a.x, a.y, Math.max(4, sightM * v.scale), 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(77,255,136,0.18)';
-    ctx.beginPath(); ctx.arc(a.x, a.y, 12, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#e8fff0'; ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(a.x, a.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // Find pings.
+      for (const pg of P.pings ?? []) {
+        const k = (now - pg.t0) / 1600;
+        if (k < 0 || k > 1) continue;
+        const s = S(pg.at);
+        ctx.strokeStyle = `rgba(232,255,240,${1 - k})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 8 + k * 40, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(s.x, s.y, 8 + k * 22, 0, Math.PI * 2); ctx.stroke();
+      }
 
-    // Scale bar (bottom left) and north arrow (top right).
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    const len = niceLength(140 / v.scale);
-    const bx = 16, by = size.h - 18, bw = len * v.scale;
-    ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.fillRect(bx - 6, by - 18, bw + 12, 26);
-    ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by - 4); ctx.stroke();
-    ctx.fillStyle = '#4dff88'; ctx.font = '11px ui-monospace, Consolas, monospace';
-    ctx.fillText(len >= 1000 ? `${len / 1000} km` : `${len} m`, bx, by - 7);
-    const nx = size.w - 28, ny = 30;
-    ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.beginPath(); ctx.arc(nx, ny, 17, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#4dff88';
-    ctx.beginPath(); ctx.moveTo(nx, ny - 12); ctx.lineTo(nx + 6, ny + 6); ctx.lineTo(nx, ny + 2); ctx.lineTo(nx - 6, ny + 6); ctx.closePath(); ctx.fill();
-    ctx.font = 'bold 9px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center';
-    ctx.fillText('N', nx, ny + 14);
-    // getView reads size and the view ref; viewTick redraws after zoom/pan.
-  }, [size, viewTick, terrain, slope, fog, photo, zones, items, found, explored, base, astronaut, sightM, waypoints, route, layers, W, H]);
+      // Astronaut: sight ring with a radar sweep.
+      const a = S(astronaut), sr = Math.max(6, sightM * v.scale);
+      const cg = ctx.createConicGradient((now / 1000) * 1.8, a.x, a.y);
+      cg.addColorStop(0, 'rgba(77,255,136,0.30)'); cg.addColorStop(0.1, 'rgba(77,255,136,0.0)'); cg.addColorStop(1, 'rgba(77,255,136,0.0)');
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(a.x, a.y, sr, 0, Math.PI * 2); ctx.fill();
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,255,136,0.75)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(a.x, a.y, sr, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      const beat = (now % 1600) / 1600;
+      ctx.strokeStyle = `rgba(77,255,136,${0.6 * (1 - beat)})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(a.x, a.y, 6 + beat * 14, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#e8fff0'; ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(a.x, a.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      // Scale bar, north arrow and the safe-zone key.
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      const len = niceLength(140 / v.scale);
+      const bx = 16, by = sz.h - 18, bw = len * v.scale;
+      ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.fillRect(bx - 6, by - 18, bw + 12, 26);
+      ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by - 4); ctx.stroke();
+      ctx.fillStyle = '#4dff88'; ctx.font = '11px ui-monospace, Consolas, monospace';
+      ctx.fillText(len >= 1000 ? `${len / 1000} km` : `${len} m`, bx, by - 7);
+      const nx = sz.w - 28, ny = 30;
+      ctx.fillStyle = 'rgba(7,11,8,0.75)'; ctx.beginPath(); ctx.arc(nx, ny, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4dff88';
+      ctx.beginPath(); ctx.moveTo(nx, ny - 12); ctx.lineTo(nx + 6, ny + 6); ctx.lineTo(nx, ny + 2); ctx.lineTo(nx - 6, ny + 6); ctx.closePath(); ctx.fill();
+      ctx.font = 'bold 9px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center'; ctx.fillText('N', nx, ny + 14);
+      if (lay.range && P.range) {
+        ctx.textAlign = 'left'; ctx.font = '10px ui-monospace, Consolas, monospace';
+        const kx = sz.w - 196, ky = sz.h - 44;
+        ctx.fillStyle = 'rgba(7,11,8,0.8)'; ctx.fillRect(kx - 8, ky - 14, 192, 40);
+        ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(kx, ky - 4); ctx.lineTo(kx + 16, ky - 4); ctx.stroke();
+        ctx.fillStyle = '#4dff88'; ctx.fillText(`SAFE RETURN (≥${Math.round(L.reserve * 100)}% left)`, kx + 22, ky);
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = '#ffb000'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(kx, ky + 12); ctx.lineTo(kx + 16, ky + 12); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#ffb000'; ctx.fillText('ONE-WAY LIMIT', kx + 22, ky + 16);
+      }
+    };
+    const frame = (now: number) => { draw(now); raf = requestAnimationFrame(frame); };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = canvasRef.current?.getBoundingClientRect();
     return { x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) };
   };
-
   const onWheel = (e: RWheelEvent) => {
     const v = getView();
     const s = local(e);
-    const k = Math.exp(-e.deltaY * 0.0015);
     const fit = Math.min(size.w / W, size.h / H) * 0.94;
-    const scale = Math.min(fit * 12, Math.max(fit * 0.8, v.scale * k));
+    const scale = Math.min(fit * 12, Math.max(fit * 0.8, v.scale * Math.exp(-e.deltaY * 0.0015)));
     viewRef.current = { scale, ox: s.x - ((s.x - v.ox) * scale) / v.scale, oy: s.y - ((s.y - v.oy) * scale) / v.scale };
     userMovedRef.current = true;
-    setViewTick((t) => t + 1);
   };
-
-  const onMouseDown = (e: RMouseEvent) => {
-    if (e.button !== 0) return;
-    dragRef.current = { ...local(e), moved: false };
-  };
+  const onMouseDown = (e: RMouseEvent) => { if (e.button === 0) dragRef.current = { ...local(e), moved: false }; };
   const onMouseMove = (e: RMouseEvent) => {
     const s = local(e);
     const d = dragRef.current;
-    if (d) {
-      const dx = s.x - d.x, dy = s.y - d.y;
-      if (d.moved || Math.hypot(dx, dy) > 4) {
-        const v = getView();
-        viewRef.current = { ...v, ox: v.ox + dx, oy: v.oy + dy };
-        userMovedRef.current = true;
-        dragRef.current = { ...s, moved: true };
-        setViewTick((t) => t + 1);
-      }
+    if (d && (d.moved || Math.hypot(s.x - d.x, s.y - d.y) > 4)) {
+      const v = getView();
+      viewRef.current = { ...v, ox: v.ox + s.x - d.x, oy: v.oy + s.y - d.y };
+      userMovedRef.current = true;
+      dragRef.current = { ...s, moved: true };
     }
     const p = toMap(s.x, s.y);
     setHover(p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= H ? p : null);
@@ -389,23 +563,30 @@ export function MapView(props: MapViewProps) {
   };
   const onContextMenu = (e: RMouseEvent) => {
     e.preventDefault();
-    const s = local(e);
-    const v = getView();
-    const idx = waypoints.findIndex((p) => Math.hypot(v.ox + p.x * v.scale - s.x, v.oy + p.y * v.scale - s.y) < 12);
+    const s = local(e), v = getView();
+    const idx = props.waypoints.findIndex((p) => Math.hypot(v.ox + p.x * v.scale - s.x, v.oy + p.y * v.scale - s.y) < 12);
     if (idx >= 0) props.onRemoveWaypoint?.(idx);
   };
+  const onDoubleClick = () => { viewRef.current = null; userMovedRef.current = false; };
 
   const readout = hover && (() => {
     const ll = toLatLon(pack.area, hover);
-    const z = zoneAt(zones, hover);
-    const sl = slopeAt(pack.elevation, hover);
+    const z = zoneAt(props.zones, hover);
+    const sl = slopeAt(el, hover);
+    const ci = cellOf(el, hover);
+    const safe = range?.safe[ci], reach = range?.reach[ci];
     return (
       <div className="mv-readout">
         <span>{ll.lat.toFixed(4)}°N {ll.lon.toFixed(4)}°E</span>
-        <span>elev {heightAt(pack.elevation, hover).toFixed(0)} m</span>
+        <span>elev {heightAt(el, hover).toFixed(0)} m</span>
         <span style={{ color: sl > SLOPE_BLOCKED ? 'var(--critical)' : sl > SLOPE_CAUTION ? 'var(--warning)' : undefined }}>slope {sl.toFixed(1)}°{sl > SLOPE_BLOCKED ? ' BLOCKED' : ''}</span>
         <span>{z ? z.label : 'firm ground'}</span>
-        <span>{(dist(hover, base) / 1000).toFixed(2)} km to base</span>
+        <span>{(dist(hover, props.base) / 1000).toFixed(2)} km to base</span>
+        {safe !== undefined && reach !== undefined && (
+          safe >= reserve ? <span>return margin {(safe * 100).toFixed(0)}%</span>
+            : reach >= 0 ? <span style={{ color: 'var(--warning)' }}>ONE-WAY: no safe return</span>
+              : <span style={{ color: 'var(--critical)' }}>out of reach</span>
+        )}
       </div>
     );
   })();
@@ -421,6 +602,7 @@ export function MapView(props: MapViewProps) {
         onMouseUp={onMouseUp}
         onMouseLeave={() => { dragRef.current = null; setHover(null); }}
         onContextMenu={onContextMenu}
+        onDoubleClick={onDoubleClick}
       />
       {readout}
     </div>

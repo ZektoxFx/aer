@@ -13,7 +13,14 @@
 .badge { padding: 1px 6px; border: 1px solid var(--fg); font-size: 11px; }
 .badge.warn { border-color: var(--warning); color: var(--warning); }
 .md-main { flex: 1; min-height: 0; display: flex; }
-.md-map { flex: 1; min-width: 0; position: relative; }
+.md-left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.md-map { flex: 1; min-height: 0; position: relative; }
+.md-profile { flex: none; border-top: 1px solid #1c2a20; padding: 4px 8px; background: #0a100c; }
+.md-chips { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; }
+.chip { border: 1px solid #1c2a20; background: #0d1410; padding: 1px 7px; color: var(--dim); letter-spacing: 0.06em; }
+.chip b { color: var(--fg); font-weight: bold; }
+.chip.crit { border-color: var(--critical); color: var(--critical); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.45; } }
 .md-hint { position: absolute; right: 12px; bottom: 8px; font-size: 11px; background: rgba(7, 11, 8, 0.75); padding: 2px 6px; pointer-events: none; }
 .md-side { width: 320px; overflow-y: auto; border-left: 1px solid #1c2a20; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .card { background: #0d1410; border: 1px solid #1c2a20; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
@@ -42,6 +49,7 @@
 
 @media (max-width: 760px) {
   .md-main { flex-direction: column; }
+  .md-left { flex: none; }
   .md-map { height: 60vh; flex: none; }
   .md-side { width: auto; border-left: none; border-top: 1px solid #1c2a20; }
 }

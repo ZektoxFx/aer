@@ -18,6 +18,8 @@ export interface RouteOptions {
   reserveMin?: number;
   /** Distance between sample points (m). */
   stepM?: number;
+  /** Optional smart router: returns the walked path from a to b (ends included), or null if unreachable. */
+  router?: (a: Pt, b: Pt) => Pt[] | null;
 }
 
 /** One sample along the route, used to animate the walk. */
@@ -31,6 +33,8 @@ export interface RouteSample {
 export interface LegResult {
   from: Pt;
   to: Pt;
+  /** The walked path, from → to (straight unless a router bent it). */
+  path: Pt[];
   distM: number;
   climbM: number;
   descentM: number;
@@ -54,8 +58,8 @@ export interface RouteResult {
   status: Status;
   /** Index of the first waypoint from which a straight walk back to base fails; null if every waypoint is safe. */
   pnrIndex: number | null;
-  /** Straight walk back to base from the last waypoint. */
-  home: { minutes: number; ok: boolean; end: SuitState };
+  /** Walk back to base from the last waypoint (smart path if a router is set). */
+  home: Home;
 }
 
 const worst = (a: Status, b: Status): Status =>
@@ -68,9 +72,14 @@ export const slopeSpeedFactor = (slopeDeg: number): number => Math.max(0.25, 1 -
 
 interface Walk { end: SuitState; minutes: number; warnings: SimWarning[]; samples: RouteSample[]; climbM: number; descentM: number; maxSlopeDeg: number; blocked: boolean; zones: Set<string> }
 
-/** Walk a straight line from a to b, sampling every stepM. */
-function walkLeg(el: Elevation, zones: HazardZone[], a: Pt, b: Pt, start: SuitState, t0: number, opt: RouteOptions): Walk {
-  const pts = samplePath(a, b, opt.stepM ?? 10);
+const pathLength = (path: Pt[]) => path.reduce((sum, p, i) => (i ? sum + dist(path[i - 1], p) : 0), 0);
+
+/** The path a leg follows: the router's if it found one, else a straight line. */
+const legPath = (a: Pt, b: Pt, opt: RouteOptions): Pt[] => opt.router?.(a, b) ?? [a, b];
+
+/** Walk along a path, sampling every stepM. */
+function walkLeg(el: Elevation, zones: HazardZone[], path: Pt[], start: SuitState, t0: number, opt: RouteOptions): Walk {
+  const pts = path.flatMap((p, i) => (i ? samplePath(path[i - 1], p, opt.stepM ?? 10).slice(1) : [p]));
   let state = start, minutes = 0, climbM = 0, descentM = 0, maxSlopeDeg = 0, blocked = false;
   let warnings: SimWarning[] = [];
   const seen = new Set<string>();
@@ -96,13 +105,16 @@ function walkLeg(el: Elevation, zones: HazardZone[], a: Pt, b: Pt, start: SuitSt
   return { end: state, minutes, warnings, samples, climbM, descentM, maxSlopeDeg, blocked, zones: seen };
 }
 
-/** Can the astronaut walk straight home from `from` and still have `reserveMin` minutes of supplies left? */
-export function canReturn(el: Elevation, zones: HazardZone[], from: Pt, base: Pt, state: SuitState, opt: RouteOptions): { minutes: number; ok: boolean; end: SuitState } {
-  const back = walkLeg(el, zones, from, base, state, 0, opt);
+export interface Home { minutes: number; ok: boolean; end: SuitState; path: Pt[] }
+
+/** Can the astronaut walk home from `from` and still have `reserveMin` minutes of supplies left? */
+export function canReturn(el: Elevation, zones: HazardZone[], from: Pt, base: Pt, state: SuitState, opt: RouteOptions): Home {
+  const path = legPath(from, base, opt);
+  const back = walkLeg(el, zones, path, state, 0, opt);
   // After arriving, the suit must still last the reserve while resting.
   const rest = simulate(back.end, opt.env, { speedMS: 0, slopeDeg: 0, loadKg: 0 }, opt.reserveMin ?? 15);
   const failed = [...back.warnings, ...rest.warnings].some((w) => w.level === 'critical' || w.code === 'WATER_OUT');
-  return { minutes: back.minutes, ok: !failed && !back.blocked, end: back.end };
+  return { minutes: back.minutes, ok: !failed && !back.blocked, end: back.end, path };
 }
 
 /**
@@ -115,14 +127,15 @@ export function planRoute(el: Elevation, zones: HazardZone[], start: Pt, base: P
   let state = suit, minutes = 0, distM = 0, status: Status = 'nominal', pnrIndex: number | null = null;
   let from = start;
   waypoints.forEach((to, i) => {
-    const w = walkLeg(el, zones, from, to, state, minutes, opt);
+    const path = legPath(from, to, opt);
+    const w = walkLeg(el, zones, path, state, minutes, opt);
     const legStatus = worst(statusOf(w.warnings), w.blocked ? 'critical' : w.maxSlopeDeg > SLOPE_CAUTION ? 'warning' : 'nominal');
     legs.push({
-      from, to, distM: dist(from, to), climbM: w.climbM, descentM: w.descentM, maxSlopeDeg: w.maxSlopeDeg,
+      from, to, path, distM: pathLength(path), climbM: w.climbM, descentM: w.descentM, maxSlopeDeg: w.maxSlopeDeg,
       minutes: w.minutes, blocked: w.blocked, zones: [...w.zones], end: w.end, warnings: w.warnings, status: legStatus,
     });
     samples.push(...w.samples);
-    state = w.end; minutes += w.minutes; distM += dist(from, to); status = worst(status, legStatus);
+    state = w.end; minutes += w.minutes; distM += pathLength(path); status = worst(status, legStatus);
     if (pnrIndex === null && !canReturn(el, zones, to, base, state, opt).ok) pnrIndex = i;
     from = to;
   });

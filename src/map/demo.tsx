@@ -10,14 +10,19 @@ import { makeDevPack } from './devPack';
 import type { Pt } from './geo';
 import { buildLayout } from './layout';
 import type { MapItem } from './layout';
-import type { MapLayers } from './MapView';
+import type { MapLayers, Ping } from './MapView';
 import { MapView } from './MapView';
+import { findPath, makeGrid, rangeField } from './pathfind';
+import type { WalkModel } from './pathfind';
 import { planRoute } from './route';
-import type { Status } from './route';
-import { createExplored, exploredFraction, markSeen, newlyVisible, sightRadius } from './visibility';
+import type { RouteResult, Status } from './route';
+import { RouteProfile } from './RouteProfile';
+import { STORM_TAU, createExplored, exploredFraction, markSeen, newlyVisible, sightRadius } from './visibility';
 
 /** The Data role's pack is too coarse to walk on until real height maps arrive. */
 const MIN_REAL_CELLS = 32;
+/** Supplies that must be left after getting home (the safe-zone edge). */
+const RESERVE = 0.1;
 
 const pct = (v: number, full: number) => Math.max(0, Math.min(100, (v / full) * 100));
 const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`);
@@ -30,12 +35,19 @@ function scaledSuit(fraction: number): SuitState {
 function Gauge({ label, now, end, full, unit }: { label: string; now: number; end?: number; full: number; unit: string }) {
   const n = pct(now, full), e = end === undefined ? n : pct(end, full);
   const color = e < 15 ? 'var(--critical)' : e < 35 ? 'var(--warning)' : 'var(--fg)';
+  const d = unit === 'Wh' ? 0 : 2;
   return (
     <div className="g">
-      <div className="g-row"><span>{label}</span><span>{now.toFixed(unit === 'Wh' ? 0 : 2)} {unit}{end !== undefined && <span className="dim"> → {end.toFixed(unit === 'Wh' ? 0 : 2)}</span>}</span></div>
+      <div className="g-row"><span>{label}</span><span>{now.toFixed(d)} {unit}{end !== undefined && <span className="dim"> → {end.toFixed(d)}</span>}</span></div>
       <div className="g-bar"><div className="g-now" style={{ width: `${n}%`, background: 'var(--dim)' }} /><div className="g-now" style={{ width: `${e}%`, background: color }} /></div>
     </div>
   );
+}
+
+function foundMessage(t: number, f: MapItem): string {
+  if (f.required) return `★ +${fmtMin(t)}: found the ROVER COMMS LINK page. Now find the rover.`;
+  if (f.kind === 'rover') return `★ +${fmtMin(t)}: found the rover. Its radio can reach Earth.`;
+  return `+${fmtMin(t)}: found ${f.label}${f.yields ? ` (${f.yields.join(', ')})` : ''}`;
 }
 
 function MapDemo() {
@@ -46,13 +58,17 @@ function MapDemo() {
   const [night, setNight] = useState(false);
   const [speed, setSpeed] = useState(0.8);
   const [load, setLoad] = useState(10);
-  const [layers, setLayers] = useState<MapLayers>({ slope: true, hazards: true, fog: true, grid: false, allItems: false });
+  const [autoPath, setAutoPath] = useState(true);
+  const [layers, setLayers] = useState<MapLayers>({ slope: true, hazards: true, fog: true, grid: false, contours: true, range: true, allItems: false });
   const [waypoints, setWaypoints] = useState<Pt[]>([]);
-  const [suit, setSuit] = useState<SuitState>(() => scaledSuit(0.5));
   const [suitStartPct, setSuitStartPct] = useState(50);
+  const [suit, setSuit] = useState<SuitState>(() => scaledSuit(0.5));
   const [found, setFound] = useState<Set<string>>(new Set());
   const [log, setLog] = useState<string[]>([]);
-  const [walking, setWalking] = useState(false);
+  const [walking, setWalking] = useState<RouteResult | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [tracks, setTracks] = useState<Pt[]>([]);
+  const [pings, setPings] = useState<Ping[]>([]);
   const [exVersion, setExVersion] = useState(0);
 
   useEffect(() => {
@@ -66,11 +82,15 @@ function MapDemo() {
   );
   const layout = useMemo(() => buildLayout(pack.area, seed), [pack.area, seed]);
   const explored = useMemo(() => createExplored(pack.area), [pack.area]);
+  const grid = useMemo(() => makeGrid(pack.elevation, layout.zones), [pack.elevation, layout.zones]);
   const [astronaut, setAstronaut] = useState<Pt>(layout.base);
 
   const sol = pack.sols[Math.min(solIdx, pack.sols.length - 1)];
+  const storm = sol.tau > STORM_TAU;
   const sightM = sightRadius({ night, tau: sol.tau });
   const env = useMemo<Environment>(() => ({ pressureKPa: sol.pressureKPa, tempC: night ? sol.tempMinC : sol.tempMaxC, windMS: sol.windMS, tau: sol.tau }), [sol, night]);
+  const model = useMemo<WalkModel>(() => ({ speedMS: speed, loadKg: load, env }), [speed, load, env]);
+  const router = useMemo(() => (autoPath ? (a: Pt, b: Pt) => findPath(grid, model, a, b) : undefined), [autoPath, grid, model]);
 
   const reveal = useCallback((p: Pt, r: number, items: MapItem[], have: Set<string>) => {
     markSeen(explored, p, r);
@@ -79,52 +99,83 @@ function MapDemo() {
     return fresh;
   }, [explored]);
 
-  // New game whenever the map or seed changes.
+  // Latest settings for reset(), so a new game uses the current slider values.
+  const settings = useRef({ sightM, suitStartPct, sol: sol.sol });
+  useEffect(() => { settings.current = { sightM, suitStartPct, sol: sol.sol }; });
+
+  // New game whenever the map or seed changes, or on the button.
   const reset = useCallback(() => {
+    const { sightM, suitStartPct, sol: solNo } = settings.current;
     explored.seen.fill(0);
     const have = new Set<string>();
     const first = reveal(layout.base, sightM, layout.items, have);
     setFound(have);
     setAstronaut(layout.base);
     setWaypoints([]);
+    setTracks([]);
     setSuit(scaledSuit(suitStartPct / 100));
-    setLog([...first.map((f) => `Nearby: ${f.label}`), `Sol ${sol.sol}: you wake beside the crashed lander. Find O₂, parts and the comms page.`]);
+    setLog([...first.map((f) => `Nearby: ${f.label}`), `Sol ${solNo}: you wake in the lander cabin. The radio is dead. Find the comms link page, then the rover.`]);
     setExVersion((v) => v + 1);
-    // sightM/sol/suitStartPct are read once at reset time on purpose.
   }, [explored, layout, reveal]);
   useEffect(() => { reset(); }, [reset]);
 
-  const route = useMemo(
-    () => (waypoints.length ? planRoute(pack.elevation, layout.zones, astronaut, layout.base, waypoints, suit, { speedMS: speed, loadKg: load, env }) : null),
-    [pack.elevation, layout, astronaut, waypoints, suit, speed, load, env],
+  // Planning (paused while walking: the walk animates a frozen copy of the route).
+  const planned = useMemo(
+    () => (!walking && waypoints.length ? planRoute(pack.elevation, layout.zones, astronaut, layout.base, waypoints, suit, { speedMS: speed, loadKg: load, env, router }) : null),
+    [walking, pack.elevation, layout, astronaut, waypoints, suit, speed, load, env, router],
   );
+  const route = walking ?? planned;
+
+  // The safe-return zone, recomputed whenever the astronaut stops.
+  const range = useMemo(
+    () => (walking ? null : rangeField(grid, model, astronaut, layout.base, suit)),
+    [walking, grid, model, astronaut, layout.base, suit],
+  );
+  const lastRange = useRef(range);
+  if (range) lastRange.current = range;
+  const shownRange = range ?? lastRange.current;
+  const safeKm2 = useMemo(() => {
+    if (!shownRange) return 0;
+    let n = 0;
+    for (const v of shownRange.safe) if (v >= RESERVE) n++;
+    return (n * pack.elevation.cellM ** 2) / 1e6;
+  }, [shownRange, pack.elevation.cellM]);
 
   // Animate the walk along the costed route: the astronaut moves, sees, and finds things.
   const anim = useRef<number | null>(null);
   const walk = () => {
-    if (!route || walking) return;
-    if (route.legs.some((l) => l.blocked)) { setLog((l) => ['Route blocked: a slope is too steep to walk. Move a waypoint.', ...l]); return; }
-    setWalking(true);
-    const samples = route.samples;
+    if (!planned || walking) return;
+    if (planned.legs.some((l) => l.blocked)) { setLog((l) => ['Route blocked: a slope is too steep to walk. Move a waypoint.', ...l]); return; }
+    const r = planned;
+    setWalking(r);
+    const samples = r.samples;
     const have = new Set(found);
-    const msPerSample = Math.max(8, Math.min(40, 4000 / samples.length));
+    const msPerSample = Math.max(8, Math.min(40, 5000 / samples.length));
     let i = 0, last = performance.now();
     const step = (now: number) => {
+      const trail: Pt[] = [];
       while (now - last >= msPerSample && i < samples.length - 1) {
         i++; last += msPerSample;
         const s = samples[i];
+        trail.push(s.at);
         const fresh = reveal(s.at, sightM, layout.items, have);
-        if (fresh.length) setLog((l) => [...fresh.map((f) => `+${fmtMin(s.t)}: found ${f.label}`), ...l]);
+        if (fresh.length) {
+          setLog((l) => [...fresh.map((f) => foundMessage(s.t, f)), ...l]);
+          setPings((p) => [...p.filter((x) => now - x.t0 < 2000), ...fresh.map((f) => ({ at: f.at, t0: now }))]);
+        }
         setAstronaut(s.at);
         setSuit(s.state);
       }
+      if (trail.length) setTracks((t) => [...t, ...trail]);
+      setProgress(i);
       setFound(new Set(have));
       setExVersion((v) => v + 1);
       if (i < samples.length - 1) anim.current = requestAnimationFrame(step);
       else {
-        setWalking(false);
+        setWalking(null);
+        setProgress(0);
         setWaypoints([]);
-        setLog((l) => [`Arrived after ${fmtMin(route.minutes)}, ${(route.distM / 1000).toFixed(2)} km.`, ...l]);
+        setLog((l) => [`Arrived after ${fmtMin(r.minutes)}, ${(r.distM / 1000).toFixed(2)} km.`, ...l]);
       }
     };
     anim.current = requestAnimationFrame(step);
@@ -132,14 +183,21 @@ function MapDemo() {
   useEffect(() => () => { if (anim.current) cancelAnimationFrame(anim.current); }, []);
 
   const toggle = (k: keyof MapLayers) => setLayers((l) => ({ ...l, [k]: !l[k] }));
-  const exploredPct = (exploredFraction(explored) * 100).toFixed(1);
-  const end = route?.end;
+  const end = planned?.end;
+  const hiddenTotal = layout.items.filter((i) => i.hidden).length;
+  const foundHidden = layout.items.filter((i) => i.hidden && found.has(i.id)).length;
+  const hasComms = layout.items.some((i) => i.required && found.has(i.id));
 
   return (
     <div className="md">
       <header className="md-head">
-        <div>
-          <strong>AER · MARS MAP</strong> <span className="dim">/ map role test page</span>
+        <div><strong>AER · MARS MAP</strong> <span className="dim">/ Jezero traverse planner (map role test page)</span></div>
+        <div className="md-chips">
+          <span className="chip">SAFE ZONE <b>{safeKm2.toFixed(2)} km²</b></span>
+          <span className="chip">SIGHT <b style={{ color: sightM < 100 ? 'var(--warning)' : undefined }}>{sightM} m</b></span>
+          <span className="chip">FOUND <b>{foundHidden}/{hiddenTotal}</b></span>
+          <span className="chip">COMMS PAGE <b style={{ color: hasComms ? 'var(--fg)' : 'var(--dim)' }}>{hasComms ? 'YES' : 'NO'}</b></span>
+          {storm && <span className="chip crit">DUST STORM τ {sol.tau}</span>}
         </div>
         <div className="md-src">
           <span className={pack.source.startsWith('SYNTHETIC') ? 'badge warn' : 'badge'}>{pack.source}</span>
@@ -148,41 +206,53 @@ function MapDemo() {
       </header>
 
       <main className="md-main">
-        <section className="md-map">
-          <MapView
-            pack={pack} zones={layout.zones} items={layout.items} found={found}
-            explored={explored} exploredVersion={exVersion} base={layout.base}
-            astronaut={astronaut} sightM={sightM} waypoints={waypoints} route={route} layers={layers}
-            onAddWaypoint={(p) => !walking && setWaypoints((w) => [...w, p])}
-            onRemoveWaypoint={(i) => !walking && setWaypoints((w) => w.filter((_, j) => j !== i))}
-          />
-          <div className="md-hint dim">click = waypoint · right-click waypoint = remove · wheel = zoom · drag = pan</div>
+        <section className="md-left">
+          <div className="md-map">
+            <MapView
+              pack={pack} zones={layout.zones} items={layout.items} found={found}
+              explored={explored} exploredVersion={exVersion} base={layout.base}
+              astronaut={astronaut} sightM={sightM} waypoints={waypoints} route={route} layers={layers}
+              range={shownRange} reserve={RESERVE} crashPath={layout.crashPath} tracks={tracks} pings={pings}
+              night={night} storm={storm}
+              onAddWaypoint={(p) => !walking && setWaypoints((w) => [...w, p])}
+              onRemoveWaypoint={(i) => !walking && setWaypoints((w) => w.filter((_, j) => j !== i))}
+            />
+            <div className="md-hint dim">click = waypoint · right-click = remove · wheel = zoom · drag = pan · double-click = fit</div>
+          </div>
+          {route && (
+            <div className="md-profile">
+              <RouteProfile el={pack.elevation} route={route} full={FULL_SUIT} progress={walking ? progress : undefined}
+                title={`elevation: ${pack.source} · weather: ${dataPack?.source ?? 'none'} · Sol ${sol.sol}`} />
+            </div>
+          )}
         </section>
 
         <aside className="md-side">
           <div className="card">
             <h3>Conditions</h3>
             <label>Sol <select value={solIdx} onChange={(e) => setSolIdx(Number(e.target.value))}>
-              {pack.sols.map((s, i) => <option key={s.sol} value={i}>Sol {s.sol} · τ {s.tau}{s.tau > 5 ? ' (storm)' : ''}</option>)}
+              {pack.sols.map((s, i) => <option key={s.sol} value={i}>Sol {s.sol} · τ {s.tau}{s.tau > STORM_TAU ? ' (storm)' : ''}</option>)}
             </select></label>
             <label><input type="checkbox" checked={night} onChange={() => setNight(!night)} /> Night</label>
-            <div className="dim small">{env.tempC} °C · wind {env.windMS} m/s · {env.pressureKPa} kPa · sight <b style={{ color: sightM < 100 ? 'var(--warning)' : 'var(--fg)' }}>{sightM} m</b></div>
+            <div className="dim small">{env.tempC} °C · wind {env.windMS} m/s · {env.pressureKPa} kPa</div>
           </div>
 
           <div className="card">
-            <h3>Suit {route && <span className="dim small">(now → after route)</span>}</h3>
+            <h3>Suit {planned && <span className="dim small">(now → after route)</span>}</h3>
             <Gauge label="O₂" now={suit.o2Kg} end={end?.o2Kg} full={FULL_SUIT.o2Kg} unit="kg" />
             <Gauge label="Water" now={suit.waterKg} end={end?.waterKg} full={FULL_SUIT.waterKg} unit="kg" />
             <Gauge label="Battery" now={suit.batteryWh} end={end?.batteryWh} full={FULL_SUIT.batteryWh} unit="Wh" />
             <Gauge label="LiOH" now={suit.liohKg} end={end?.liohKg} full={FULL_SUIT.liohKg} unit="kg" />
-            <label className="small">Start suit at <input type="range" min={10} max={100} step={5} value={suitStartPct} onChange={(e) => setSuitStartPct(Number(e.target.value))} /> {suitStartPct}% <span className="dim">(on reset)</span></label>
+            <div className="dim small">Core {suit.coreTempC.toFixed(1)} °C{end ? ` → ${end.coreTempC.toFixed(1)} °C` : ''}</div>
+            <label className="small">Start suit <input type="range" min={10} max={100} step={5} value={suitStartPct} onChange={(e) => setSuitStartPct(Number(e.target.value))} /> {suitStartPct}% <span className="dim">(new game)</span></label>
           </div>
 
           <div className="card">
             <h3>Route</h3>
             <label className="small">Speed <input type="range" min={0.3} max={1.4} step={0.1} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} /> {speed.toFixed(1)} m/s</label>
             <label className="small">Load <input type="range" min={0} max={40} step={5} value={load} onChange={(e) => setLoad(Number(e.target.value))} /> {load} kg</label>
-            {!route && <p className="dim small">Click the map to plan a walk from where you stand.</p>}
+            <label className="small"><input type="checkbox" checked={autoPath} onChange={() => setAutoPath(!autoPath)} /> Smart path (least O₂, avoids cliffs and sand)</label>
+            {!route && <p className="dim small">Click the map to plan a walk from where you stand. Stay inside the green line to be sure of getting home.</p>}
             {route && (
               <>
                 <table className="legs">
@@ -206,35 +276,38 @@ function MapDemo() {
               </>
             )}
             <div className="btns">
-              <button onClick={walk} disabled={!route || walking}>{walking ? 'Walking…' : 'Walk ▶'}</button>
-              <button onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={!waypoints.length || walking}>Undo</button>
-              <button onClick={() => setWaypoints([])} disabled={!waypoints.length || walking}>Clear</button>
+              <button onClick={walk} disabled={!planned || !!walking}>{walking ? 'Walking…' : 'Walk ▶'}</button>
+              <button onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={!waypoints.length || !!walking}>Undo</button>
+              <button onClick={() => setWaypoints([])} disabled={!waypoints.length || !!walking}>Clear</button>
             </div>
           </div>
 
           <div className="card">
-            <h3>Map</h3>
+            <h3>Map layers</h3>
             <div className="toggles">
-              {(['slope', 'hazards', 'fog', 'grid', 'allItems'] as const).map((k) => (
-                <label key={k}><input type="checkbox" checked={layers[k]} onChange={() => toggle(k)} /> {k === 'allItems' ? 'show hidden (dev)' : k === 'fog' ? 'explored' : k}</label>
+              {(['range', 'contours', 'slope', 'hazards', 'fog', 'grid', 'allItems'] as const).map((k) => (
+                <label key={k}><input type="checkbox" checked={layers[k]} onChange={() => toggle(k)} /> {{ range: 'safe zone', contours: 'contours', slope: 'slope', hazards: 'hazards', fog: 'explored', grid: 'grid', allItems: 'show hidden (dev)' }[k]}</label>
               ))}
             </div>
             <div className="legend small">
-              <span><i style={{ background: 'rgba(255,200,0,.5)' }} />slope &gt;10°</span>
+              <span><i style={{ background: 'transparent', borderColor: '#4dff88' }} />safe return</span>
+              <span><i style={{ background: 'rgba(24,12,0,.6)', borderColor: '#ffb000' }} />one-way</span><span><i style={{ background: 'rgba(30,0,0,.8)' }} />out of reach</span>
+              <span><i style={{ background: 'rgba(255,200,0,.5)' }} />&gt;10°</span>
               <span><i style={{ background: 'rgba(255,140,0,.7)' }} />&gt;18°</span>
               <span><i style={{ background: 'rgba(255,60,60,.8)' }} />&gt;25° blocked</span>
               <span><i className="dots" />soft sand</span>
               <span><i className="hatch" />boulders</span>
             </div>
-            <div className="small">Explored {exploredPct}% · found {[...found].length} / {layout.items.filter((i) => i.hidden).length}</div>
+            <div className="dim small">Safe zone: estimate from steady walking rates of the team's suit model, {Math.round(RESERVE * 100)}% reserve. Route numbers are simulated step by step.</div>
+            <div className="small">Explored {(exploredFraction(explored) * 100).toFixed(1)}%</div>
             <label className="small">Seed <input type="number" value={seed} min={1} onChange={(e) => setSeed(Math.max(1, Number(e.target.value) || 1))} /></label>
             {realUsable && <label className="small"><input type="checkbox" checked={useSynthetic} onChange={() => setUseSynthetic(!useSynthetic)} /> use synthetic terrain</label>}
-            <div className="btns"><button onClick={reset} disabled={walking}>New game</button></div>
+            <div className="btns"><button onClick={reset} disabled={!!walking}>New game</button></div>
           </div>
 
           <div className="card log">
             <h3>Log</h3>
-            {log.map((l, i) => <div key={i} className="small">{l}</div>)}
+            {log.map((l, i) => <div key={i} className="small" style={{ color: l.startsWith('★') ? '#ffffff' : undefined }}>{l}</div>)}
           </div>
         </aside>
       </main>

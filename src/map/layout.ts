@@ -18,7 +18,8 @@ export interface HazardZone {
   extraSlopeDeg: number;
 }
 
-export type ItemKind = 'base' | 'o2' | 'lioh' | 'water' | 'battery' | 'scrap' | 'manual' | 'shelter' | 'rover';
+/** Item kinds from proposal §4.1: supplies (o2, lioh, water, battery, repair), rocket pieces (scrap), manual pages. */
+export type ItemKind = 'base' | 'o2' | 'lioh' | 'water' | 'battery' | 'repair' | 'scrap' | 'manual' | 'shelter' | 'rover';
 
 export interface MapItem {
   id: string;
@@ -27,6 +28,12 @@ export interface MapItem {
   at: Pt;
   /** Hidden items appear only once the astronaut has seen them. */
   hidden: boolean;
+  /** Rocket pieces: scrap materials they break down into (§4.1 table). */
+  yields?: string[];
+  /** Manual pages: the build the page unlocks. */
+  unlocks?: string;
+  /** Needed to win (the rover comms link page). */
+  required?: boolean;
 }
 
 export const HAZARD_EFFECT: Record<HazardKind, { speedFactor: number; extraSlopeDeg: number; label: string }> = {
@@ -51,20 +58,41 @@ const ZONES: { id: string; kind: HazardKind; poly: F[] }[] = [
   { id: 'rocks-crater', kind: 'rocks', poly: [[0.5, 0.33], [0.58, 0.38], [0.58, 0.48], [0.5, 0.53], [0.42, 0.5], [0.4, 0.4]] },
 ];
 
-type ItemSpec = { id: string; kind: ItemKind; label: string; f: F; hidden: boolean };
+/**
+ * The lander's crash path (§4.1): it came in from the south-east, shedding cargo, and the cabin
+ * stopped at the base. Old orbital maps predate the crash, so the scar only shows once seen.
+ */
+export const CRASH_PATH: F[] = [[0.98, 0.93], [0.9, 0.82], [0.81, 0.71], [0.72, 0.6], [0.62, 0.48]];
+export const BASE_F: F = [0.62, 0.48];
+
+type ItemSpec = Omit<MapItem, 'at' | 'hidden'> & { f: F; hidden?: boolean };
 const ITEMS: ItemSpec[] = [
-  { id: 'base', kind: 'base', label: 'Crashed lander (base)', f: [0.62, 0.48], hidden: false },
-  { id: 'o2-1', kind: 'o2', label: 'O₂ canister', f: [0.72, 0.22], hidden: true },
-  { id: 'o2-2', kind: 'o2', label: 'O₂ canister', f: [0.22, 0.62], hidden: true },
-  { id: 'lioh-1', kind: 'lioh', label: 'LiOH cartridge', f: [0.55, 0.7], hidden: true },
-  { id: 'water-1', kind: 'water', label: 'Water bladder', f: [0.9, 0.42], hidden: true },
-  { id: 'battery-1', kind: 'battery', label: 'Battery pack', f: [0.36, 0.56], hidden: true },
-  { id: 'scrap-1', kind: 'scrap', label: 'Rocket piece: fuel line', f: [0.68, 0.6], hidden: true },
-  { id: 'scrap-2', kind: 'scrap', label: 'Rocket piece: antenna dish', f: [0.44, 0.24], hidden: true },
-  { id: 'scrap-3', kind: 'scrap', label: 'Rocket piece: valve', f: [0.82, 0.88], hidden: true },
-  { id: 'manual-1', kind: 'manual', label: 'Manual page: suit refill', f: [0.58, 0.55], hidden: true },
-  { id: 'manual-2', kind: 'manual', label: 'Manual page: comms link', f: [0.12, 0.55], hidden: true },
-  { id: 'shelter-1', kind: 'shelter', label: 'Wreck: storm shelter', f: [0.8, 0.12], hidden: true },
+  { id: 'base', kind: 'base', label: 'Lander cabin (base)', f: BASE_F, hidden: false },
+
+  // Dropped along the crash path, roughly in the order they fell.
+  { id: 'hull', kind: 'scrap', label: 'Hull and fairing panels', yields: ['metal'], f: [0.94, 0.86] },
+  { id: 'tank', kind: 'scrap', label: 'Tanks and valves', yields: ['tank parts', 'leftover gas or water'], f: [0.87, 0.77] },
+  { id: 'o2-1', kind: 'o2', label: 'O₂ bottle', f: [0.82, 0.73] },
+  { id: 'wreck', kind: 'shelter', label: 'Large wreck piece (storm shelter)', f: [0.78, 0.66] },
+  { id: 'solar', kind: 'scrap', label: 'Solar array segment', yields: ['solar cells', 'wiring'], f: [0.745, 0.625] },
+  { id: 'water-1', kind: 'water', label: 'Water pack', f: [0.7, 0.56] },
+  { id: 'page-solar', kind: 'manual', label: 'Manual page: solar patch', unlocks: 'Solar patch', f: [0.665, 0.535] },
+  // Broke off at the impact, close to the cabin (one is in sight at the start).
+  { id: 'wiring', kind: 'scrap', label: 'Wiring harnesses', yields: ['wiring'], f: [0.6, 0.455] },
+  { id: 'blanket', kind: 'scrap', label: 'Thermal blankets', yields: ['insulation'], f: [0.66, 0.38] },
+
+  // The debris field where Sol 1's scrubber runs low (§6.2).
+  { id: 'lioh-1', kind: 'lioh', label: 'LiOH canister', f: [0.765, 0.645] },
+
+  // Thrown or blown off the path.
+  { id: 'avionics', kind: 'scrap', label: 'Avionics box and antenna', yields: ['electronics'], f: [0.8, 0.2] },
+  { id: 'page-o2tap', kind: 'manual', label: 'Manual page: oxygen tap', unlocks: 'Oxygen tap', f: [0.72, 0.24] },
+  { id: 'repair-1', kind: 'repair', label: 'Repair kit', f: [0.9, 0.4] },
+  { id: 'battery-1', kind: 'battery', label: 'Battery pack', f: [0.36, 0.56] },
+  { id: 'page-df', kind: 'manual', label: 'Manual page: direction finder', unlocks: 'Direction finder', f: [0.4, 0.8] },
+  // The parachute was cut loose high up, so the wind carried it far to the west.
+  { id: 'chute', kind: 'scrap', label: 'Parachute and straps', yields: ['fabric'], f: [0.22, 0.62] },
+  { id: 'page-comms', kind: 'manual', label: 'Manual page: rover comms link', unlocks: 'Rover comms link', required: true, f: [0.12, 0.55] },
 ];
 
 /** Possible rover spots; the seed picks one so each game is different. */
@@ -85,6 +113,8 @@ export interface Layout {
   zones: HazardZone[];
   items: MapItem[];
   base: Pt;
+  /** The crash scar, base last. */
+  crashPath: Pt[];
 }
 
 export function buildLayout(area: DataPack['area'], seed = 1): Layout {
@@ -92,10 +122,10 @@ export function buildLayout(area: DataPack['area'], seed = 1): Layout {
   const zones = ZONES.map((z) => ({ id: z.id, kind: z.kind, poly: z.poly.map(at), ...HAZARD_EFFECT[z.kind] }));
   const roverIdx = Math.floor(seeded(seed)() * ROVER_SPOTS.length);
   const items: MapItem[] = [
-    ...ITEMS.map((i) => ({ id: i.id, kind: i.kind, label: i.label, at: at(i.f), hidden: i.hidden })),
+    ...ITEMS.map(({ f, hidden, ...rest }) => ({ ...rest, at: at(f), hidden: hidden ?? true })),
     { id: 'rover', kind: 'rover', label: 'Lost rover', at: at(ROVER_SPOTS[roverIdx]), hidden: true },
   ];
-  return { zones, items, base: items[0].at };
+  return { zones, items, base: at(BASE_F), crashPath: CRASH_PATH.map(at) };
 }
 
 /** The hazard zone at a point, if any (the first listed wins where zones overlap). */
