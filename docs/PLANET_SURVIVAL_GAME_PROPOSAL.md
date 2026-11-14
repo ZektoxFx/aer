@@ -119,7 +119,7 @@ Rapid total decompression gives 9–14 seconds of useful consciousness. Pulmonar
 
 ### 3.2 Martian Environment
 - **Gravity:** 3.71 m/s², about 38% of Earth's, which applies to carried loads.
-- **Pressure** comes from MEDA data for the selected sol, not a constant. The global average is about 0.61 kPa. The Jezero MEDA sols in our data pack read 0.625–0.655 kPa (checked November 14).
+- **Pressure** comes from MEDA data for the selected sol, not a constant. The global average is about 0.61 kPa. Jezero's daily mean ranged 587–797 Pa across the 118 MEDA sols in our data (see `docs/DATA_SOURCES.md`); the five scenario sols read 0.625–0.655 kPa.
 - **Water** boils at about $0$–$5^\circ\text{C}$ across that range.
 - **Suit:** 20.7–29.6 kPa pure O₂, or about 56 kPa N₂/O₂.
 - **Dust** optical depth ($\tau$) from rover data sets solar power and storm conditions.
@@ -454,7 +454,7 @@ The 2026 rules (confirmed November 14) allow a video of 30 seconds or less or up
 
 Check these before relying on them in the build:
 
-- [x] Jezero pressure range from MEDA: 0.625–0.655 kPa in the data pack sols (scenario sols still to pick)
+- [x] Jezero pressure range from MEDA: 587–797 Pa daily mean across 118 sols; 0.625–0.655 kPa on the five scenario sols
 - [x] MOXIE power draw: rated 300 W for 6–12 g/h (NASA)
 - [x] Suit consumables checked against Apollo and EMU figures (November 14): 80 W avionics, 0.6 kg O₂, 3.9 kg water, 640 Wh battery, LiOH sized to outlast the O₂
 - [x] Panel dust: 0.2%/sol typical, 2%/sol highest observed (Lorenz et al. 2021)

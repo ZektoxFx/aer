@@ -1,19 +1,27 @@
 import { useEffect, useState } from 'react';
-import type { DataPack } from './data/types';
+import { loadGameData, type GameData } from './ui/gameData';
+import { Hud } from './ui/Hud';
 import { Shell } from './ui/Shell';
 
 export default function App() {
-  const [pack, setPack] = useState<DataPack | null>(null);
+  const [data, setData] = useState<GameData | null>(null);
   const [error, setError] = useState('');
+  const [view, setView] = useState<'hud' | 'telemetry'>('hud');
 
   useEffect(() => {
-    fetch('/data/fake.json')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setPack)
-      .catch((e: Error) => setError(e.message));
+    loadGameData().then(setData).catch((e: Error) => setError(e.message));
   }, []);
 
   if (error) return <p className="critical">Data pack failed to load: {error}</p>;
-  if (!pack) return <p>LOADING DATA PACK…</p>;
-  return <Shell pack={pack} />;
+  if (!data) return <p>LOADING DATA PACK…</p>;
+  return (
+    <>
+      <nav className="view-nav" aria-label="Views">
+        {(['hud', 'telemetry'] as const).map((v) => (
+          <button key={v} aria-pressed={view === v} onClick={() => setView(v)}>{v.toUpperCase()}</button>
+        ))}
+      </nav>
+      {view === 'hud' ? <Hud data={data} /> : <Shell data={data} />}
+    </>
+  );
 }
