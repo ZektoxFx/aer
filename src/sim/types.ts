@@ -116,6 +116,8 @@ export interface TickResult {
   speed: ClockSpeed;
   warnings: SimWarning[];
   power: PowerResult;
+  /** Minutes until each suit consumable runs out, counting cabin charging (battery never runs out while it charges). */
+  forecast: Forecast;
 }
 
 /** Game minutes until each suit consumable runs out at the current activity. Infinity = not being used. */

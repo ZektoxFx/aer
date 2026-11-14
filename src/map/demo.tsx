@@ -11,6 +11,7 @@ import { makeDevPack } from './devPack';
 import type { Pt } from './geo';
 import { buildLayout } from './layout';
 import { buildJezeroLayout } from './realData';
+import { HudMap } from './HudMap';
 import type { MapContent } from './realData';
 import type { MapItem } from './layout';
 import type { MapLayers, Ping } from './MapView';
@@ -351,5 +352,20 @@ function MapDemo() {
   );
 }
 
+/** /map.html?hud: the HUD map component on its own, at HUD size, to test it without editing the UI role's Hud.tsx. */
+function HudMapPreview() {
+  const [pack, setPack] = useState<DataPack | null>(null);
+  useEffect(() => { getJson<DataPack>('/data/jezero_pack.json').then(setPack).catch(() => setPack(null)); }, []);
+  if (!pack) return <p className="dim">Loading…</p>;
+  const sol = pack.sols[0];
+  const env: Environment = { pressureKPa: sol.pressureKPa, tempC: sol.tempMaxC, windMS: sol.windMS, tau: sol.tau };
+  return (
+    <div style={{ maxWidth: 760, margin: '16px auto', padding: '0 16px', display: 'flex', flexDirection: 'column', minHeight: '90vh' }}>
+      <p className="dim small">Map role preview of the HUD map (no movement: the player stays at the cabin).</p>
+      <HudMap pack={pack} suit={FULL_SUIT} env={env} storm={sol.tau > STORM_TAU} sol={sol.sol} />
+    </div>
+  );
+}
+
 const root = document.getElementById('root');
-if (root) createRoot(root).render(<StrictMode><MapDemo /></StrictMode>);
+if (root) createRoot(root).render(<StrictMode>{new URLSearchParams(location.search).has('hud') ? <HudMapPreview /> : <MapDemo />}</StrictMode>);

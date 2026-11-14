@@ -1,10 +1,19 @@
-// The map inside the in-suit HUD. The player clicks waypoints, the map plans the route on the Data role's real
-// Jezero terrain, and WALK hands the route to the HUD's game clock: each leg's Sim Activity (speed, slope, load)
-// drives the suit while the astronaut moves along the route in game time.
+// The map for the in-suit HUD (Map role): the real Mars photo as the map, click to place a route, danger zones
+// (slopes, rocks, sand), and items hidden until the player is close. It does NOT move the player: whoever owns
+// movement passes the player's position in (`astronaut`) and gets the planned route out (`onRoute`), which already
+// carries Sim's leg list (`route.simLegs`) and point of no return (`route.turnBackByMin`).
+//
+// For the UI role, if you want it in the HUD (the "[ map / surface photo view ]" spot in Hud.tsx). Map does not
+// edit Hud.tsx; every prop below is a value the HUD already has, and all but the first five are optional:
+//
+//   <HudMap pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
+//     night={false} astronaut={/* player position in map metres, once movement exists */ undefined}
+//     onRoute={(route) => { /* movement owner: route?.simLegs */ }} onFound={(items) => {}} resetKey={0} />
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PoiFile, TerrainLayers } from '../data/files';
 import type { DataPack } from '../data/types';
-import type { Activity, Environment, Shelter, SuitState } from '../sim/types';
+import { FULL_SUIT } from '../sim/simulate';
+import type { Environment, SuitState } from '../sim/types';
 import type { Pt } from './geo';
 import { buildLayout } from './layout';
 import type { MapItem } from './layout';
@@ -19,66 +28,46 @@ import { createExplored, markSeen, newlyVisible, sightRadius } from './visibilit
 import './map.css';
 import './hudMap.css';
 
-/** Walking pace and carried load for planning (design values; Sim owns the physiology). */
+/** Walking pace and carried load for route costing (design values; Sim owns the physiology). */
 const WALK = { speedMS: 0.8, loadKg: 10 };
 const RESERVE = 0.1;
-const REST: Activity = { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 const LAYERS: MapLayers = { slope: false, hazards: true, fog: true, grid: false, contours: false, range: true, allItems: false };
+/** The safe zone is recomputed once the player has stood still this long (it takes about half a second). */
+const SETTLE_MS = 700;
 
 const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`);
 const getJson = <T,>(url: string): Promise<T> => fetch(url).then((r) => { if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json() as Promise<T>; });
 
 export interface HudMapProps {
   pack: DataPack;
-  /** Game clock (minutes); the walk advances with it, so pausing the game pauses the walk. */
-  clockMin: number;
   suit: SuitState;
   env: Environment;
-  night: boolean;
   storm: boolean;
   /** MEDA sol shown in the map caption. */
   sol: number;
-  /** The astronaut's activity changed (a new route leg, or arrival). The HUD puts it into the game state. */
-  onMove: (activity: Activity, shelter: Shelter) => void;
-  /** Change to stop a walk where the astronaut is (the HUD took over the activity). */
-  stopKey?: number;
+  night?: boolean;
+  /** The player's position in map metres (from the movement owner). Default: the lander cabin. */
+  astronaut?: Pt;
+  /** The route the player planned (null when cleared). Movement can walk `route.simLegs`. */
+  onRoute?: (route: RouteResult | null) => void;
+  /** Hidden items that just came into sight. */
+  onFound?: (items: MapItem[]) => void;
   /** Change to start again at the cabin (new game). */
   resetKey?: number;
 }
 
-interface Walk { route: RouteResult; startMin: number; leg: number }
-
-/** Point along the route at `t` game minutes from the start (between the costed samples). */
-function pointAt(route: RouteResult, t: number, from: Pt): Pt {
-  const s = route.samples;
-  if (!s.length) return from;
-  if (t <= s[0].t) return s[0].at;
-  for (let i = 1; i < s.length; i++) {
-    if (s[i].t >= t) {
-      const f = (t - s[i - 1].t) / Math.max(1e-9, s[i].t - s[i - 1].t);
-      return { x: s[i - 1].at.x + (s[i].at.x - s[i - 1].at.x) * f, y: s[i - 1].at.y + (s[i].at.y - s[i - 1].at.y) * f };
-    }
-  }
-  return s[s.length - 1].at;
-}
-
-/** Index of the Sim leg that is under way `t` minutes into the walk. */
-function legAt(route: RouteResult, t: number): number {
-  let acc = 0;
-  for (let i = 0; i < route.simLegs.length; i++) {
-    acc += route.simLegs[i].minutes;
-    if (t < acc) return i;
-  }
-  return route.simLegs.length - 1;
-}
+/** Suit levels shown in the big-map strip, so the player still sees them with the gauges covered. */
+const SUIT_STRIP: { label: string; key: 'o2Kg' | 'liohKg' | 'waterKg' | 'batteryWh' }[] = [
+  { label: 'O₂', key: 'o2Kg' }, { label: 'SCRUBBER', key: 'liohKg' }, { label: 'WATER', key: 'waterKg' }, { label: 'BATTERY', key: 'batteryWh' },
+];
 
 function foundLine(f: MapItem): string {
-  if (f.required) return '★ Found the ROVER COMMS LINK page. Now find the rover.';
-  if (f.kind === 'rover') return '★ Found the rover. Its radio can reach Earth.';
-  return `Found ${f.label}${f.fiction ? ' (game fiction)' : ''}`;
+  if (f.required) return '★ Spotted the ROVER COMMS LINK page.';
+  if (f.kind === 'rover') return '★ Spotted the rover.';
+  return `Spotted ${f.label}${f.fiction ? ' (game fiction)' : ''}`;
 }
 
-export function HudMap({ pack, clockMin, suit, env, night, storm, sol, onMove, stopKey, resetKey }: HudMapProps) {
+export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, onRoute, onFound, resetKey }: HudMapProps) {
   // undefined = still loading, null = missing (then the synthetic test layout is used).
   const [pois, setPois] = useState<PoiFile | null | undefined>(undefined);
   const [terrainLayers, setTerrainLayers] = useState<TerrainLayers | null>(null);
@@ -103,163 +92,138 @@ export function HudMap({ pack, clockMin, suit, env, night, storm, sol, onMove, s
   const explored = useMemo(() => createExplored(pack.area), [pack.area]);
   const grid = useMemo(() => makeGrid(pack.elevation, layout.zones), [pack.elevation, layout.zones]);
   const sightM = sightRadius({ night, tau: env.tau });
+  const ax = astronaut?.x ?? layout.base.x, ay = astronaut?.y ?? layout.base.y;
+  const pos = useMemo<Pt>(() => ({ x: ax, y: ay }), [ax, ay]);
 
-  const [astronaut, setAstronaut] = useState<Pt>(layout.base);
   const [waypoints, setWaypoints] = useState<Pt[]>([]);
-  const [walk, setWalk] = useState<Walk | null>(null);
   const [found, setFound] = useState<Set<string>>(new Set());
   const [tracks, setTracks] = useState<Pt[]>([]);
   const [pings, setPings] = useState<Ping[]>([]);
   const [exVersion, setExVersion] = useState(0);
   const [log, setLog] = useState<string[]>([]);
-  // Snapshots of the suit and weather: planning uses the moment of the last click, the safe zone the last stop,
-  // so routes are not re-planned on every HUD frame.
+  // Suit and weather snapshots: the route uses the moment of the last click and the safe zone the moment the player
+  // last stood still, so neither is recomputed on every HUD frame.
   const live = useRef({ suit, env });
   useEffect(() => { live.current = { suit, env }; });
   const [planAt, setPlanAt] = useState(() => ({ suit, env }));
-  const [stopAt, setStopAt] = useState(() => ({ suit, env }));
+  const [rest, setRest] = useState(() => ({ at: pos, suit, env }));
   const visited = useRef(new Set<string>());
+  const lastPos = useRef<Pt | null>(null);
+  const [big, setBig] = useState(false);
+  useEffect(() => {
+    if (!big) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setBig(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [big]);
 
-  // New game: back to the cabin with only the nearby ground seen.
+  // New game: only the ground around the cabin is seen.
   useEffect(() => {
     explored.seen.fill(0);
     visited.current.clear();
+    lastPos.current = astronaut ?? layout.base;
     markSeen(explored, layout.base, sightM);
-    const have = new Set(newlyVisible(layout.items, layout.base, sightM, new Set()).map((i) => i.id));
-    setFound(have);
-    setAstronaut(layout.base);
+    setFound(new Set(newlyVisible(layout.items, layout.base, sightM, new Set()).map((i) => i.id)));
     setWaypoints([]);
-    setWalk(null);
     setTracks([]);
-    setStopAt(live.current);
-    setLog(['You wake in the lander cabin (game fiction). Find the comms link page, then Perseverance.']);
+    setLog(['Click the map to plan a route. Items show up when you get close.']);
     setExVersion((v) => v + 1);
-    // sightM is read once at the start; later changes apply as the astronaut moves.
+    // sightM is read once here; later changes apply as the player moves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout, explored, resetKey]);
 
-  const planModel = useMemo(() => ({ ...WALK, env: planAt.env }), [planAt.env]);
-  const planned = useMemo(() => {
-    if (walk || !waypoints.length) return null;
-    const router = (a: Pt, b: Pt) => findPath(grid, planModel, a, b);
-    return planRoute(pack.elevation, layout.zones, astronaut, layout.base, waypoints, planAt.suit, { ...planModel, router });
-  }, [walk, waypoints, grid, planModel, pack.elevation, layout, astronaut, planAt.suit]);
-  const route = walk?.route ?? planned;
-
-  const range = useMemo(
-    () => (walk ? null : rangeField(grid, { ...WALK, env: stopAt.env }, astronaut, layout.base, stopAt.suit)),
-    [walk, grid, stopAt, astronaut, layout.base],
-  );
-  const lastRange = useRef(range);
-  if (range) lastRange.current = range;
-
-  // The walk runs on the game clock: position, current leg and what the astronaut sees.
-  const t = walk ? Math.max(0, clockMin - walk.startMin) : 0;
-  const leg = walk ? legAt(walk.route, t) : -1;
-  const done = !!walk && t >= walk.route.minutes;
-  const pos = walk ? pointAt(walk.route, Math.min(t, walk.route.minutes), astronaut) : astronaut;
-
+  // Reveal the ground and hidden items around the player as the position changes.
   useEffect(() => {
-    if (!walk) return;
-    if (done) {
-      const end = walk.route.samples.at(-1)?.at ?? pos;
-      const home = Math.hypot(end.x - layout.base.x, end.y - layout.base.y) < 30;
-      setAstronaut(end);
-      setWalk(null);
-      setWaypoints([]);
-      setStopAt(live.current);
-      setLog((l) => [`Arrived after ${fmtMin(walk.route.minutes)}, ${(walk.route.distM / 1000).toFixed(2)} km.${home ? ' Back in the cabin.' : ''}`, ...l].slice(0, 6));
-      onMove(REST, home ? 'cabin' : 'none');
-      return;
-    }
-    if (leg !== walk.leg) {
-      setWalk({ ...walk, leg });
-      onMove(walk.route.simLegs[leg]?.activity ?? REST, 'none');
-    }
-  }, [walk, done, leg, pos, layout.base, onMove]);
-
-  // Reveal the ground and items around the moving astronaut.
-  const lastPos = useRef<Pt | null>(null);
-  useEffect(() => {
-    if (!walk) { lastPos.current = null; return; }
     const prev = lastPos.current;
     if (prev && Math.hypot(prev.x - pos.x, prev.y - pos.y) < 5) return;
     lastPos.current = pos;
+    if (!prev) return; // the start is handled by the new-game reset
     markSeen(explored, pos, sightM);
     const fresh = newlyVisible(layout.items, pos, sightM, found);
     const notes: string[] = [];
     for (const c of layout.items) {
       if ((c.kind === 'clue' || c.kind === 'science') && !visited.current.has(c.id) && Math.hypot(c.at.x - pos.x, c.at.y - pos.y) < 60) {
         visited.current.add(c.id);
-        notes.push(`◆ Reached ${c.label} (NASA site).${c.note ? ` ${c.note}` : ''}`);
+        notes.push(`◆ ${c.label} (NASA site).${c.note ? ` ${c.note}` : ''}`);
       }
     }
     if (fresh.length) {
       setFound((f) => new Set([...f, ...fresh.map((i) => i.id)]));
       const now = performance.now();
       setPings((p) => [...p.filter((x) => now - x.t0 < 2000), ...fresh.map((i) => ({ at: i.at, t0: now }))]);
+      onFound?.(fresh);
     }
     if (fresh.length || notes.length) setLog((l) => [...fresh.map(foundLine), ...notes, ...l].slice(0, 6));
     setTracks((tr) => [...tr, pos]);
     setExVersion((v) => v + 1);
-  }, [walk, pos, explored, sightM, layout.items, found]);
+  }, [pos, explored, sightM, layout.items, found, onFound]);
 
-  // The HUD took over (a test mode or the storm shelter flow): stop where the astronaut is.
-  const stopRef = useRef(stopKey);
+  // Safe zone: recomputed once the player has stood still for a moment.
   useEffect(() => {
-    if (stopRef.current === stopKey) return;
-    stopRef.current = stopKey;
-    if (!walk) return;
-    setAstronaut(pos);
-    setWalk(null);
-    setWaypoints([]);
-    setStopAt(live.current);
-    setLog((l) => ['Walk stopped.', ...l].slice(0, 6));
-  }, [stopKey, walk, pos]);
+    if (rest.at.x === pos.x && rest.at.y === pos.y) return;
+    const id = setTimeout(() => setRest({ at: pos, ...live.current }), SETTLE_MS);
+    return () => clearTimeout(id);
+  }, [pos, rest.at]);
+  const range = useMemo(
+    () => rangeField(grid, { ...WALK, env: rest.env }, rest.at, layout.base, rest.suit),
+    [grid, rest, layout.base],
+  );
 
-  const start = () => {
-    if (!planned || walk) return;
-    if (planned.legs.some((l) => l.blocked)) { setLog((l) => ['Route blocked: a slope is too steep to walk. Move a waypoint.', ...l].slice(0, 6)); return; }
-    setWalk({ route: planned, startMin: clockMin, leg: 0 });
-    onMove(planned.simLegs[0]?.activity ?? REST, 'none');
-  };
-  const addWaypoint = (p: Pt) => {
-    if (walk) return;
-    setPlanAt(live.current);
-    setWaypoints((w) => [...w, p]);
-  };
+  // The route is planned from where the player is now.
+  const planModel = useMemo(() => ({ ...WALK, env: planAt.env }), [planAt.env]);
+  const route = useMemo(() => {
+    if (!waypoints.length) return null;
+    const router = (a: Pt, b: Pt) => findPath(grid, planModel, a, b);
+    return planRoute(pack.elevation, layout.zones, pos, layout.base, waypoints, planAt.suit, { ...planModel, router });
+  }, [waypoints, grid, planModel, pack.elevation, layout, pos, planAt.suit]);
+  useEffect(() => { onRoute?.(route); }, [route, onRoute]);
 
-  const status = route ? route.status.toUpperCase() : '';
+  const addWaypoint = (p: Pt) => { setPlanAt(live.current); setWaypoints((w) => [...w, p]); };
+
   return (
-    <div className="hud-map">
+    <div className={big ? 'hud-map big' : 'hud-map'}>
+      {big && (
+        <div className="hud-map-suit" aria-label="Suit levels">
+          {SUIT_STRIP.map(({ label, key }) => {
+            const pct = Math.max(0, Math.min(100, (suit[key] / FULL_SUIT[key]) * 100));
+            return (
+              <span key={key} className={pct < 30 ? 'warning' : undefined}>
+                {label} {pct.toFixed(0)}%<i><b style={{ width: `${pct}%` }} /></i>
+              </span>
+            );
+          })}
+          <span className={storm ? 'warning' : 'dim'}>{storm ? 'DUST STORM' : night ? 'NIGHT' : 'DAY'} · SIGHT {sightM} m</span>
+        </div>
+      )}
       <div className="hud-map-canvas">
         <MapView
           pack={pack} zones={layout.zones} items={layout.items} found={found}
           explored={explored} exploredVersion={exVersion} base={layout.base}
           astronaut={pos} sightM={sightM} waypoints={waypoints} route={route} layers={LAYERS}
-          range={range ?? lastRange.current} reserve={RESERVE} crashPath={layout.crashPath} tracks={tracks} pings={pings}
+          range={range} reserve={RESERVE} crashPath={layout.crashPath} tracks={tracks} pings={pings}
           archiveTraverse={layout.archiveTraverse} roverTracks={layout.roverTracks} searchArea={layout.searchArea}
           night={night} storm={storm}
           onAddWaypoint={addWaypoint}
-          onRemoveWaypoint={(i) => !walk && setWaypoints((w) => w.filter((_, j) => j !== i))}
+          onRemoveWaypoint={(i) => setWaypoints((w) => w.filter((_, j) => j !== i))}
         />
       </div>
       <div className="hud-map-bar">
-        {walk ? (
-          <span>WALKING · {fmtMin(Math.min(t, walk.route.minutes))} / {fmtMin(walk.route.minutes)} · LEG {leg + 1}/{walk.route.simLegs.length}</span>
-        ) : route ? (
+        {route ? (
           <span>
-            ROUTE {(route.distM / 1000).toFixed(2)} km · {fmtMin(route.minutes)} · <b className={route.status === 'nominal' ? undefined : route.status}>{status}</b>
-            {route.turnBackByMin === null ? <b className="critical"> · NO SAFE TURN-BACK</b>
-              : route.pnrIndex !== null ? <b className="critical"> · TURN BACK BY {fmtMin(route.turnBackByMin)}</b> : null}
+            ROUTE {(route.distM / 1000).toFixed(2)} km · {fmtMin(route.minutes)} · <b className={route.status === 'nominal' ? undefined : route.status}>{route.status.toUpperCase()}</b>
+            {route.legs.some((l) => l.blocked) ? <b className="critical"> · TOO STEEP: MOVE A WAYPOINT</b>
+              : route.turnBackByMin === null ? <b className="critical"> · NO SAFE TURN-BACK</b>
+                : route.pnrIndex !== null ? <b className="critical"> · TURN BACK BY {fmtMin(route.turnBackByMin)}</b> : null}
           </span>
         ) : (
-          <span className="dim">CLICK THE MAP TO PLAN A WALK · STAY INSIDE THE GREEN LINE TO GET HOME</span>
+          <span className="dim">CLICK THE MAP TO PLACE A ROUTE · STAY INSIDE THE GREEN LINE TO GET HOME</span>
         )}
         <span className="hud-map-btns">
-          <button onClick={start} disabled={!planned || !!walk}>WALK ▶</button>
-          <button onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={!waypoints.length || !!walk}>UNDO</button>
-          <button onClick={() => setWaypoints([])} disabled={!waypoints.length || !!walk}>CLEAR</button>
+          <button onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={!waypoints.length}>UNDO</button>
+          <button onClick={() => setWaypoints([])} disabled={!waypoints.length}>CLEAR</button>
+          <button onClick={() => setBig((b) => !b)} aria-pressed={big} title={big ? 'Back to the HUD (Esc)' : 'Show the map over the whole window'}>
+            {big ? '✕ SMALL MAP' : '⤢ BIG MAP'}
+          </button>
         </span>
       </div>
       {log[0] && <p className="hud-map-log">{log[0]}</p>}
