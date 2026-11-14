@@ -143,3 +143,71 @@ export interface CreditsFile {
   noAffiliation: string;
   chartLabels: Record<'pressure' | 'airTemp' | 'groundTemp' | 'wind' | 'dust' | 'sunlight' | 'map', string>;
 }
+
+/** terrain_patch_2m.json: header for terrain_patch_2m.bin, a 2 m height tile around the AER-1 cabin (load with terrainPatch.ts). */
+export interface TerrainPatchMeta {
+  source: string;
+  use: string;
+  file: string;
+  cols: number;
+  rows: number;
+  cellM: number;
+  /** North-west corner of the tile in the jezero_pack.json elevation frame (metres from the map's NW corner, x east, y south). */
+  x0M: number;
+  y0M: number;
+  centre: { what: string; eastM: number; northM: number };
+  minM: number;
+  maxM: number;
+  /** heightM = minM + uint16 value * scaleM */
+  scaleM: number;
+  checkAgainst10mGrid: { meanAbsDiffM: number; maxAbsDiffM: number };
+  notes: string[];
+}
+
+/** relay.json: when Perseverance can reach a relay orbiter (NASA Mars Relay Network Handbook). */
+export interface RelayFile {
+  source: string;
+  use: string;
+  jezeroLatDeg: number;
+  orbiters: {
+    id: string;
+    name: string;
+    orbit: string;
+    periodMin: number;
+    /** Local mean solar time of the orbit's two equator crossings; null when the orbit is not Sun-synchronous. */
+    nodesLMST: string[] | null;
+    passesPerSol?: string;
+    usablePassMin?: [number, number];
+    shortPassMin?: [number, number];
+    averagePassMin?: number;
+    typicalSessionMin?: number;
+    note: string;
+  }[];
+  notMoreAvailable: Record<string, string>;
+  /** A simple daily schedule for the game: one pass inside each window. */
+  gameWindowsLTST: {
+    about: string;
+    windows: { orbiter: string; centre: string; fromHour: number; toHour: number; passMin: number }[];
+    values: string;
+  };
+}
+
+/** dustdevils.json: dust devil (vortex) timing and size at Jezero from MEDA. */
+export interface DustDevilFile {
+  source: string;
+  use: string;
+  perSol: number;
+  perSolNote: string;
+  peakPerHourNoon: number;
+  peakNote: string;
+  dustyFraction: number;
+  dustyNote: string;
+  diameterM: { min: number; mean: number; max: number };
+  strongest: { dropPa: number; windMS: number; note: string };
+  activityPerKm2PerSol: [number, number];
+  pressureDropPa: { min: number; median: number; max: number; over1Pa: number; over2Pa: number };
+  duringStorm: string;
+  /** 24 entries, hour 0-23 LTST. expectedPerSol sums to perSol. */
+  hourlyLTST: { hour: number; vortices: number; dusty: number; expectedPerSol: number }[];
+  notes: string[];
+}

@@ -1,0 +1,28 @@
+{
+ "source": "USGS Mars 2020 TRN HiRISE 1 m DTM (DOI 10.5066/P9REJ9JN), box-averaged to 2 m by tools/data/bake_terrain.py and cut by tools/data/bake_patch.py",
+ "use": "Fetch terrain_patch_2m.bin as an ArrayBuffer and read it as Uint16Array (little-endian). heightM = minM + value * scaleM. Row 0 is the tile's north edge, column 0 its west edge.",
+ "file": "terrain_patch_2m.bin",
+ "cols": 800,
+ "rows": 800,
+ "cellM": 2.0,
+ "x0M": 2260.0,
+ "y0M": 1370.0,
+ "frame": "Same frame as jezero_pack.json elevation: metres from the map's north-west corner, x east, y south. Cell (row r, col c) covers x0M + c*cellM .. +cellM, y0M + r*cellM .. +cellM.",
+ "centre": {
+  "what": "AER-1 cabin (crashedLander.cabinLocation)",
+  "eastM": -640.0,
+  "northM": 230.0
+ },
+ "minM": -2581.64,
+ "maxM": -2533.11,
+ "scaleM": 0.01,
+ "checkAgainst10mGrid": {
+  "meanAbsDiffM": 0.025,
+  "maxAbsDiffM": 0.052
+ },
+ "notes": [
+  "True heights, no vertical exaggeration.",
+  "HiRISE DTMs with 1 m posts resolve features a few metres across (Kirk et al. 2008, JGR 113, E00A24), so 2 m keeps the useful detail.",
+  "Covers the cabin, the descent stage, the parachute and backshell, the landing site and Ingenuity's airfield (south-east part)."
+ ]
+}

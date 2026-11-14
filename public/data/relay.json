@@ -1,0 +1,94 @@
+{
+ "source": "NASA Mars Exploration Program, Mars Relay Network Handbook, JPL D-71874, Release 4 (April 27, 2026), Table 2-3 and sections 3.1, 3.3, 5.2. https://assets.science.nasa.gov/content/dam/science/psd/mars/files/mars-relay-network/MRN%20Handbook_v4_final_URS_cleared.pdf",
+ "use": "When the astronaut can talk to Earth through Perseverance. The rover sends to an orbiter over UHF during a pass; the orbiter forwards to Earth later, and the signal then takes the one-way light time (reference.json mars.lightTimeOneWayMin). A reply comes up the same way on a later pass.",
+ "jezeroLatDeg": 18.44,
+ "orbiters": [
+  {
+   "id": "MRO",
+   "name": "Mars Reconnaissance Orbiter (NASA)",
+   "orbit": "low, near-polar, Sun-synchronous",
+   "periodMin": 112,
+   "nodesLMST": [
+    "15:09",
+    "03:09"
+   ],
+   "passesPerSol": "at least 2 at low latitudes (Jezero is 18.4 N)",
+   "usablePassMin": [
+    10,
+    11
+   ],
+   "shortPassMin": [
+    7,
+    8
+   ],
+   "note": "Short 7-8 min overflights are not usually used; 10-11 min is typical for the passes that are."
+  },
+  {
+   "id": "ODY",
+   "name": "2001 Mars Odyssey (NASA)",
+   "orbit": "low, near-polar, Sun-synchronous",
+   "periodMin": 118,
+   "nodesLMST": [
+    "06:11",
+    "18:11"
+   ],
+   "passesPerSol": "2-4 within 30 deg of the equator, clustered around the two node times",
+   "averagePassMin": 14,
+   "note": "Average time above 10 deg elevation."
+  },
+  {
+   "id": "TGO",
+   "name": "ExoMars Trace Gas Orbiter (ESA)",
+   "orbit": "low, 76 deg inclination, not Sun-synchronous, so pass times drift from week to week",
+   "periodMin": 118,
+   "nodesLMST": null,
+   "typicalSessionMin": 17,
+   "note": "A typical TGO session with adaptive data rate lasts about 17 minutes."
+  },
+  {
+   "id": "MEX",
+   "name": "Mars Express (ESA)",
+   "orbit": "elliptical, 7 h period",
+   "periodMin": 419,
+   "nodesLMST": null,
+   "note": "Highly elliptical orbit: less frequent passes with widely varying range."
+  }
+ ],
+ "notMoreAvailable": {
+  "MAVEN": "Lost in 2025 (handbook section 1). Do not list it as a current relay."
+ },
+ "gameWindowsLTST": {
+  "about": "Simple schedule for the game: the two Sun-synchronous orbiters pass Jezero near fixed local times. Windows are node time +/- 1 h because the nearest ground track can fall either side of the site. Times are LMST; the game clock is LTST, which differs by up to about 50 minutes over the Mars year, so treat the windows as approximate. TGO adds about one pass at a varying time.",
+  "windows": [
+   {
+    "orbiter": "MRO",
+    "centre": "03:09",
+    "fromHour": 2.15,
+    "toHour": 4.15,
+    "passMin": 10
+   },
+   {
+    "orbiter": "ODY",
+    "centre": "06:11",
+    "fromHour": 5.18,
+    "toHour": 7.18,
+    "passMin": 14
+   },
+   {
+    "orbiter": "MRO",
+    "centre": "15:09",
+    "fromHour": 14.15,
+    "toHour": 16.15,
+    "passMin": 10
+   },
+   {
+    "orbiter": "ODY",
+    "centre": "18:11",
+    "fromHour": 17.18,
+    "toHour": 19.18,
+    "passMin": 14
+   }
+  ],
+  "values": "Window width and the one-pass-per-window rule are design simplifications; node times and pass lengths are from the handbook."
+ }
+}

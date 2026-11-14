@@ -73,6 +73,24 @@
    "provider": "University of Arizona HiRISE team",
    "citation": "uahirise.org/ESP_068294_1985",
    "credit": "NASA/JPL-Caltech/University of Arizona"
+  },
+  {
+   "what": "Dust devils: how often and when",
+   "mission": "Mars 2020 Perseverance",
+   "instrument": "MEDA",
+   "product": "Vortex encounters, sols 15-89 (309 events) and 415-sol rates",
+   "provider": "B. Jackson 2022; R. Hueso et al. 2023",
+   "citation": "Planetary Science Journal 3, 20; JGR Planets 128, e2022JE007516",
+   "credit": "NASA/JPL-Caltech; MEDA team (CAB, Spain)"
+  },
+  {
+   "what": "When the rover can reach an orbiter (relay passes)",
+   "mission": "Mars Relay Network",
+   "instrument": "UHF relay",
+   "product": "Mars Relay Network Handbook, Release 4 (2026)",
+   "provider": "NASA Mars Exploration Program / JPL",
+   "citation": "JPL D-71874",
+   "credit": "NASA/JPL-Caltech; ESA (Trace Gas Orbiter, Mars Express)"
   }
  ],
  "imageCredits": [

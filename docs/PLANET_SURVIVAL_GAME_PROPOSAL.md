@@ -473,11 +473,13 @@ Check these before relying on them in the build:
 - [x] Science target: Wildcat Ridge, where SHERLOC found organic molecules (NASA/JPL, Sept 2022), with Three Forks and Rochette as alternatives (`content.json`, PR #11)
 - [x] Perseverance's real traverse: NASA/JPL Mars 2020 waypoints; 3 rover hiding spots at its real sol 420, 464 and 686 positions, 2.4–2.8 km from landing (`pois.json`)
 - [x] Rover goal decided: the rover is the radio home (November 14)
-- [x] Perseverance's links to Earth: UHF (~400 MHz, up to 2 Mbit/s) to MRO and MAVEN, which relay to the Deep Space Network; X-band high-gain antenna direct to Earth, mostly for commands; low-gain backup (NASA/JPL Mars 2020 landing press kit, Telecommunications)
+- [x] Perseverance's links to Earth: UHF (~400 MHz, up to 2 Mbit/s) to MRO, Odyssey and ESA's Trace Gas Orbiter and Mars Express (MAVEN was lost in 2025; Mars Relay Network Handbook, JPL D-71874 Rev. 4), which relay to the Deep Space Network; X-band high-gain antenna direct to Earth, mostly for commands; low-gain backup (NASA/JPL Mars 2020 landing press kit, Telecommunications)
 - [x] Storm dust sols: the January 2022 Jezero regional storm, sols 312–319, Mastcam-Z τ 0.33 → 1.38 peak on sol 316 → 0.44 (`dust.json`)
 - [x] How quickly a real storm builds: Jezero's 2022 storm went from τ 0.33 to its peak in about 4 sols (sols 312–316) and cleared in about 3. The 5-minute countdown is a pacing choice, and the game's τ 8 peak is stronger than any Jezero storm on record (highest τ in the 1358-sol record: 1.99)
 - [x] Thermal inertia as an indicator of loose sand: loose particulate material is below ~350 and Gale's active dunes are 200–310 (Edwards et al. 2018); Perseverance's MEDA measured 180 on a Jezero sand dune and up to 605 on bedrock (Martínez et al. 2023). The game's threshold of 200 picks the loosest material; it remains a design value (`reference.json`)
 - [x] Ground albedo for the sunlight model: 0.12, MEDA's mean along the traverse (Martínez et al. 2023; noon values 0.10–0.16). It replaced the earlier 0.17 working value (`sunlight.json`)
+- [x] Dust devil timing at Jezero: 4.9 per sol, peaking at noon (1.5 per hour), about one in four dusty; from all 309 MEDA encounters in sols 15–89 (Jackson 2022; Hueso et al. 2023) (`dustdevils.json`)
+- [x] Relay passes: MRO near 03:09 and 15:09 LMST and Odyssey near 06:11 and 18:11 LMST, 10–14 minutes each; TGO at varying times (Mars Relay Network Handbook, JPL D-71874 Rev. 4) (`relay.json`)
 - [ ] Dust devils clearing solar panels
 - [x] Earth–Mars signal delay: about 3–22 minutes one way
 - [ ] Blue sunsets (stretch feature)

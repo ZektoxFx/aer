@@ -118,16 +118,18 @@ MANUAL_PAGES = [
         "pageNumber": 4, "title": "Calling Earth through Perseverance", "category": "Communications",
         "unlocksRecipe": "rover_comms_link",
         "sciencePrinciple": "Perseverance has three antennas. A UHF antenna (about 400 MHz) sends most of its data to "
-        "orbiters passing overhead, such as the Mars Reconnaissance Orbiter and MAVEN, at up to 2 megabits per second; "
-        "the orbiters relay it to NASA's Deep Space Network. A small X-band high-gain antenna can talk directly to "
+        "orbiters passing overhead, at up to 2 megabits per second. Today these are NASA's Mars Reconnaissance Orbiter "
+        "and Mars Odyssey and ESA's Trace Gas Orbiter (MAVEN, used early in the mission, was lost in 2025). Each pass "
+        "lasts only about 10 to 17 minutes, so the rover can call out a few times a sol. The orbiters relay the data "
+        "to NASA's Deep Space Network. A small X-band high-gain antenna can talk directly to "
         "Earth, but slowly, and is mostly used to receive each morning's commands. A low-gain antenna is the backup. "
         "The rover runs on a nuclear power source (about 110 W at the start of the mission), so it keeps working "
         "through dust storms. Radio takes about 3 to 22 minutes to cross between Mars and Earth, depending on where "
         "the planets are, so any reply comes back after a long wait.",
         "source": "NASA/JPL Mars 2020 landing press kit, Telecommunications "
                   "(jpl.nasa.gov/news/press_kits/mars_2020/landing/mission/spacecraft/telecommunications); NASA Mars Relay "
-                  "Network (science.nasa.gov/mars/mars-relay-network). Connecting a survivor's radio to the rover is game fiction.",
-        "diagram": "[Your radio] ─UHF─► [Perseverance] ─UHF─► [Orbiter: MRO / MAVEN] ─X-band─► [Deep Space Network, Earth]",
+                  "Network (science.nasa.gov/mars/mars-relay-network); Mars Relay Network Handbook, JPL D-71874 Release 4 (2026). Connecting a survivor's radio to the rover is game fiction.",
+        "diagram": "[Your radio] ─UHF─► [Perseverance] ─UHF─► [Orbiter: MRO / Odyssey / TGO] ─X-band─► [Deep Space Network, Earth]",
     },
     {
         "pageNumber": 5, "title": "Why your own breath is the danger", "category": "Life support", "unlocksRecipe": "",
@@ -294,6 +296,15 @@ CREDITS = {
         {"what": "Landing hardware positions", "mission": "Mars Reconnaissance Orbiter", "instrument": "HiRISE",
          "product": "ESP_068294_1985 annotated release", "provider": "University of Arizona HiRISE team",
          "citation": "uahirise.org/ESP_068294_1985", "credit": "NASA/JPL-Caltech/University of Arizona"},
+        {"what": "Dust devils: how often and when", "mission": "Mars 2020 Perseverance", "instrument": "MEDA",
+         "product": "Vortex encounters, sols 15-89 (309 events) and 415-sol rates",
+         "provider": "B. Jackson 2022; R. Hueso et al. 2023",
+         "citation": "Planetary Science Journal 3, 20; JGR Planets 128, e2022JE007516",
+         "credit": "NASA/JPL-Caltech; MEDA team (CAB, Spain)"},
+        {"what": "When the rover can reach an orbiter (relay passes)", "mission": "Mars Relay Network",
+         "instrument": "UHF relay", "product": "Mars Relay Network Handbook, Release 4 (2026)",
+         "provider": "NASA Mars Exploration Program / JPL", "citation": "JPL D-71874",
+         "credit": "NASA/JPL-Caltech; ESA (Trace Gas Orbiter, Mars Express)"},
     ],
     "imageCredits": [
         "Rover photos (Navcam, Hazcam): NASA/JPL-Caltech",
