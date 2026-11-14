@@ -73,8 +73,10 @@ def main(repo):
             "Hourly arrays are indexed by Local True Solar Time hour 0-23; null = no data that hour.",
             "pressurePa = [lowest, mean, highest] of all 1 Hz readings. airTempC = [min, mean, max] of the hourly means. "
             "windMS = [mean, 99th percentile] of all readings.",
-            "The wind sensor was damaged on sol 313, during the dust storm (Lemmon et al. 2022); Hueso et al. 2023 "
-            "report the wind sensors were partly damaged in two dust devil encounters. No valid wind after 13:42 LTST on sol 313.",
+            "Wind sensor damage: during the Jan 2022 dust storm, a dust devil passed close to the rover on sol 313 at 13:42 LTST "
+            "and its gust damaged wind boom WS2; WS1 was damaged on sol 315 (14:24 LTST). Images suggest lifted dust hit the "
+            "sensor wires. No valid wind after 13:42 LTST on sol 313 (Viudez-Moreiras et al. 2022, JGR Planets, "
+            "doi:10.1029/2022JE007522; also Lemmon et al. 2022; Hueso et al. 2023).",
             "groundTemp/skyTemp are brightness temperatures from TIRS (ground emissivity 0.98 assumed).",
             "MEDA logs 12 h per sol on a normal cadence (odd/even hours alternate), so some sols miss hours.",
         ],
