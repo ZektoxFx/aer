@@ -1,4 +1,5 @@
 import type { ContentFile } from '../data/files';
+import type { Pt } from '../map/geo';
 import type { SuitState } from '../sim/types';
 import { fits, type Pack, type PackEntry, type SuitKey } from './inventory';
 
@@ -19,10 +20,41 @@ export interface Ship {
 
 export const EMPTY_SHIP: Ship = { stored: [], materials: {}, repaired: [], built: [] };
 
+// ---- Where the storage is: a small locker inside the lander, then the storage room built outside ----
+
+/** The lander's inside locker holds this much (stored items plus scrap materials), until the storage room is built. */
+export const SHIP_LOCKER_KG = 25;
+/** Within this distance of the lander's centre, the astronaut is aboard (through the hatch), metres. */
+export const ABOARD_RADIUS_M = 5;
+/** The storage room, once built: offset from the lander in map metres (east, south), and how close counts as inside it. */
+export const STORAGE_ROOM_AT = { dx: 13, dy: -6 };
+export const STORAGE_ROOM_RADIUS_M = 5;
+export const STORAGE_ROOM_ID = 'storage_room';
+export const SUIT_PATCH_ID = 'suit_patch';
+
+export const hasStorageRoom = (ship: Ship) => ship.built.includes(STORAGE_ROOM_ID);
+/** Mass in the ship: stored items plus scrap materials, kg. */
+export const shipKg = (ship: Ship) =>
+  ship.stored.reduce((a, e) => a + e.massKg, 0) + Object.values(ship.materials).reduce((a, b) => a + b, 0);
+/** Room left in the ship's storage, kg (unlimited once the storage room is built). */
+export const shipRoomKg = (ship: Ship) => (hasStorageRoom(ship) ? Infinity : Math.max(0, SHIP_LOCKER_KG - shipKg(ship)));
+export const shipFits = (ship: Ship, kg: number) => kg <= shipRoomKg(ship) + 1e-9;
+
+/** Inside the lander (through the hatch). */
+export const aboard = (pos: Pt, base: Pt) => Math.hypot(pos.x - base.x, pos.y - base.y) <= ABOARD_RADIUS_M;
+export const storageRoomPoint = (base: Pt): Pt => ({ x: base.x + STORAGE_ROOM_AT.dx, y: base.y + STORAGE_ROOM_AT.dy });
+/** Where the storage can be used: aboard the lander, or in the storage room once it is built. */
+export const atStorage = (pos: Pt, base: Pt, ship: Ship) => {
+  if (aboard(pos, base)) return true;
+  if (!hasStorageRoom(ship)) return false;
+  const r = storageRoomPoint(base);
+  return Math.hypot(pos.x - r.x, pos.y - r.y) <= STORAGE_ROOM_RADIUS_M;
+};
+
 export type RepairId = 'hull' | 'power' | 'life';
 
 export interface Repair {
-  id: RepairId | typeof COMMS_LINK_ID;
+  id: RepairId | typeof COMMS_LINK_ID | typeof STORAGE_ROOM_ID | typeof SUIT_PATCH_ID;
   name: string;
   /** Game minutes the work takes (time passes in the cabin). */
   minutes: number;
@@ -32,6 +64,8 @@ export interface Repair {
   parts: string[];
   /** Manual page needed to know how (in the backpack or the ship). */
   page?: number;
+  /** A blueprint needed to know how (in the backpack or the ship), by its id. */
+  blueprint?: string;
   /** Needs the repair kit's tools (they are not used up). */
   tool: boolean;
   /** Repairs that must be done first. */
@@ -54,10 +88,13 @@ export const REPAIRS: Repair[] = [
   },
 ];
 
-/** Put a backpack item in the ship. Rocket pieces are broken down into their materials. */
+/**
+ * Put a backpack item in the ship. Rocket pieces are broken down into their materials. Nothing changes (the same
+ * objects come back) when it won't fit in the locker.
+ */
 export function store(pack: Pack, ship: Ship, id: string): { pack: Pack; ship: Ship } {
   const e = pack.entries.find((x) => x.id === id);
-  if (!e) return { pack, ship };
+  if (!e || !shipFits(ship, e.kind === 'scrap' ? Object.values(e.yields ?? {}).reduce((a, b) => a + b, 0) : e.massKg)) return { pack, ship };
   const rest = { ...pack, entries: pack.entries.filter((x) => x.id !== id) };
   if (e.kind === 'scrap') {
     const materials = { ...ship.materials };
@@ -92,6 +129,7 @@ export function repairNeeds(r: Repair, pack: Pack, ship: Ship, names: (m: string
   for (const dep of r.after ?? []) needs.push({ label: `First: ${REPAIRS.find((x) => x.id === dep)!.name.toLowerCase()}`, have: ship.repaired.includes(dep) });
   if (r.tool) needs.push({ label: 'Tools: repair kit', have: items.some((e) => !!e.repairs) });
   if (r.page !== undefined) needs.push({ label: `Manual page ${r.page}`, have: items.some((e) => e.kind === 'page' && e.page === r.page) });
+  if (r.blueprint) needs.push({ label: 'Blueprint: storage room', have: items.some((e) => e.blueprint === r.blueprint) });
   for (const p of r.parts) needs.push({ label: partName(p), have: items.some((e) => e.id === p) });
   for (const [m, kg] of Object.entries(r.materials)) {
     const got = ship.materials[m] ?? 0;
@@ -130,24 +168,48 @@ export const COMMS_LINK_KG = 1.5;
  */
 export function commsLinkJob(content?: ContentFile | null): Repair {
   const r = content?.recipes.find((x) => x.id === 'rover_comms_link');
-  const does = r?.does ?? "Connects to the rover's radio to send the distress call";
+  // Story (UI owner, November 15): this is the kit that repairs Perseverance's radio link. Recipe from content.json.
+  const does = "Repairs Perseverance's radio link, so it can send your distress call";
   return {
-    id: COMMS_LINK_ID, name: r?.name ?? 'Rover comms link', minutes: r?.buildMin ?? 60,
+    id: COMMS_LINK_ID, name: 'Rover radio repair kit', minutes: r?.buildMin ?? 60,
     materials: { ...(r?.needs ?? { electronics: 2, wiring: 2 }) }, parts: [], page: r?.manualPage ?? 4, tool: true, after: ['power'],
     does: `${does}${does.endsWith('.') ? '' : '.'}`,
   };
 }
 
-export const commsLinkEntry = (name = 'Rover comms link'): PackEntry => ({
+export const commsLinkEntry = (name = 'Rover radio repair kit'): PackEntry => ({
   id: COMMS_LINK_ID, kind: 'part', name, massKg: COMMS_LINK_KG,
-  note: "Built from field manual page 4. It plugs into Perseverance's UHF radio. Mass is a design value.",
+  note: "Built from AER-1 parts and field manual page 4. It repairs Perseverance's UHF radio link. Mass is a design value.",
 });
+
+/**
+ * Build the storage room outside the lander from the blueprint and hull scrap. Afterwards storage has no weight limit,
+ * and it can be used in the room too. Recipe: design values.
+ */
+export const STORAGE_ROOM_JOB: Repair = {
+  id: STORAGE_ROOM_ID, name: 'Storage room', minutes: 90, materials: { metal: 8, fabric: 3, wiring: 1 }, parts: [],
+  blueprint: STORAGE_ROOM_ID, tool: true,
+  does: `A room beside the lander: storage with no weight limit (the locker inside holds ${SHIP_LOCKER_KG} kg).`,
+};
+
+/** Patch the suit damage from the crash: stops the slow oxygen leak. Recipe: design values. */
+export const SUIT_PATCH_JOB: Repair = {
+  id: SUIT_PATCH_ID, name: 'Patch the suit leak', minutes: 30, materials: { fabric: 1, insulation: 1 }, parts: [], tool: true,
+  does: 'Seals the tear from the crash: the suit stops leaking oxygen.',
+};
+
+/** Until it is patched, the crash-damaged suit loses this share of extra O₂ on top of breathing (design value). */
+export const SUIT_LEAK = 0.25;
+export const suitLeaking = (ship: Ship) => !ship.built.includes(SUIT_PATCH_ID);
 
 export const canBuild = (job: Repair, pack: Pack, ship: Ship) =>
   !ship.built.includes(job.id) && repairNeeds(job, pack, ship).every((n) => n.have);
 
-/** Build at the workbench: materials are used up, and the product goes in the backpack (or the ship if it won't fit). */
-export function doBuild(job: Repair, pack: Pack, ship: Ship, product: PackEntry): { pack: Pack; ship: Ship; inPack: boolean } | null {
+/**
+ * Build at the workbench: materials are used up, and the product (if any) goes in the backpack, or the ship if it
+ * won't fit.
+ */
+export function doBuild(job: Repair, pack: Pack, ship: Ship, product?: PackEntry): { pack: Pack; ship: Ship; inPack: boolean } | null {
   if (!canBuild(job, pack, ship)) return null;
   const materials = { ...ship.materials };
   for (const [m, kg] of Object.entries(job.materials)) {
@@ -155,6 +217,7 @@ export function doBuild(job: Repair, pack: Pack, ship: Ship, product: PackEntry)
     if (materials[m] <= 0) delete materials[m];
   }
   const nextShip = { ...ship, materials, built: [...ship.built, job.id] };
+  if (!product) return { pack, ship: nextShip, inPack: false };
   if (fits(pack, product.massKg)) return { pack: { ...pack, entries: [...pack.entries, product] }, ship: nextShip, inPack: true };
   return { pack, ship: { ...nextShip, stored: [...nextShip.stored, product] }, inPack: false };
 }

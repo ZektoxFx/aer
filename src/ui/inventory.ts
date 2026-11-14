@@ -37,6 +37,8 @@ export interface PackEntry {
   contains?: Partial<Record<SuitKey, number>>;
   /** Manual pages: the page number in the pack's fieldManualPages. */
   page?: number;
+  /** Blueprints: what it shows how to build (a job id in ship.ts). */
+  blueprint?: string;
   note?: string;
 }
 
@@ -108,6 +110,10 @@ export function pickupTarget(world: Pick<MapWorldState, 'items' | 'found'> | nul
 /** Turn a map item into what goes in the backpack, using content.json for mass, refills and scrap yields. */
 export function packEntryFor(item: MapItem, content: ContentFile | null | undefined, rng: () => number = Math.random): PackEntry {
   if (isSalvage(item)) return { id: item.id, itemKind: 'scrap', ...SALVAGE[item.id] };
+  // Blueprints are UI items (debris.ts) with ids 'blueprint:<job id>'.
+  if (item.id.startsWith('blueprint:')) {
+    return { id: item.id, kind: 'page', itemKind: 'manual', name: item.label, massKg: 0, blueprint: item.id.slice('blueprint:'.length), note: item.note };
+  }
   if (item.kind === 'manual') {
     const page = Number(item.contentId ?? item.id.replace(/\D+/g, ''));
     return { id: item.id, kind: 'page', itemKind: 'manual', name: item.label, massKg: 0, page: Number.isFinite(page) ? page : undefined };
@@ -132,7 +138,7 @@ export function packEntryFor(item: MapItem, content: ContentFile | null | undefi
       }
     }
     return {
-      id: item.id, kind: 'scrap', itemKind: 'scrap', name: piece.name, massKg: piece.massKg, yields: { ...piece.yields },
+      id: item.id, kind: 'scrap', itemKind: 'scrap', name: item.id.startsWith('aer1-') ? item.label : piece.name, massKg: piece.massKg, yields: { ...piece.yields },
       ...(contains ? { contains } : {}), note: piece.note,
     };
   }
