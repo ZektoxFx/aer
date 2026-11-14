@@ -137,3 +137,12 @@ describe('rocks and credits', () => {
     }
   });
 });
+
+describe('scenario weather', () => {
+  it('no scenario sol reports 0 m/s wind (missing wind is filled and noted, never shown as calm air)', () => {
+    for (const s of pack.sols) {
+      expect(s.windMS, `sol ${s.sol}`).toBeGreaterThan(0);
+      if (/No wind data this sol/.test(s.notes ?? '')) expect(s.windMS).toBeCloseTo(3.3, 1);
+    }
+  });
+});

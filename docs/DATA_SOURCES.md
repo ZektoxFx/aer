@@ -49,7 +49,7 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 
 ## Caveats the team should know
 
-1. **Wind:** the MEDA wind sensor was damaged during the sol 313 storm, so there is no wind after sol 313. In `jezero_pack.json`, `windMS: 0` on those sols means *no data*, not calm air.
+1. **Wind:** the MEDA wind sensor was damaged during the sol 313 storm, so there is no wind after sol 313. In `jezero_pack.json`, the scenario sols after that (316, 319, 1695) use 3.3 m/s, the median daily mean wind of the 27 measured sols (55–313), and each sol's `notes` says so. In `weather.json`, `windMS` stays `null` on those sols.
 2. **Real Jezero storms are weaker than the game's:** the January 2022 regional storm peaked at τ = 1.38 (sol 316). The storm sim's default `peakTau = 8` comes from Opportunity's 2018 global storm (τ 10.8). Use the real Jezero curve, or say on screen that the storm is a stronger, fictional one.
 3. **Pressure:** Jezero's daily mean pressure in the sample was 587–797 Pa. The proposal's guess of 0.7–0.9 kPa was too high, so use MEDA values.
 4. **Rock chemistry:** the Máaz and Séítah oxide values in `rockFormations` are SuperCam unit means from Wiens et al. 2022 (*Science Advances* 8, eabo3399, Table 1). The delta and regolith entries carry no oxide values, because none were checked against a publication. The regolith ISRU numbers (2 wt% water, perchlorate) are working assumptions marked `[verify]`.

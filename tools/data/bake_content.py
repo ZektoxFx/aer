@@ -323,6 +323,29 @@ SCIENCE_TARGET = {
 }
 
 
+OLD_WIND_NOTE = " windMS=0 means no data (sensor damaged), not calm air."
+
+
+def fill_missing_wind(pack, weather):
+    """Scenario sols after the sol 313 storm have no wind data. A 0 would read as calm air in the UI and
+    the suit sim, so fill with the median daily mean wind of the measured sols and say so in the note."""
+    import statistics
+
+    measured = [s for s in weather["sols"] if s.get("windMS")]
+    median = round(statistics.median(s["windMS"][0] for s in measured), 1)
+    first, last = min(s["sol"] for s in measured), max(s["sol"] for s in measured)
+    for s in pack["sols"]:
+        w = next((x for x in weather["sols"] if x["sol"] == s["sol"]), None)
+        if w and not w.get("windMS"):
+            s["windMS"] = median
+            note = s.get("notes", "").replace(OLD_WIND_NOTE, "")
+            fill = (f" No wind data this sol (MEDA wind sensor damaged on sol 313): windMS is the median daily mean "
+                    f"wind of the {len(measured)} measured sols {first}-{last} ({median} m/s), not a measurement.")
+            if "No wind data this sol" not in note:
+                note += fill
+            s["notes"] = note
+
+
 def main(repo):
     out = Path(repo) / "public" / "data"
     pois = {p["id"]: p for p in json.loads((out / "pois.json").read_text(encoding="utf-8"))["pois"]}
@@ -348,6 +371,7 @@ def main(repo):
     pack = json.loads(pack_path.read_text(encoding="utf-8"))
     pack["fieldManualPages"] = MANUAL_PAGES
     pack["rockFormations"] = ROCKS
+    fill_missing_wind(pack, json.loads((out / "weather.json").read_text(encoding="utf-8")))
     pack_path.write_text(json.dumps(pack, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print("content.json:", len(SUPPLIES), "supplies,", len(ROCKET_PIECES), "pieces,", len(RECIPES), "recipes,",
           len(HISTORY), "history cards; manual pages:", len(MANUAL_PAGES))
