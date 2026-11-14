@@ -67,6 +67,14 @@ describe('missionSteps', () => {
     expect(missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 3, of: 3 })[1].done).toBe(true);
   });
 
+  it('adds the comms link build and ticks the call once it is sent', () => {
+    const s = missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 3, of: 3 }, { linkBuilt: false });
+    expect(s.map((x) => x.id)).toEqual(['crash', 'ship', 'page', 'link', 'rover', 'call']);
+    expect(s.find((x) => x.id === 'link')!.done).toBe(false);
+    const won = missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 3, of: 3 }, { linkBuilt: true, called: true });
+    expect(won.find((x) => x.id === 'call')).toMatchObject({ done: true, detail: 'Earth heard you' });
+  });
+
   it('shows the next orbiter pass on the last step', () => {
     const s = missionSteps(null, { x: 0, y: 0 }, { orbiter: 'MRO', centre: '15:09', inMin: 90 }, fmt);
     expect(s[3].detail).toBe('MRO ≈15:09 · in 90 min');

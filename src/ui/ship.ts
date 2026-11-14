@@ -1,3 +1,4 @@
+import type { ContentFile } from '../data/files';
 import type { SuitState } from '../sim/types';
 import { fits, type Pack, type PackEntry, type SuitKey } from './inventory';
 
@@ -12,14 +13,16 @@ export interface Ship {
   /** Scrap materials (kg): rocket pieces are broken down when stored. */
   materials: Record<string, number>;
   repaired: RepairId[];
+  /** Things built at the workbench (ids), e.g. the rover comms link. */
+  built: string[];
 }
 
-export const EMPTY_SHIP: Ship = { stored: [], materials: {}, repaired: [] };
+export const EMPTY_SHIP: Ship = { stored: [], materials: {}, repaired: [], built: [] };
 
 export type RepairId = 'hull' | 'power' | 'life';
 
 export interface Repair {
-  id: RepairId;
+  id: RepairId | typeof COMMS_LINK_ID;
   name: string;
   /** Game minutes the work takes (time passes in the cabin). */
   minutes: number;
@@ -98,7 +101,7 @@ export function repairNeeds(r: Repair, pack: Pack, ship: Ship, names: (m: string
 }
 
 export const canRepair = (r: Repair, pack: Pack, ship: Ship) =>
-  !ship.repaired.includes(r.id) && repairNeeds(r, pack, ship).every((n) => n.have);
+  !(ship.repaired as string[]).includes(r.id) && repairNeeds(r, pack, ship).every((n) => n.have);
 
 /** Do a repair: materials and parts are used up (tools and manual pages are kept). Null if it can't be done. */
 export function doRepair(r: Repair, pack: Pack, ship: Ship): { pack: Pack; ship: Ship } | null {
@@ -111,8 +114,49 @@ export function doRepair(r: Repair, pack: Pack, ship: Ship): { pack: Pack; ship:
   const used = new Set(r.parts);
   return {
     pack: { ...pack, entries: pack.entries.filter((e) => !used.has(e.id)) },
-    ship: { ...ship, materials, stored: ship.stored.filter((e) => !used.has(e.id)), repaired: [...ship.repaired, r.id] },
+    ship: { ...ship, materials, stored: ship.stored.filter((e) => !used.has(e.id)), repaired: [...ship.repaired, r.id as RepairId] },
   };
+}
+
+// ---- The workbench: building the rover comms link (the way home, proposal §6.2) ----
+
+export const COMMS_LINK_ID = 'comms_link';
+/** Mass of the built comms link (design value). */
+export const COMMS_LINK_KG = 1.5;
+
+/**
+ * The rover comms link as a workbench job, from the Data role's content.json recipe (falls back to its current
+ * values). It needs ship power for the tools, the repair kit, and manual page 4.
+ */
+export function commsLinkJob(content?: ContentFile | null): Repair {
+  const r = content?.recipes.find((x) => x.id === 'rover_comms_link');
+  const does = r?.does ?? "Connects to the rover's radio to send the distress call";
+  return {
+    id: COMMS_LINK_ID, name: r?.name ?? 'Rover comms link', minutes: r?.buildMin ?? 60,
+    materials: { ...(r?.needs ?? { electronics: 2, wiring: 2 }) }, parts: [], page: r?.manualPage ?? 4, tool: true, after: ['power'],
+    does: `${does}${does.endsWith('.') ? '' : '.'}`,
+  };
+}
+
+export const commsLinkEntry = (name = 'Rover comms link'): PackEntry => ({
+  id: COMMS_LINK_ID, kind: 'part', name, massKg: COMMS_LINK_KG,
+  note: "Built from field manual page 4. It plugs into Perseverance's UHF radio. Mass is a design value.",
+});
+
+export const canBuild = (job: Repair, pack: Pack, ship: Ship) =>
+  !ship.built.includes(job.id) && repairNeeds(job, pack, ship).every((n) => n.have);
+
+/** Build at the workbench: materials are used up, and the product goes in the backpack (or the ship if it won't fit). */
+export function doBuild(job: Repair, pack: Pack, ship: Ship, product: PackEntry): { pack: Pack; ship: Ship; inPack: boolean } | null {
+  if (!canBuild(job, pack, ship)) return null;
+  const materials = { ...ship.materials };
+  for (const [m, kg] of Object.entries(job.materials)) {
+    materials[m] = Math.round(((materials[m] ?? 0) - kg) * 1000) / 1000;
+    if (materials[m] <= 0) delete materials[m];
+  }
+  const nextShip = { ...ship, materials, built: [...ship.built, job.id] };
+  if (fits(pack, product.massKg)) return { pack: { ...pack, entries: [...pack.entries, product] }, ship: nextShip, inPack: true };
+  return { pack, ship: { ...nextShip, stored: [...nextShip.stored, product] }, inPack: false };
 }
 
 /** The repaired ship's help at the lander: power recharges the battery; life support refills the rest. */
