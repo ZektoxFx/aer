@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { DataPack } from '../data/types';
 import { FULL_SUIT } from '../sim/simulate';
 import type { Activity } from '../sim/types';
+import { dataCaption, type GameData } from './gameData';
 import { StripChart } from './StripChart';
 import { runTelemetry, solEnvironment } from './telemetry';
 import './ui.css';
@@ -12,7 +12,8 @@ const WALK_MIN = 300;
 const STEP_MIN = 5;
 
 /** App layout: header, sol picker, suit strip charts and active warnings. */
-export function Shell({ pack }: { pack: DataPack }) {
+export function Shell({ data }: { data: GameData }) {
+  const { pack } = data;
   const [solIndex, setSolIndex] = useState(0);
   const sol = pack.sols[solIndex];
 
@@ -24,7 +25,7 @@ export function Shell({ pack }: { pack: DataPack }) {
     points.map((p) => [p.min, pick(p)]);
 
   // Every chart names its source and sol (team rule). Archived data, never "live".
-  const caption = `Simulated suit · inputs: ${pack.source} · Sol ${sol.sol}`;
+  const caption = dataCaption(pack, sol);
   const warnings = points[points.length - 1].warnings;
 
   return (
@@ -44,10 +45,11 @@ export function Shell({ pack }: { pack: DataPack }) {
         </div>
         <span>{pack.area.name}</span>
         <span>P {sol.pressureKPa.toFixed(2)} kPa</span>
-        <span>T {sol.tempMinC}…{sol.tempMaxC} °C</span>
-        <span>Wind {sol.windMS} m/s</span>
-        <span className={sol.tau > 5 ? 'warning' : undefined}>τ {sol.tau.toFixed(1)}</span>
+        <span>T {sol.tempMinC.toFixed(0)}…{sol.tempMaxC.toFixed(0)} °C</span>
+        <span>Wind {sol.windMS.toFixed(1)} m/s</span>
+        <span className={sol.tau > 5 ? 'warning' : undefined}>τ {sol.tau.toFixed(2)}</span>
       </section>
+      {sol.label && <p className="shell-note">{sol.label}{sol.scenario ? ` · ${sol.scenario}` : ''}</p>}
 
       <p className="shell-note">
         Test walk: {TEST_WALK.speedMS} m/s, {TEST_WALK.slopeDeg}° uphill, {TEST_WALK.loadKg} kg carried, for{' '}

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DataPack } from '../data/types';
 import { SPEED_X, forecast, newGame, tick } from '../sim/game';
 import { FULL_SUIT } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
 import type { Activity, Shelter, TickResult } from '../sim/types';
+import { dataCaption, skyFor, type GameData } from './gameData';
 import { CONSUMABLE_LABEL, clockLabel, firstToRunOut, formatMinutes, SPEED_LABEL, type Consumable } from './hudFormat';
 import './hud.css';
 
@@ -16,8 +16,11 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
 ];
 
 /** In-suit HUD: a visor frame of readouts around an open centre (map and photos go there later). */
-export function Hud({ pack }: { pack: DataPack }) {
-  const [frame, setFrame] = useState<TickResult>(() => tick(newGame(pack.sols[0]), 0, true));
+export function Hud({ data }: { data: GameData }) {
+  const { pack } = data;
+  const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
+  const [solIndex, setSolIndex] = useState(0);
+  const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
   const [paused, setPaused] = useState(false);
   const [modeId, setModeId] = useState('cabin');
   const game = useRef(frame.state);
@@ -44,7 +47,7 @@ export function Hud({ pack }: { pack: DataPack }) {
     setModeId(id);
   };
   const triggerStorm = () => { game.current = { ...game.current, storm: makeStorm(game.current.clockMin) }; };
-  const restart = () => { game.current = newGame(pack.sols[0]); setMode('cabin'); };
+  const restart = (i = solIndex) => { game.current = startGame(i); setSolIndex(i); setMode('cabin'); };
 
   const s = frame.state;
   const fc = forecast(s.suit, shelterEnvironment(frame.env, s.shelter), s.activity);
@@ -74,11 +77,11 @@ export function Hud({ pack }: { pack: DataPack }) {
   return (
     <div className={critical ? 'visor critical-frame' : 'visor'}>
       <header className="visor-top">
-        <span>SOL {clock.sol} · {clock.time} LMST</span>
+        <span>DAY {clock.sol} · {clock.time} LTST · MEDA SOL {s.weather.sol}</span>
         <span className={frame.speed === 'emergency' ? 'critical' : frame.speed === 'storm' ? 'warning' : undefined}>
           {SPEED_LABEL[frame.speed]}
         </span>
-        <span>OUT {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(1)}</span>
+        <span>OUT {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}</span>
       </header>
 
       <div className="visor-left">
@@ -131,9 +134,17 @@ export function Hud({ pack }: { pack: DataPack }) {
           ))}
           <button aria-pressed={paused} onClick={() => setPaused((p) => !p)}>{paused ? 'RESUME' : 'PAUSE'}</button>
           <button onClick={triggerStorm} disabled={phase !== 'none' && phase !== 'over'}>TRIGGER STORM</button>
-          <button onClick={restart}>RESTART</button>
+          <button onClick={() => restart()}>RESTART</button>
+          <label className="scenario">
+            <span className="dim">SCENARIO</span>
+            <select value={solIndex} onChange={(e) => restart(Number(e.target.value))}>
+              {pack.sols.map((sol, i) => (
+                <option key={sol.sol} value={i}>{sol.scenario ?? `Sol ${sol.sol}`} (MEDA sol {sol.sol})</option>
+              ))}
+            </select>
+          </label>
         </div>
-        <p className="source dim">Simulated suit · weather inputs: {pack.source} · Sol {s.weather.sol}</p>
+        <p className="source dim">{dataCaption(pack, s.weather)}</p>
       </footer>
     </div>
   );
