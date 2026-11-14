@@ -6,7 +6,7 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 
 **App link** on the last card: https://aer-black.vercel.app (test it in a private window).
 
-**This is the team's only video script** (the shorter draft in `SUBMISSION.md` was removed, issue #34). It was written for the 2D HUD. **TODO:** #27 made the 3D view the main screen, so re-plan rows 3-5 for the 3D view with the minimap and a route, and keep the captions. Fix the on-camera bugs in #40 (points 1-4) first. Record from the deployed build after the freeze, not a local branch.
+**This is the team's only video script** (the shorter draft in `SUBMISSION.md` was removed, issue #34). Re-planned on November 14 for the 3D view (#27), the intro (#38) and scavenging and repairs (#41). **Before recording:** fix the on-camera bugs in #40 (points 1, 2 and 4 at least), then record from the deployed build after the freeze, not a local branch.
 
 ---
 
@@ -14,50 +14,51 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 
 | # | Time | Clip | Caption on screen |
 | --- | --- | --- | --- |
-| 1 | 0:00–0:03 | Still: `public/data/jezero_base_2m.jpg`, slow zoom in | **PerformativeLarper** · NASA Space Apps 2026 · Interplanetary Survival Guide: Martian Map |
-| 2 | 0:03–0:07 | Same still, keep zooming | **AER: plan a Marswalk you can survive.**<br>Small credit: *HiRISE, Jezero Crater (NASA/JPL/UArizona, USGS)* |
-| 3 | 0:07–0:13 | Recording A: HUD running Sol 1 | Real Perseverance weather (MEDA, sol 312) sets what every step costs. |
-| 4 | 0:13–0:20 | Recording B: Sol 1 scrubber alarm → diagnose | On Mars, the danger is your own breath. Your CO₂ scrubber is running out. |
-| 5 | 0:20–0:26 | Recording C: storm countdown and shelter cards | Dust storm in 5:00. Pick your shelter.<br>Small: *Game storm is stronger than Jezero's real 2022 storm (τ 1.38).* |
+| 1 | 0:00–0:04 | Recording A: title screen (Earth, satellites), then START | **PerformativeLarper** · NASA Space Apps 2026 · Interplanetary Survival Guide: Martian Map |
+| 2 | 0:04–0:09 | Recording A: meteor strike, master alarm, Control's mayday (the app's own radio caption shows) | **AER: plan a Marswalk you can survive.** |
+| 3 | 0:09–0:15 | Recording B: the hatch opens on Jezero, then the astronaut walks the 3D terrain with the minimap and a route | Real NASA data: HiRISE terrain and Perseverance weather (MEDA, sol 312) set what every step costs.<br>Small: *Hatch view: Perseverance Mastcam-Z, sol 4* |
+| 4 | 0:15–0:21 | Recording C: press F at a supply cache, open PACK → REPAIRS | Scavenge, salvage NASA hardware, repair your lander. Every kilogram you carry costs oxygen. |
+| 5 | 0:21–0:26 | Recording D: storm countdown and shelter cards | Dust storm in 5:00. Pick your shelter.<br>Small: *Game storm is stronger than Jezero's real 2022 storm (τ 1.38).* |
 | 6 | 0:26–0:30 | Black, or the Jezero still dimmed | From one walk today to the first human missions.<br>github.com/ZektoxFx/aer · aer-black.vercel.app |
 
-Keep each caption on screen for its whole clip; the shortest is 3 seconds. Captions are short enough to read at that pace.
-
-**Map shot (swap later):** if Map lands before the freeze, record a route on Jezero turning red past its point of no return and use it for row 3 (keep the row 3 caption). Nothing else changes.
+Keep each caption on screen for its whole clip; the shortest is 4 seconds. Keep the video captions at the top of the frame so they don't cover the app's radio caption at the bottom. The intro sound is optional: the app's radio captions are already in English.
 
 ---
 
 ## How to record
 
 **Setup**
-1. Open the app in Chrome or Safari: the Vercel link, or `npm run dev` and http://localhost:5173.
+1. Open the app in Chrome (the Vercel link) in a fresh private window, so the intro and the how-to card show as for a new player.
 2. Make the browser window about 1280 × 720 (16:9) and hide bookmarks and other tabs.
 3. Press **⌘⇧5** → **Record Selected Portion** → drag the box over the page area only (not the address bar) → **Record**. Stop with the ■ in the menu bar. Each recording lands on the Desktop.
 
-Record each clip a little long (10–20 s); you will trim in iMovie.
+Record each clip a little long; you will trim in iMovie.
 
-**Recording A: HUD running Sol 1 (row 3)**
-1. Click **HUD** (top left), then **START SOL 1** (bottom row).
-2. Start recording. Wait 1 s on the briefing card, click **BEGIN SALVAGE**.
-3. Let it run 8–10 s: the clock ticks, the O₂, scrubber and battery gauges fall, and the status line shows "WALKING TO DEBRIS FIELD". Stop.
+**Recording A: title and crash (rows 1–2)**
+1. Start recording on the title screen. Wait 2 s, click **START**.
+2. Let it run through the meteor strike and the first lines of Control's call (about 10 s). Don't click: a click skips the intro.
 
-**Recording B: scrubber alarm (row 4)**
-1. Click **RESTART SOL 1**, then **BEGIN SALVAGE**.
-2. Press **SKIP +1 H** until the orange **CO₂ SCRUBBER ALARM** card appears (2–3 presses). Do not record the skipping.
-3. Start recording on the alarm card. Wait 2 s so the telemetry is readable, click **SATURATED CANISTER**, wait 2 s on the recovery card, click **SWAP CANISTER**. Stop.
+**Recording B: hatch and walk (row 3)**
+1. Keep the intro running after Recording A (or start a new private window and click START again). Start recording when the cabin goes dark, just before the hatch opens.
+2. When the game appears, click **LET'S GO** on the how-to card. Click the view, then walk with **W** and look around with the mouse for a few seconds.
+3. Click a point on the minimap to plan a route so the line shows. Stop.
 
-**Recording C: storm (row 5)**
-1. Click **RESTART** (not RESTART SOL 1). This ends Sol 1 and unlocks the test buttons.
-2. Click **WALK**.
-3. Start recording. Click **TRIGGER STORM**: "DUST STORM APPROACHING 5:00" and the four shelter cards appear. Let the countdown run 3 s, click **REACH THE WRECK**, let "EN ROUTE: WRECK" show for 2 s. Stop.
+**Recording C: scavenge and repair (row 4)**
+1. Walk toward the light beams north-west of the lander (the supply cache, about 110 m) until **F PICK UP …** appears. Start recording.
+2. Press **F**, then **I** to open the pack. Click the **REPAIRS** tab and hold 2 s on the list. Stop.
+
+**Recording D: storm (row 5)**
+1. Walk at least 30 m away from the lander first: the shelter cards don't appear while you are in the cabin.
+2. Open **☰ MENU** → **TRIGGER DUST STORM**, and start recording as you click it: "▲ DUST STORM IN 5:00" and the shelter cards appear.
+3. Let the countdown run 3 s, click **REACH THE WRECK**, and let "EN ROUTE: WRECK" show for 2 s. Stop.
 
 ---
 
 ## How to edit in iMovie
 
-1. **File → New Movie**. Import the three recordings and `public/data/jezero_base_2m.jpg`.
-2. Drag in order: the image (7 s total, split into 3 s + 4 s for rows 1–2), Recording A, Recording B, Recording C, then the image again (or a black background from **Backgrounds**) for row 6.
-3. Trim each clip to the row's length. In the image clip, use **Crop → Ken Burns** for the slow zoom.
+1. **File → New Movie**. Import the four recordings and `public/data/jezero_base_2m.jpg`.
+2. Drag in order: Recording A (split into 4 s + 5 s for rows 1–2), Recording B, Recording C, Recording D, then `public/data/jezero_base_2m.jpg` (or a black background from **Backgrounds**) for row 6.
+3. Trim each clip to the row's length. In the image clip, use **Crop → Ken Burns** for a slow zoom.
 4. Add captions with **Titles → Lower Third** (or **Standard** for rows 1, 2 and 6). Type the caption text exactly as in the script.
 5. Check the total duration under the timeline: **30.0 s or less**.
 6. **File → Share → File**, 1080p, then upload as a **public** (or unlisted) YouTube video, or to Google Drive with "Anyone with the link".
@@ -71,6 +72,7 @@ Record each clip a little long (10–20 s); you will trim in iMovie.
 - [ ] Every caption in English and readable
 - [ ] App link on the last card opens in a private window
 - [ ] Row 5 says the game storm is stronger than the real one
+- [ ] Row 3 credits the hatch view (Perseverance Mastcam-Z, sol 4)
 - [ ] No people, no NASA logos or insignia on the title cards
 - [ ] The word "live" appears nowhere
 - [ ] Link opens in a private window

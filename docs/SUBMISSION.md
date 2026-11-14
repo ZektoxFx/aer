@@ -2,7 +2,7 @@
 
 Each `##` section below matches a field on the Space Apps project page. Paste them in as written. Lines marked **TODO** still need a teammate before we submit, and lines marked **CHECK** depend on something not merged yet: delete or update them at the hour-40 feature freeze, so the page only claims what judges can open.
 
-**Status (Data, November 14, issue #34):** updated against `main` at 192 tests, with the 3D view (#27) merged. Open team decisions: team name (confirm), storm strength, partner data and the SI wording.
+**Status (UI, November 14):** updated against `main` at 210 tests, with the intro radio calls (#38) and pickups, the backpack, ship storage and ship repairs (#41) merged. Earlier pass: Data, issue #34. Open team decisions: team name (confirm), storm strength, partner data and the SI wording.
 
 Deadline: **Sunday, November 15, 11:59 p.m.** local time. Everything must be in English.
 
@@ -16,7 +16,7 @@ AER: Atmospheric Equilibrium & Recovery
 
 AER is a Marswalk planner for the first astronauts on Mars, with a survival game inside it. It layers real NASA data over Jezero Crater, where Perseverance landed: HiRISE images and elevation, THEMIS thermal inertia, MEDA weather and Mastcam-Z dust measurements. An astronaut can plan a walk there and see what it will cost in oxygen, CO₂ scrubber capacity, cooling water and battery, and the latest moment they can turn back and still reach shelter.
 
-The game shows why each layer matters. A lone astronaut crash-lands in Jezero with a dead radio and must reach Perseverance to call Earth for help, before their own exhaled CO₂, the cold or a dust storm stops them. Every number in the suit comes from NASA physiology and spacesuit data. The challenge asks for a hyperlocal map that keeps an explorer safe while they do science; AER turns that map into decisions the player can feel.
+The game shows why each layer matters. A meteor strike forces a lone astronaut to crash-land in Jezero with a dead radio. They scavenge supplies and scrap, repair their lander into a base, then reach Perseverance to call Earth for help, before their own exhaled CO₂, the cold or a dust storm stops them. Every number in the suit comes from NASA physiology and spacesuit data. The challenge asks for a hyperlocal map that keeps an explorer safe while they do science; AER turns that map into decisions the player can feel.
 
 ## Link to Project Demo
 
@@ -45,10 +45,12 @@ AER helps a Mars astronaut answer one question before every surface walk: *can I
   - **A dust storm:** a five-minute countdown, then a choice of where to shelter, with collapsing solar power and shrinking sight while it lasts.
   - Throughout, the suit simulation models **work hot, rest cold**: walking overheats the suit even at −55 °C, while resting at night brings on hypothermia.
 - **A 3D view, the main game screen.** Jezero is built from the real HiRISE elevation, with the HiRISE photo draped over it. Hills are drawn 1.6 × taller so the gentle relief reads on screen, and the screen says so. The astronaut walks it in first or third person (V switches), movement feeds the same suit simulation, and the layered map becomes a minimap. The 2D map view is one click away.
+- **The story, start to finish.** An intro shows the launch from Earth, a meteor strike and the crash. Mission Control radios to divert to Mars, and a stored message after the crash says to find Perseverance about 2 km west (the distance and direction come from the rover's real parking spots). The view out of the lander's hatch is two real Perseverance Mastcam-Z frames from sol 4. A mission card under the minimap tracks the goal and shows the next orbiter relay pass, from the NASA Mars Relay Network Handbook.
+- **Scavenging and repairs.** The astronaut picks up supplies, rocket pieces and field-manual pages, and can salvage parts from real Mars 2020 hardware lying in Jezero (descent stage, backshell, heat shield). The backpack holds 20 kg, and everything carried adds to the walking load, so it costs oxygen, scrubber and water. At the lander, scrap is stored and broken down into materials, and three repairs (hull, power, life support) turn the wreck into a base that refills the suit. Each repair needs the right tools, manual page, materials and NASA part.
 
 ### How it works
 
-- **Suit simulation (TypeScript, checked by automated tests: 192 project-wide on November 14; TODO update the count at the freeze).** Oxygen use, CO₂ production and scrubber use all come from one metabolic rate set by speed, slope and load.
+- **Suit simulation (TypeScript, checked by automated tests: 210 project-wide on November 14; TODO update the count at the freeze).** Oxygen use, CO₂ production and scrubber use all come from one metabolic rate set by speed, slope and load. In the 3D view, the load is the astronaut's tools plus whatever is in the backpack.
   - Rates follow NASA's ISS-era averages (0.84 kg O₂ and 1.0 kg CO₂ per person per day). A 300 W walk matches the Apollo moonwalk average.
   - Starting supplies match Apollo and ISS spacesuit figures: 0.6 kg O₂, 3.9 kg cooling water, an 80 W electronics load.
   - Body heat is balanced against the cold and the suit's evaporative cooler.
@@ -61,7 +63,7 @@ AER helps a Mars astronaut answer one question before every surface walk: *can I
 
 - **For mission planning:** NASA's existing Mars maps are regional or global. AER works at the scale of a single walk, and turns the data into the numbers a crew needs: cost, margin and when to turn back.
 - **For learning:** the scenarios make invisible risks concrete. Players learn why breathing harder does not help when the scrubber fails, and why a dust storm is dangerous for darkness and lost power, not wind. Mars air is so thin that a 100 km/h wind pushes like an 11–13 km/h breeze on Earth.
-- **Honest about its limits:** every chart names its mission, instrument and sol. Game fiction (the AER-1 lander, the supplies, the radio relay) is labelled as fiction.
+- **Honest about its limits:** every chart names its mission, instrument and sol. Game fiction (the AER-1 lander, the supplies, the radio calls, salvaging NASA hardware, the repair recipes) is labelled as fiction, and design values are marked as such.
 
 ### What we hope to achieve
 
@@ -79,8 +81,9 @@ Draft:
 
 - **The idea:** the concept came from team members, both the original crash-survival game and the Marswalk planner proposal that refined it. **TODO (team):** one story detail was suggested by Claude while reviewing the proposal: the rover as the radio to call home, instead of a source of data to download. The team chose it. Decide together how to describe this honestly.
 - **Code:** Claude (Anthropic) helped write and test the simulation, the data pipeline and parts of the interface. Commits it helped with carry a `Co-Authored-By: Claude` line, and the README says so.
+- **Story text and game values:** the team set the story beats (meteor strike, radio calls, repairing the ship, then calling Earth). Claude drafted the wording of the radio lines and the repair recipes and salvage values from that direction. The recipes are marked as design values in the code.
 - **Data:** Claude helped find sources and write the data-processing scripts. Another AI agent (Antigravity) drafted the original pack and the story content, including rock chemistry and field manual pages. We replaced its unsourced numbers: the Máaz and Séítah rock values now come from published SuperCam measurements (Wiens et al. 2022), the manual pages cite real sources, and the delta and regolith entries carry no unchecked numbers. Every data value comes from the sources listed below, not from AI. Checking against the sources also caught AI mistakes (an invented dust storm, an outdated list of relay orbiters), which we corrected.
-- **Images:** the AER-1 lander image is AI-generated and carries a visible "AI GENERATED ASSET" watermark. No NASA logos or insignia are used.
+- **Images and sound:** the app shows no AI-generated images. The intro's surface view is real Perseverance photos, and the AI-generated AER-1 lander image (watermarked "AI GENERATED ASSET") is no longer shown; it stays in the repository. Sound effects are synthesized in the browser, and the radio voice is the browser's built-in text-to-speech. No NASA logos or insignia are used.
 - **Fact-checking:** AI was used to look up spacesuit and Mars values. Each one is cited in the code and in this document.
 
 ## NASA Data
@@ -90,7 +93,8 @@ Draft:
 - **Perseverance MEDA** ([PDS Atmospheres Node](https://pds-atmospheres.nmsu.edu/data_and_services/atmospheres_data/PERSEVERANCE/meda.html)): 118 sols of pressure, air and ground temperature, wind, and long-wave (heat) radiation. Used for the weather in every scenario. MEDA's measured ground albedo (Martínez et al. 2023, *JGR Planets* 128, e2022JE007537) sets the sunlight model.
 - **Perseverance Mastcam-Z** dust optical depth for 1358 sols, including the January 2022 Jezero dust storm (M. Lemmon, [Mendeley 10.17632/gktjp9jptb.2](https://data.mendeley.com/datasets/gktjp9jptb/2)). Used for dust and solar power.
 - **Mars 2020 waypoints, traverse and sample list** (NASA/JPL [MMGIS](https://mars.nasa.gov/mmgis-maps/M20), [sample list](https://science.nasa.gov/mission/mars-2020-perseverance/mars-rock-samples/)), and **HiRISE ESP_068294_1985** for the landing hardware. Used for points of interest and the rover's hiding spots.
-- **Mars 2020 raw images** (NASA/JPL-Caltech, ASU): point-of-view photos at waypoints.
+- **Mars 2020 raw images** (NASA/JPL-Caltech, ASU): point-of-view photos at waypoints, and the intro's view out of the hatch (Mastcam-Z, sol 4, near the landing site).
+- **NASA Mars Relay Network Handbook** (JPL D-71874, Release 4, 2026): orbiter pass windows over Jezero, used for the mission card's next relay pass.
 - **Perseverance SuperCam** rock compositions for the Máaz and Séítah formations (Wiens et al. 2022, *Science Advances* 8, eabo3399, [open access](https://www.science.org/doi/10.1126/sciadv.abo3399)). Used for the rock and terrain descriptions.
 - **NASA TM-103623**, Appelbaum & Flood, *Solar Radiation on Mars: Update 1990* ([NTRS](https://ntrs.nasa.gov/citations/19910005804)). Used for surface sunlight under dust.
 - **NASA life-support and spacesuit references:**
@@ -122,6 +126,6 @@ The guide's rules: 30 seconds or less, English subtitles if spoken in another la
 - [ ] Every TODO and CHECK above is resolved
 - [ ] The demo link and the app link open in a private window, with no login
 - [ ] Everything is in English; the video has English subtitles
-- [ ] No NASA logos in anything AI-generated; the AI image watermark is visible
+- [ ] No NASA logos anywhere; no unwatermarked AI images (the app currently shows none)
 - [ ] The storm intensity is either the real Jezero curve or labelled as stronger than reality
 - [ ] Submitted before Sunday 11:59 p.m. local time
