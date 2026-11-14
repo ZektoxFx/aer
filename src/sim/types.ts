@@ -36,6 +36,27 @@ export interface SimWarning {
   message: string;
 }
 
+/** A base power system: solar panels charging one battery (cabin, shelter, solar patch). §3.5 */
+export interface PowerState {
+  batteryWh: number;
+  capacityWh: number;
+  panelAreaM2: number;
+  soiling: number;      // 0 = clean panels, 1 = fully covered by dust
+}
+
+/** Something drawing power. The order of the loads array is priority: the last one is cut first. */
+export interface Load {
+  id: string;
+  watts: number;
+}
+
+export interface PowerResult {
+  state: PowerState;
+  solarW: number;                          // panel output at the end of the step
+  deliveredWh: Record<string, number>;     // energy each load actually received
+  shed: string[];                          // loads that lost power at any point in the step
+}
+
 export interface StepResult {
   state: SuitState;
   warnings: SimWarning[];
