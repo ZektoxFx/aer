@@ -25,6 +25,8 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `sunlight.json` | Sunlight on flat ground (W/m²) by dust τ and sun elevation, including diffuse light | NASA TM-103623, Appelbaum & Flood 1990 ([NTRS](https://ntrs.nasa.gov/citations/19910005804)) |
 | `reference.json` | Measured Jezero ranges and cited constants for the simulation | Computed from the files above, plus the proposal (flagged `verify`) |
 | `photos/` | 17 rover photos for points of interest and 5 HiRISE hardware images; `photos/photos.json` lists the credits | NASA Mars 2020 raw images (NASA/JPL-Caltech, ASU for Mastcam-Z); HiRISE (NASA/JPL-Caltech/University of Arizona) |
+| `content.json` | Supplies, rocket pieces and their scrap, the 7 builds (§4.1), the improvising rule, 12 history cards with sources, and the science target (Wildcat Ridge) | Amounts are design values to tune. History cards cite NASA/JPL pages. Built by `tools/data/bake_content.py` |
+| `fieldManualPages` in `jezero_pack.json` | 5 field manual pages: the 4 manual builds plus a CO2 reference page | Rewritten with real sources; the AER-1 tank, rover beacon and radio bridge are labelled game fiction |
 | `crashed_lander_aer1.jpg` | The fictional AER-1 lander | **AI-generated**, with a visible watermark |
 | `fake.json` | The original team placeholder, restored | Not data |
 
