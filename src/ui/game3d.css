@@ -76,13 +76,15 @@
 
 /* ---- Top right: minimap ---- */
 .v-map {
-  position: absolute; top: var(--edge); right: calc(var(--edge) + 14px); z-index: 2; width: min(330px, 32vw);
+  position: absolute; top: var(--edge); right: calc(var(--edge) + 14px); z-index: 2; width: min(290px, 30vw);
   display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 2 * var(--edge) - 70px); overflow: auto;
 }
 .v-map .hud-map-canvas { min-height: 0; border-radius: 14px; border-color: var(--line); }
 /* Neat minimap: keep the map, its route line and buttons; drop the help and credit text (credits are in the footer). */
 .v-map .hud-map > :not(.hud-map-canvas):not(.hud-map-bar) { display: none; }
 .v-map .hud-map-bar { font-size: 9px; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+/* In 3D, drop the click help under the minimap (the how-to card has it); route status and warnings stay. */
+.v-map .hud-map-bar > .dim { display: none; }
 .v-map .hud-map-btns button { font-size: 10px; padding: 2px 8px; background: var(--glass); border-color: var(--line); }
 .v-toggle {
   align-self: flex-end; font: inherit; font-size: 11px; letter-spacing: 0.12em; cursor: pointer; color: var(--fg);
@@ -195,11 +197,16 @@
 
 /* ---- Mission card under the minimap ---- */
 .v-mission {
-  padding: 8px 12px 10px; font-size: 11px;
+  padding: 7px 11px 8px; font-size: 11px;
   background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
-.v-mission.closed { padding-bottom: 8px; }
+.v-mission-more { font-size: 9px; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.v-mission-head:hover .v-mission-more { color: var(--fg); }
+/* Collapsed: only the next step, one line plus its live detail. */
+.v-mission-next { margin: 5px 0 0; display: grid; grid-template-columns: 12px 1fr; gap: 6px; line-height: 1.35; color: var(--fg); }
+.v-mission-next .v-check { color: var(--warning); }
+.v-mission-next em { display: block; font-style: normal; font-size: 10px; color: var(--warning); font-variant-numeric: tabular-nums; }
 .v-mission-head {
   width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 0; cursor: pointer;
   font: inherit; font-size: 11px; letter-spacing: 0.12em; color: var(--fg); background: none; border: 0;
@@ -360,3 +367,28 @@
 .v-work-bar { display: block; height: 4px; background: var(--warning); transform-origin: left; animation-name: v-work-fill; animation-timing-function: linear; animation-fill-mode: both; }
 @keyframes v-work-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .v-work-bar { animation-name: none; } }
+
+/* ---- Low-oxygen alert: pops up at the top centre, small, and never blocks the middle of the view ---- */
+.v-alert {
+  width: min(360px, 80vw); padding: 9px 14px 10px; text-align: left; border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent); border: 1px solid var(--warning);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--warning) 35%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  animation: v-alert-in 0.25s ease-out, v-alert-pulse 1.4s ease-in-out 0.25s infinite alternate;
+}
+.v-alert.critical { border-color: var(--critical); box-shadow: 0 0 22px color-mix(in srgb, var(--critical) 50%, transparent); animation-duration: 0.25s, 0.6s; }
+.v-alert p { margin: 0; font-size: 11px; line-height: 1.45; }
+.v-alert b { font-weight: normal; font-variant-numeric: tabular-nums; color: var(--warning); }
+.v-alert.critical b { color: var(--critical); }
+.v-alert-title { color: var(--warning); letter-spacing: 0.16em; font-size: 12px !important; margin-bottom: 3px !important; }
+.v-alert.critical .v-alert-title { color: var(--critical); }
+.v-alert-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.v-alert-acts button {
+  font: inherit; font-size: 10px; letter-spacing: 0.12em; cursor: pointer; color: var(--fg); padding: 3px 12px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 999px;
+}
+.v-alert-acts button:first-child:not(:last-child) { border-color: var(--warning); color: var(--warning); }
+.v-alert-acts button:hover { border-color: var(--fg); }
+@keyframes v-alert-in { from { transform: translateY(-10px); opacity: 0; } }
+@keyframes v-alert-pulse { to { box-shadow: 0 0 4px transparent; } }
+@media (prefers-reduced-motion: reduce) { .v-alert, .v-alert.critical { animation: none; } }
