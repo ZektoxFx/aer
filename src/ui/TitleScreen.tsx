@@ -290,6 +290,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <p className="title-kicker">TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS 2026</p>
         <h1 className="title-word">AER</h1>
         <p className="title-sub">ATMOSPHERIC EQUILIBRIUM &amp; RECOVERY</p>
+        <p className="title-mission">MISSION AER-1 · ASTEROID-BELT PROSPECTING · VIA A MARS FLYBY</p>
         <p className="title-tag">Plan a Marswalk you can survive.</p>
 
         {panel === 'menu' && (

@@ -624,3 +624,6 @@
 .meteor-strike.leaving .meteor-note, .meteor-strike.leaving .meteor-alarm { opacity: 0; animation: none; }
 .meteor-entry { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; mix-blend-mode: screen;
   background: radial-gradient(ellipse 70% 65% at 50% 55%, color-mix(in srgb, var(--mars-dust) 45%, transparent), color-mix(in srgb, var(--warning) 35%, transparent) 55%, color-mix(in srgb, var(--alarm) 30%, transparent) 100%); }
+/* The mission line under the title (story: docs/STORY.md). */
+.title-mission { margin: 6px 0 0; font: 10px ui-monospace, Consolas, monospace; letter-spacing: 0.24em; color: var(--dim); }
+@media (max-width: 600px) { .title-mission { font-size: 9px; letter-spacing: 0.14em; } }
