@@ -1,5 +1,8 @@
 import type { DataPack } from '../data/types';
-import { MAP_WALK_MS, slopeSpeedFactor, stepSlope, type Elevation, type Pt } from '../map';
+// Straight from the modules (not the map index, which also pulls in three.js for the 3D world).
+import { stepSlope, type Elevation, type Pt } from '../map/geo';
+import { slopeSpeedFactor } from '../map/route';
+import { MAP_WALK_MS } from '../map/world';
 import type { Activity } from '../sim/types';
 
 // Free walking for the 3D view. Positions are map metres (x east, y south from the north-west corner), the same

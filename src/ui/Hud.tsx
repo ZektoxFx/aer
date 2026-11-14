@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { HudMap, type MapItem, type MapWorldState, type Pt, type RouteResult } from '../map';
-import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+// Straight from the module, not the map index: the index also exports the 3D world builder, which pulls three.js
+// into the first download.
+import { HudMap } from '../map/HudMap';
+import type { MapItem, MapWorldState, Pt, RouteResult } from '../map';
+import { SPEED_X, forecast, newGame, outdoorEnv, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
 import type { Activity, Shelter, TickResult } from '../sim/types';
@@ -18,7 +22,8 @@ import { Sol1Panel } from './Sol1Panel';
 import { browserStorage, hudKeyAction } from './settings';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
-import { World3D } from './World3D';
+// three.js is big: load the 3D view on demand so the title screen opens fast (#40).
+const World3D = lazy(() => import('./World3D').then((m) => ({ default: m.World3D })));
 import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
 import { missionSteps, nextRelayPass } from './mission';
 import {
@@ -73,6 +78,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
+  // One map for both views (#40): it renders into a host element that moves between the 2D and 3D layouts, so
+  // switching views doesn't rebuild it (and recompute the safe zone).
+  const [mapHost] = useState(() => { const d = document.createElement('div'); d.className = 'hud-map-host'; return d; });
+  const mapSlot = useCallback((el: HTMLDivElement | null) => { if (el && mapHost.parentElement !== el) el.appendChild(mapHost); }, [mapHost]);
   const mapWorldRef = useRef<MapWorldState | null>(null);
   useEffect(() => { mapWorldRef.current = mapWorld; }, [mapWorld]);
   // Taken items leave the 3D world.
@@ -123,6 +132,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
+  // Conditions over game time, so the map's TURN BACK BY counts nightfall and storms (#40, from #24). Rebuilt only
+  // when the weather day, the storm or the sun data changes, so the map doesn't re-plan every frame.
+  const { weather: envWeather, storm: envStorm, sky: envSky } = frame.state;
+  const envAt = useMemo(() => {
+    const snap = { ...frame.state, weather: envWeather, storm: envStorm, sky: envSky };
+    return (t: number) => outdoorEnv({ ...snap, clockMin: t });
+  }, [envWeather, envStorm, envSky]); // eslint-disable-line react-hooks/exhaustive-deps
   // Free-play environment timeline: the storm forecast for this run (null once it has arrived, or in Sol 1).
   const [stormAt, setStormAt] = useState<number | null>(() => stormForecastAt(frame.state.clockMin));
   const stormAtRef = useRef(stormAt);
@@ -141,6 +157,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [walk, setWalk] = useState<{ plan: WalkPlan; startMin: number; stoppedAt: number | null } | null>(null);
   const [homePlan, setHomePlan] = useState<WalkPlan | null>(null); // the way back, once out at the destination
   const walkRef = useRef(walk);
+  /** A route walk that is moving (not stopped). */
+  const walkActive = () => !!walkRef.current && walkRef.current.stoppedAt === null;
+  /** The route walker's position every frame, for the 3D view (#40: no 20 m jumps). */
+  const walkPosRef = useRef<Pt | null>(null);
+  const followWalk = useCallback(() => walkPosRef.current, []);
   const homeAfterRef = useRef<WalkPlan | null>(null);
   const postedRef = useRef<Pt | null>(null);
   const game = useRef(frame.state);
@@ -151,7 +172,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   useEffect(() => { if (howToOpen) setPaused(true); }, [howToOpen]);
 
   /** One step of the game: the sim tick plus the shelter flow (arrival, then the summary once the storm is over). */
+  // Switching views stops whatever the last view was doing (#40): no running on in the 2D HUD after leaving 3D.
+  const stepMode = useRef(mode);
   const step = (dt: number, isPaused: boolean): TickResult => {
+    if (stepMode.current !== modeRef.current) {
+      stepMode.current = modeRef.current;
+      moveRef.current = null;
+      if (!walkActive()) game.current = { ...game.current, activity: { speedMS: 0, slopeDeg: 0, loadKg: 0 } };
+    }
     const m = missionRef.current;
     const holding = m !== null && (isHolding(m) || isOver(m));
     const r = tick(game.current, dt, isPaused || holding);
@@ -183,7 +211,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       setStormAt(null);
     }
     const mv = moveRef.current;
-    if (modeRef.current === '3d' && mv && !walkRef.current && !missionRef.current && !flowRef.current) {
+    if (modeRef.current === '3d' && mv && !walkActive() && !missionRef.current && !flowRef.current) {
       state = { ...state, activity: activityFor(mv, carriedKg(bagRef.current)), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
     }
     // A repaired ship refills the suit while the astronaut is at the lander.
@@ -193,6 +221,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const wk = walkRef.current;
     if (wk && wk.stoppedAt === null) {
       const w = walkAt(wk.plan, state.clockMin - wk.startMin);
+      walkPosRef.current = w.at;
       state = { ...state, activity: w.activity, shelter: 'none' };
       // Move the map's astronaut every 20 m, not every frame (the map re-plans from the new spot each time).
       if (!postedRef.current || distM(postedRef.current, w.at) > 20 || w.done) {
@@ -201,6 +230,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       }
       if (w.done) {
         walkRef.current = null;
+        walkPosRef.current = null;
         setWalk(null);
         if (wk.plan.toBase) {
           state = { ...state, shelter: 'cabin' };
@@ -241,15 +271,17 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
     const here = inCabinZone(m.pos, base);
     if (here !== atShipRef.current) { atShipRef.current = here; setAtShip(here); }
-    if (walkRef.current) return; // the route walker owns the position
+    if (walkActive()) return; // the route walker owns the position
+    // After STOP on a route walk, walking with the keys takes over (#40) and the stopped walk is dropped.
+    if (walkRef.current && m.moving) { walkRef.current = null; walkPosRef.current = null; homeAfterRef.current = null; setWalk(null); }
     const atCabin = inCabinZone(m.pos, base);
     if (atCabin ? postedRef.current !== null : !postedRef.current || distM(postedRef.current, m.pos) > 20) {
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base, setHintOn, setNear, setAtShip]);
+  }, [base, setHintOn, setNear, setAtShip, setWalk]); // eslint-disable-line react-hooks/exhaustive-deps
   const stopWalking = (atCabin: boolean) => {
-    walkRef.current = null; setWalk(null); homeAfterRef.current = null;
+    walkRef.current = null; walkPosRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
   };
   const setMode = (id: string) => {
@@ -425,6 +457,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const stormRealSec = s.storm ? Math.ceil((stormCountdownMin(s.storm, s.clockMin) / SPEED_X.storm) * 60) : 0;
   const stormActive = phase === 'warning' || phase === 'building' || phase === 'peak' || phase === 'clearing';
   const showChoices = stormActive && !flow && s.shelter !== 'cabin' && (phase === 'warning' || phase === 'building');
+  const mapPortal = createPortal(
+    <HudMap
+      pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
+      night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
+      astronaut={astronaut} onRoute={onRoute} onWorld={setMapWorld} envAt={envAt}
+    />,
+    mapHost,
+  );
 
   const menuAction = (id: string) => {
     if (id === 'pause') setPaused((p) => !p);
@@ -554,13 +594,18 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       </section>
     );
     return (
+      <>
+      {mapPortal}
       <div className="game3d">
+        <Suspense fallback={<p className="v-loading">LOADING 3D VIEW…</p>}>
         <World3D
-          pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
+          pack={pack} base={base} timeScale={timeScale} follow={walk && walk.stoppedAt === null ? followWalk : undefined} placeKey={placeKey}
+          startPos={astronaut} moveLocked={mission !== null || flow !== null}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
           map={world3d}
         />
+        </Suspense>
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
         {/* Top left: time, conditions, oxygen and the first thing to run out. */}
@@ -607,11 +652,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {/* Top right: the minimap, with suit details under it. */}
         <aside className="v-map">
-          <HudMap
-            pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
-            night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
-            astronaut={astronaut} onRoute={onRoute} onWorld={setMapWorld}
-          />
+          <div ref={mapSlot} className="hud-map-slot" />
           {goalPanel}
           <button className="v-toggle" aria-expanded={suitOpen} onClick={() => setSuitOpen((o) => !o)}>
             SUIT DETAILS {suitOpen ? '▴' : '▾'}
@@ -836,11 +877,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           </div>
         )}
       </div>
+      </>
     );
   }
 
   return (
     <>
+    {mapPortal}
     <p className="hud-note">
       SIMULATED ASTRONAUT · REAL ARCHIVED NASA WEATHER (PERSEVERANCE MEDA, MEDA SOL {s.weather.sol}) · NOT LIVE
     </p>
@@ -888,11 +931,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {/* The map stays mounted (it keeps the explored fog and the planned route); cards float over it. */}
         <div className="centre-map">
-          <HudMap
-            pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
-            night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
-            astronaut={astronaut} onRoute={onRoute}
-          />
+          <div ref={mapSlot} className="hud-map-slot" />
           {overlay && <div className="centre-overlay">{overlay}</div>}
         </div>
       </div>
