@@ -1,6 +1,7 @@
 // Shared contract: Map and UI call simulate() with these types.
 // Change it only after telling the whole team.
 
+import type { SunlightTable } from '../data/files';
 import type { SolWeather } from '../data/types';
 
 export interface SuitState {
@@ -104,6 +105,9 @@ export interface GameState {
   power: PowerState;      // the cabin's power system
   loads: Load[];          // switched-on cabin loads, in priority order
   storm: StormEvent | null;
+  /** NASA sunlight table (sunlight.json) plus site latitude and season (Ls from weather.json).
+   *  When set, sun position and sunlight come from NASA data instead of the built-in shortcuts. */
+  sky?: { table: SunlightTable; latDeg: number; lsDeg: number };
 }
 
 export interface TickResult {

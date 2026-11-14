@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import sunRaw from '../../public/data/sunlight.json?raw';
+import type { SunlightTable } from '../data/files';
+import { solarWm2 } from '../data/sunlight';
 import type { SolWeather } from '../data/types';
-import { SPEED_X, forecast, localHour, newGame, sunElevationDeg, tick, weatherAt } from './game';
+import { SPEED_X, forecast, localHour, nasaSolar, newGame, outdoorEnv, sunElevationDeg, tick, weatherAt } from './game';
 import { BASE_LOADS } from './power';
 import { FULL_SUIT } from './simulate';
 import { MIN_PER_SOL, makeStorm } from './storm';
@@ -81,6 +84,43 @@ describe('game clock', () => {
     const g = { ...g0, clockMin: at(23), suit: { ...g0.suit, elapsedMin: at(23) }, loads: [BASE_LOADS.moxie] };
     const r = tick(g, 60); // one game hour
     expect(g.power.batteryWh - r.state.power.batteryWh).toBeCloseTo(300, 6);
+  });
+});
+
+describe('NASA sky (sunlight.json)', () => {
+  const table = JSON.parse(sunRaw) as SunlightTable;
+  const sky = (lsDeg: number) => ({ table, latDeg: 18.44, lsDeg });
+
+  it('at the equinox the noon sun stands 90° − latitude high', () => {
+    expect(sunElevationDeg(at(12), sky(0))).toBeCloseTo(90 - 18.44, 1);
+  });
+
+  it('northern-summer days at Jezero are longer than winter days', () => {
+    expect(sunElevationDeg(at(6), sky(90))).toBeGreaterThan(0);  // already up at 06:00
+    expect(sunElevationDeg(at(6), sky(270))).toBeLessThan(0);    // still dark at 06:00
+  });
+
+  it('inside the table, sunlight is exactly NASA’s value', () => {
+    expect(nasaSolar(table, 0)(0.45, 50)).toBeCloseTo(solarWm2(table, 0.45, 50, 0), 9);
+  });
+
+  it('beyond the table’s τ 6, storms keep getting darker, never negative', () => {
+    const f = nasaSolar(table, 0);
+    expect(f(8, 50)).toBeLessThan(f(6, 50));
+    expect(f(10.8, 50)).toBeLessThan(f(8, 50));
+    expect(f(10.8, 50)).toBeGreaterThan(0);
+    expect(f(8, -5)).toBe(0);
+  });
+
+  it('with NASA data a τ 8 storm still cuts sunlight to under 20% of a clear day', () => {
+    const f = nasaSolar(table, 0);
+    expect(f(8, 60) / f(0.45, 60)).toBeLessThan(0.2);
+  });
+
+  it('a game given the sky uses NASA sunlight and sun position', () => {
+    const g = newGame(sol13, sky(0));
+    const expected = solarWm2(table, sol13.tau, sunElevationDeg(g.clockMin, g.sky), 0);
+    expect(outdoorEnv(g).solarWm2).toBeCloseTo(expected, 9);
   });
 });
 
