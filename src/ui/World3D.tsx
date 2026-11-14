@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { DataPack } from '../data/types';
 import { buildMapWorld, groundStep, type MapWorldState, type Pt } from '../map';
-import { buildAstronaut, buildLander, cssColor } from './astronaut3d';
+import { buildAstronaut, cssColor } from './astronaut3d';
+import { coverRocks, stormStrength } from './cover';
+import { buildBase, buildCelestial, buildCoverRock, buildRover, buildSparks, type BaseLook } from './props3d';
 import { moveStep, type MoveInput, type MoveResult } from './movement';
 import { buildContactShadow, buildDustDevils, buildFootprints, buildSky, buildTerrain } from './terrain3d';
 
@@ -38,6 +40,14 @@ export interface World3DProps {
   view?: 'first' | 'third';
   /** LOCAL DRAFT (Map/Aiman): the map's items, zones, safe zone and route, built into this world. */
   map?: MapWorldState | null;
+  /** Unit vector toward the Sun (x east, y up, z south), from sun.ts. Without it the Sun stays in the south-east. */
+  sunDir?: { x: number; y: number; z: number };
+  /** The ship's state, shown on the base: stored items on the shelves, repairs done, the comms link. */
+  baseLook?: BaseLook;
+  /** Perseverance, once the map knows where it is. */
+  rover?: { at: Pt; visible: boolean; linked: boolean; called: boolean } | null;
+  /** A repair or build is under way: the astronaut kneels at the job and sparks fly. */
+  working?: boolean;
 }
 
 /** Mouse-look sensitivity, radians per pixel. */
@@ -98,10 +108,37 @@ export function World3D(props: World3DProps) {
     Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 220 });
     scene.add(sun, sun.target);
 
-    // ---- The crashed lander, rocks, the astronaut and their prints ----
-    const lander = buildLander();
-    lander.position.set(base.x - W2, groundAt(base) - 0.6, base.y - H2);
-    scene.add(lander);
+    // ---- The crashed lander as a base (storage room, solar array, tanks), rocks, the astronaut and their prints ----
+    const baseY = groundAt(base);
+    const baseModel = buildBase((dx, dz) => groundAt({ x: base.x + dx, y: base.y + dz }) - baseY);
+    baseModel.group.position.set(base.x - W2, baseY, base.y - H2);
+    scene.add(baseModel.group);
+
+    // Rock overhangs to shelter under in a storm, each with a beacon that lights up when the dust comes.
+    const covers = coverRocks(base, area);
+    const coverBeamMat = new THREE.MeshBasicMaterial({
+      color: cssColor('--warning'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    });
+    const coverBeamGeo = new THREE.CylinderGeometry(0.25, 0.6, 60, 10, 1, true);
+    covers.forEach((c, i) => {
+      const rock = buildCoverRock(c.size, 101 + i * 13);
+      rock.position.set(c.at.x - W2, groundAt(c.at) - 0.3, c.at.y - H2);
+      rock.rotation.y = c.yaw;
+      const beam = new THREE.Mesh(coverBeamGeo, coverBeamMat);
+      beam.position.y = 30;
+      rock.add(beam);
+      scene.add(rock);
+    });
+
+    // Perseverance (placed each frame from the map's rover item).
+    const rover = buildRover();
+    rover.group.visible = false;
+    rover.group.rotation.y = 0.7;
+    scene.add(rover.group);
+    const sparks = buildSparks();
+    scene.add(sparks.group);
+    const celestial = buildCelestial();
+    scene.add(celestial.group);
 
     let seed = 7;
     const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
@@ -158,7 +195,7 @@ export function World3D(props: World3DProps) {
     // ---- Player and camera state ----
     const start = { x: base.x + 8, y: base.y + 6 };
     let me: Pt = live.current.startPos ?? start; // open where the astronaut is, not back at the lander (#40)
-    let heading = 0, shownHeading = 0, phase = 0, moveBlend = 0;
+    let heading = 0, shownHeading = 0, phase = 0, moveBlend = 0, workBlend = 0;
     let yawT = 0, pitchT = 0.32, distT = 16;
     let yaw = yawT, pitch = pitchT, dist = distT;
     let camPos: THREE.Vector3 | null = null;
@@ -168,7 +205,8 @@ export function World3D(props: World3DProps) {
     let lastInput: MoveInput = { forward: 0, right: 0, run: false };
     let sinceStep = 0, footSide = 1;
     // Reused every frame instead of allocating.
-    const target = new THREE.Vector3(), back = new THREE.Vector3(), want = new THREE.Vector3(), sunOff = new THREE.Vector3();
+    const target = new THREE.Vector3(), back = new THREE.Vector3(), want = new THREE.Vector3(), sunOff = new THREE.Vector3(), hands = new THREE.Vector3();
+    const DEFAULT_SUN = { x: 0.5, y: 0.6, z: 0.62 };
 
     // ---- Input ----
     const keys = new Set<string>();
@@ -295,7 +333,10 @@ export function World3D(props: World3DProps) {
       const gx = me.x - W2, gz = me.y - H2, gy = terrain.surfaceY(gx, gz);
       moveBlend += ((m.moving ? 1 : 0) - moveBlend) * ease(8, dt);
       if (m.moving) phase += dt * (m.speedMS > 1.5 ? 13 : 8) * Math.max(0.4, ramp || 1);
-      astro.pose(phase, moveBlend, now / 1000);
+      // Repairs: face the lander and kneel at the job.
+      workBlend += ((P.working ? 1 : 0) - workBlend) * ease(5, dt);
+      if (P.working) heading = Math.atan2(base.x - me.x, -(base.y - me.y));
+      astro.pose(phase, moveBlend, now / 1000, workBlend);
       body.position.set(gx, gy, gz);
       const turnBy = Math.atan2(Math.sin(heading - shownHeading), Math.cos(heading - shownHeading));
       shownHeading += turnBy * ease(10, dt);
@@ -345,14 +386,15 @@ export function World3D(props: World3DProps) {
       if (camera.fov !== fov || camera.near !== near) { camera.fov = fov; camera.near = near; camera.updateProjectionMatrix(); }
       sky.mesh.position.copy(camera.position);
 
-      // ---- Sun, night and dust ----
-      const elevRad = (Math.max(-10, P.sunElevationDeg) * Math.PI) / 180;
+      // ---- Sun, night and dust: the light comes from where the Sun really is in the sky, and moves through the day ----
       const day = THREE.MathUtils.clamp((P.sunElevationDeg + 6) / 20, 0, 1);
       const dust = THREE.MathUtils.clamp(P.tau / 8, 0, 1);
-      sun.position.copy(body.position).add(sunOff.set(-60 * Math.cos(elevRad), 80 * Math.max(0.15, Math.sin(elevRad)), 40));
+      const sd = P.sunDir ?? DEFAULT_SUN;
+      sun.position.copy(body.position).add(sunOff.set(sd.x, Math.max(0.12, sd.y), sd.z).normalize().multiplyScalar(100));
       sun.target.position.copy(body.position);
       sun.intensity = 2.8 * day * (1 - 0.75 * dust);
-      hemi.intensity = 0.35 + 1.1 * day; // dusty Mars skies scatter a lot of light into shadows
+      hemi.intensity = 0.1 + 1.25 * day; // dusty Mars skies scatter a lot of light into shadows; nights are dark
+      celestial.update(camera.position, sd, day, dust);
       const horizon = sky.update(day, dust);
       const fog = scene.fog as THREE.Fog;
       fog.color.copy(horizon);
@@ -378,6 +420,19 @@ export function World3D(props: World3DProps) {
       }
       devils.update(dt, body.position, yaw, P.tau < 3 ? (P.dustDevils ?? 0) : 0, terrain.surfaceY);
       mapWorld.update(P.map ?? null, me, now, dt);
+
+      // The base shows what is stored and what is repaired; the rover shows the comms link; storm beacons on rocks.
+      const t = now / 1000;
+      if (P.baseLook) baseModel.update(P.baseLook, t);
+      const rv = P.rover;
+      rover.group.visible = !!rv?.visible;
+      if (rv?.visible) {
+        rover.group.position.set(rv.at.x - W2, groundAt(rv.at) + 0.02, rv.at.y - H2);
+        rover.update(t, rv.linked, rv.called, Math.hypot(rv.at.x - me.x, rv.at.y - me.y));
+      }
+      coverBeamMat.opacity = Math.min(0.45, stormStrength(P.tau) * 0.9 + (P.tau > 1.5 ? 0.08 : 0)) * (0.8 + 0.2 * Math.sin(t * 3));
+      hands.set(gx + Math.sin(shownHeading) * 0.75, gy + 0.85, gz - Math.cos(shownHeading) * 0.75);
+      sparks.update(dt, !!P.working && workBlend > 0.6, hands, t);
 
       renderer.render(scene, camera);
       raf = requestAnimationFrame(frame);
@@ -411,9 +466,11 @@ export function World3D(props: World3DProps) {
       dustGeo.dispose();
       devils.dispose();
       mapWorld.dispose();
+      celestial.dispose();
       el.removeChild(renderer.domElement);
     };
   }, [pack, base]);
 
   return <div ref={host} className="world3d" aria-label="3D view of Jezero Crater" />;
 }
+
