@@ -57,6 +57,38 @@ export interface PowerResult {
   shed: string[];                          // loads that lost power at any point in the step
 }
 
+/** A dust storm. All times are game minutes since the start of the run. §3.6, §6.3 */
+export interface StormEvent {
+  warnedAtMin: number;  // when "DUST STORM APPROACHING" appears; it arrives STORM_WARNING_LEAD_MIN later
+  peakTau: number;      // dust optical depth at the worst point (10.8 was Opportunity's last reading)
+  rampMin: number;      // arrival → peak
+  peakMin: number;      // time at peak
+  clearMin: number;     // peak → back to normal
+}
+
+export type StormPhase = 'none' | 'warning' | 'building' | 'peak' | 'clearing' | 'over';
+
+/** Where the astronaut waits out a storm, best to worst. §6.3 */
+export type Shelter = 'cabin' | 'builtShelter' | 'wreck' | 'none';
+
+/** One straight stretch of a planned walk. Map turns waypoints into legs. */
+export interface RouteLeg {
+  activity: Activity;
+  minutes: number;
+}
+
+export interface RouteAssessment {
+  totalMin: number;
+  /** The suit on arriving at the end of the route (warnings show whether you get there alive). */
+  end: StepResult;
+  /**
+   * Point of no return: the latest minute after setting out at which turning back along the same path
+   * still reaches shelter safely. Equals totalMin when you could turn back even at the end.
+   * null when turning back is unsafe even right now.
+   */
+  turnBackByMin: number | null;
+}
+
 export interface StepResult {
   state: SuitState;
   warnings: SimWarning[];
