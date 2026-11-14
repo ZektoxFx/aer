@@ -1,5 +1,8 @@
 # Map → UI notes
 
+> **15 Nov 2026, PR #55:** Map edited some `src/ui/` files with chik's go-ahead (quest guide, field journal, sample tubes,
+> take-home report, beacon, performance). Everything that changed and why: [`docs/CHANGES_STORY_QUEST_PERF.md`](../../docs/CHANGES_STORY_QUEST_PERF.md).
+
 Notes from the Map role (Aiman) for the UI designer. The Map role does not edit `src/ui/`; these are ideas and
 hook-ups for you to use when you are ready.
 
