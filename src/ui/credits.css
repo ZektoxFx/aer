@@ -1,0 +1,65 @@
+/* Credits scene: end titles rolling up over a starfield, with Mars rising at the bottom. Colours from :root only. */
+.credits {
+  position: fixed; inset: 0; z-index: 50; background: var(--space); color: var(--fg);
+  font-family: inherit; letter-spacing: 0.06em; animation: credits-in 0.8s ease-out;
+}
+@keyframes credits-in { from { opacity: 0; } }
+.credits-sky {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0.8;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, var(--fg) 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 72%, var(--fg) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 44% 34%, var(--earth-glow) 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 12%, var(--fg) 50%, transparent 51%),
+    radial-gradient(1px 1px at 77% 58%, var(--fg) 50%, transparent 51%),
+    radial-gradient(1px 1px at 88% 26%, var(--fg) 50%, transparent 51%),
+    radial-gradient(1px 1px at 6% 52%, var(--fg) 50%, transparent 51%),
+    radial-gradient(1px 1px at 52% 86%, var(--fg) 50%, transparent 51%);
+  background-size: 340px 300px;
+  animation: credits-drift 120s linear infinite;
+}
+@keyframes credits-drift { to { background-position: 0 -1200px; } }
+.credits-mars {
+  position: absolute; left: 50%; bottom: -78vmax; width: 110vmax; height: 110vmax; transform: translateX(-50%);
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 50% 30%, var(--mars-sand), var(--mars-rust) 45%, var(--mars-shadow) 75%);
+  box-shadow: 0 0 120px 20px color-mix(in srgb, var(--mars-sand) 30%, transparent);
+  opacity: 0.55; animation: credits-rise 60s ease-out forwards;
+}
+@keyframes credits-rise { from { bottom: -95vmax; } }
+.credits-roll {
+  position: absolute; inset: 0; overflow-y: auto; scrollbar-width: none; text-align: center; padding: 0 16px;
+  -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 82%, transparent);
+  mask-image: linear-gradient(transparent, #000 14%, #000 82%, transparent);
+}
+.credits-roll::-webkit-scrollbar { display: none; }
+.credits-roll:focus-visible { outline: none; }
+.credits-spacer { height: 85vh; }
+.credits-spacer.short { height: 55vh; }
+.credits-kicker { margin: 0 0 12px; color: var(--earth-glow); font-size: 13px; letter-spacing: 0.22em; }
+.credits-title { margin: 0; font-size: clamp(64px, 12vw, 120px); letter-spacing: 0.3em; line-height: 1; padding-left: 0.3em; }
+.credits-sub { margin: 10px 0 0; color: var(--mars-sky); font-size: 13px; letter-spacing: 0.24em; }
+.credits-line { margin: 14px auto 0; max-width: 560px; font-size: 13px; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+.credits section { margin: 110px auto 0; max-width: 620px; }
+.credits h2 { margin: 0 0 20px; font-size: 12px; font-weight: normal; letter-spacing: 0.3em; color: var(--warning); }
+.credits-team { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.credits-team dt { font-size: 11px; letter-spacing: 0.2em; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.credits-team dd { margin: 2px 0 0; font-size: 22px; letter-spacing: 0.08em; }
+.credits-note { margin: 0 auto 16px; max-width: 560px; font-size: 13px; line-height: 1.6; color: color-mix(in srgb, var(--fg) 82%, transparent); }
+.credits-sources, .credits-plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+.credits-plain { gap: 10px; font-size: 13px; line-height: 1.5; color: color-mix(in srgb, var(--fg) 85%, transparent); }
+.credits-sources li { display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 1.45; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+.credits-sources b { font-weight: normal; font-size: 16px; color: var(--fg); letter-spacing: 0.1em; }
+.credits-what { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mars-sky); }
+.credits-cite { font-size: 11px; color: color-mix(in srgb, var(--fg) 55%, transparent); overflow-wrap: anywhere; }
+.credits-fine { margin: 90px auto 0; max-width: 520px; font-size: 11px; line-height: 1.6; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.credits-fine + .credits-fine { margin-top: 8px; }
+.credits-end { margin: 140px 0 0; font-size: 22px; letter-spacing: 0.3em; }
+.credits-bar { position: absolute; right: 18px; bottom: 16px; display: flex; gap: 8px; z-index: 1; }
+.credits-btn {
+  font: inherit; font-size: 11px; letter-spacing: 0.16em; cursor: pointer; color: var(--fg); padding: 6px 14px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 30%, transparent); border-radius: 999px;
+}
+.credits-btn:hover { border-color: var(--fg); }
+.credits-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .credits, .credits-sky, .credits-mars { animation: none; } }

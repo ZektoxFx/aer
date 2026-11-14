@@ -6,7 +6,10 @@ import { Satellite } from './Satellite';
 import { CONTROLS, type Settings } from './settings';
 import './title.css';
 
-export const TEAM_NAME = 'PerformativeLarper';
+import { TEAM_NAME } from './team';
+import { Credits } from './Credits';
+
+export { TEAM_NAME };
 
 /**
  * The intro, one continuous sequence:
@@ -55,6 +58,7 @@ interface Props {
 export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const [phase, setPhase] = useState<Phase>('title');
   const [panel, setPanel] = useState<Panel>('menu');
+  const [credits, setCredits] = useState(false);
   const [quitTried, setQuitTried] = useState(false);
   const [radio, setRadio] = useState<RadioLine | null>(null);
   const audio = useRef<IntroAudio | null>(null);
@@ -184,6 +188,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
           <nav className="title-menu" aria-label="Main menu">
             <button className="menu-btn primary" onClick={start} autoFocus>START</button>
             <button className="menu-btn" onClick={() => setPanel('settings')}>SETTINGS</button>
+            <button className="menu-btn" onClick={() => setCredits(true)}>CREDITS</button>
             <button className="menu-btn" onClick={() => { setQuitTried(false); setPanel('quit'); }}>QUIT</button>
           </nav>
         )}
@@ -224,6 +229,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
       </div>
 
       {phase !== 'title' && phase !== 'blur' && <p className="intro-skip">CLICK TO SKIP</p>}
+      {credits && <Credits onClose={() => setCredits(false)} />}
     </div>
   );
 }

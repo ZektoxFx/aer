@@ -40,6 +40,7 @@ import { COVER_RADIUS_M, coverRocks, nearestCover, stormEffort, stormStrength, u
 import { compassPoint, sunPosition } from './sun';
 import { SunDial } from './SunDial';
 import { debrisItems } from './debris';
+import { Credits } from './Credits';
 import type { BaseLook } from './props3d';
 import './game3d.css';
 import './hud.css';
@@ -69,6 +70,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   // The mission card shows only the next step; the full list opens on demand (keeps the view clear).
   const [goalOpen, setGoalOpen] = useState(false);
   /** The low-O₂ alert was closed: at which level, and until which game minute (it comes back if things get worse). */
+  /** The credits scene: 'won' after the call reaches Earth, 'menu' when opened from the menu. */
+  const [credits, setCredits] = useState<'won' | 'menu' | null>(null);
   const [o2Hidden, setO2Hidden] = useState<{ level: 'low' | 'critical'; untilMin: number } | null>(null);
   // Pickups and the pack (3D): what is in reach, what is carried, and which manual page is open.
   const [bag, setBagState] = useState<Pack>(EMPTY_PACK);
@@ -408,7 +411,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
     setBag(EMPTY_PACK); setShip(EMPTY_SHIP); nearRef.current = null; setNear(null); setReadPage(null);
-    setLinked(false); setCalled(false); setEndCard(null); endRef.current = false; failRef.current = null; setO2Hidden(null);
+    setLinked(false); setCalled(false); setEndCard(null); endRef.current = false; failRef.current = null; setO2Hidden(null); setCredits(null);
     runStartRef.current = game.current.clockMin; setPaused(false);
     const forecast = stormForecastAt(game.current.clockMin);
     stormAtRef.current = forecast; setStormAt(forecast);
@@ -557,6 +560,15 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     }
   };
   const closeEnd = () => { setEndCard(null); setPaused(false); };
+  // The ending: the credits roll by themselves a little while after "EARTH HEARD YOU" (or at once with CREDITS).
+  const won = endCard?.result === 'won';
+  useEffect(() => {
+    if (!won) return;
+    const t = setTimeout(() => setCredits((c) => c ?? 'won'), 12000);
+    return () => clearTimeout(t);
+  }, [won]);
+  const closeCredits = () => { if (credits === 'menu') setPaused(false); setCredits(null); };
+  const creditsNode = credits && <Credits won={credits === 'won'} onClose={closeCredits} />;
 
   const repairShip = (rp: Repair) => {
     if (!canRepair(rp, bagRef.current, shipRef.current)) return;
@@ -574,6 +586,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
   // Keyboard controls (listed in Settings). The ref always holds this render's handlers.
   const onKey = (e: KeyboardEvent) => {
+    if (credits) return; // the credits scene has the keyboard
     const t = e.target;
     if (e.metaKey || e.ctrlKey || e.altKey || (t instanceof Element && t.closest('input, select, textarea'))) return;
     // Space on a focused button presses that button, as browsers do; don't also pause.
@@ -637,6 +650,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     else if (id === 'storm') triggerStorm();
     else if (id === 'skip') skipHour();
     else if (id === 'restart') restart();
+    else if (id === 'credits') { setPaused(true); setCredits('menu'); }
     else if (id === 'howto') { setHowToOpen(true); hintOnRef.current = true; setHintOn(true); }
     else if ((id === 'hud' || id === 'telemetry') && onView) onView(id);
   };
@@ -675,6 +689,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       </dl>
       <div className="end-actions">
         <button className="choice-btn" onClick={() => restart()} autoFocus>{endCard.result === 'won' ? 'PLAY AGAIN' : 'TRY AGAIN'}</button>
+        {endCard.result === 'won' && <button className="choice-btn" onClick={() => setCredits('won')}>CREDITS</button>}
         {endCard.result === 'won' && <button className="choice-btn" onClick={closeEnd}>KEEP EXPLORING</button>}
       </div>
     </section>
@@ -955,6 +970,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
               ['SKIP +1 HOUR (TEST)', 'skip', false],
               ['RESTART AT THE CABIN', 'restart', false],
               ['HOW TO PLAY', 'howto', false],
+              ['CREDITS', 'credits', false],
               ...(onView ? [['SWITCH TO 2D HUD', 'hud', false], ['TELEMETRY CHARTS', 'telemetry', false]] as const : []),
             ] as const).map(([label, id, disabled]) => (
               <button key={id} disabled={disabled} onClick={() => { menuAction(id); setMenuOpen(false); }}>{label}</button>
@@ -964,6 +980,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         )}
 
         {overlay && <div className="g3-overlay">{overlay}</div>}
+        {creditsNode}
         {work && (
           <section className="v-work" role="status" aria-label="Work in progress">
             <p className="v-work-title">{work.label}</p>
@@ -1248,6 +1265,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <div className="centre-map">
           <div ref={mapSlot} className="hud-map-slot" />
           {overlay && <div className="centre-overlay">{overlay}</div>}
+          {creditsNode}
         </div>
       </div>
 
