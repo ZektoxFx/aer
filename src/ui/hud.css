@@ -53,6 +53,11 @@
 .controls button:disabled { opacity: 0.4; cursor: default; }
 .controls button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .source { margin: 0; font-size: 11px; }
+.scenario { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; max-width: 100%; }
+.scenario select {
+  font: inherit; max-width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--dim); padding: 3px 6px;
+}
+.scenario select:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
 @media (max-width: 760px) {
   .visor { grid-template: 'top' 'centre' 'left' 'right' 'bottom' / 1fr; min-height: 0; }
