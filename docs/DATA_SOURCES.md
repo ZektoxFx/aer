@@ -25,6 +25,9 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `sunlight.json` | Sunlight on flat ground (W/m²) by dust τ and sun elevation, including diffuse light | NASA TM-103623, Appelbaum & Flood 1990 ([NTRS](https://ntrs.nasa.gov/citations/19910005804)) |
 | `reference.json` | Measured Jezero ranges and cited constants for the simulation | Computed from the files above, plus the proposal (flagged `verify`) |
 | `photos/` | 17 rover photos for points of interest and 5 HiRISE hardware images; `photos/photos.json` lists the credits | NASA Mars 2020 raw images (NASA/JPL-Caltech, ASU for Mastcam-Z); HiRISE (NASA/JPL-Caltech/University of Arizona) |
+| `content.json` | Supplies, rocket pieces and their scrap, the 7 builds (§4.1), the improvising rule, 12 history cards with sources, and the science target (Wildcat Ridge) | Amounts are design values to tune. History cards cite NASA/JPL pages. Built by `tools/data/bake_content.py` |
+| `credits.json` | Credits screen text: 8 data sources with citations, image credits, fiction and AI notes, and chart label templates such as `Perseverance MEDA · air temperature · sol {sol} (archived)` | Built by `tools/data/bake_content.py` |
+| `fieldManualPages` in `jezero_pack.json` | 5 field manual pages: the 4 manual builds plus a CO2 reference page | Rewritten with real sources; the AER-1 tank, rover beacon and radio bridge are labelled game fiction |
 | `crashed_lander_aer1.jpg` | The fictional AER-1 lander | **AI-generated**, with a visible watermark |
 | `fake.json` | The original team placeholder, restored | Not data |
 
@@ -46,10 +49,10 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 
 ## Caveats the team should know
 
-1. **Wind:** the MEDA wind sensor was damaged during the sol 313 storm, so there is no wind after sol 313. In `jezero_pack.json`, `windMS: 0` on those sols means *no data*, not calm air.
+1. **Wind:** the MEDA wind sensor was damaged during the sol 313 storm, so there is no wind after sol 313. In `jezero_pack.json`, the scenario sols after that (316, 319, 1695) use 3.3 m/s, the median daily mean wind of the 27 measured sols (55–313), and each sol's `notes` says so. In `weather.json`, `windMS` stays `null` on those sols.
 2. **Real Jezero storms are weaker than the game's:** the January 2022 regional storm peaked at τ = 1.38 (sol 316). The storm sim's default `peakTau = 8` comes from Opportunity's 2018 global storm (τ 10.8). Use the real Jezero curve, or say on screen that the storm is a stronger, fictional one.
 3. **Pressure:** Jezero's daily mean pressure in the sample was 587–797 Pa. The proposal's guess of 0.7–0.9 kPa was too high, so use MEDA values.
-4. **Rock chemistry:** the oxide percentages in `rockFormations` came from another AI agent and have not been checked against PIXL papers. Each description starts with `[verify]`.
+4. **Rock chemistry:** the Máaz and Séítah oxide values in `rockFormations` are SuperCam unit means from Wiens et al. 2022 (*Science Advances* 8, eabo3399, Table 1). The delta and regolith entries carry no oxide values, because none were checked against a publication. The regolith ISRU numbers (2 wt% water, perchlorate) are working assumptions marked `[verify]`.
 5. **Fiction:** `crashedLander`, `scatteredSupplies` and `fieldManualPages` are game fiction, and the game should label them so they are not mistaken for NASA data.
 6. **Not used yet:**
    - PSG: replaced by the NASA TM-103623 sunlight model, which includes diffuse light.
