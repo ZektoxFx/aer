@@ -27,7 +27,7 @@ const World3D = lazy(() => import('./World3D').then((m) => ({ default: m.World3D
 import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
 import { missionSteps, nextRelayPass } from './mission';
 import {
-  applySupply, BACKPACK_MAX_KG, carriedKg, drop, droppedItems, EMPTY_PACK, entryForPickup, fits, givesLabel, HEAVY_KG, manualPage, pickUp,
+  applySupply, BACKPACK_MAX_KG, carriedKg, drop, droppedItems, isPickable, EMPTY_PACK, entryForPickup, fits, givesLabel, HEAVY_KG, manualPage, pickUp,
   pickupTarget, SALVAGE, usable, type Pack, type PackEntry,
 } from './inventory';
 import {
@@ -37,7 +37,8 @@ import {
 } from './ship';
 import { callStage, hasCommsLink, installLink, LIGHT_TIME_MIN, roverInReach, watchFailure, type FailCause, type FailWatch } from './ending';
 import { COVER_RADIUS_M, coverRocks, nearestCover, stormEffort, stormStrength, underCover, type NearCover } from './cover';
-import { findingById, FINDINGS, newFindings, takeHome, type FindingId } from './findings';
+import { CACHE_SITE, findingById, FINDINGS, newFindings, takeHome, type FindingId, type FindingSignals } from './findings';
+import { bearing, currentQuest } from './quest';
 import { compassPoint, sunPosition } from './sun';
 import { SunDial } from './SunDial';
 import { debrisItems } from './debris';
@@ -110,6 +111,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const setFound = (f: FindingId[]) => { foundRef.current = f; setFoundState(f); };
   const [journalOpen, setJournalOpen] = useState(false);
   const statsRef = useRef<{ walkedM: number; o2UsedKg: number; lastPos: Pt | null }>({ walkedM: 0, o2UsedKg: 0, lastPos: null });
+  /** Add whatever these signals unlock to the journal, with a toast for the first new one. */
+  const unlockFindings = (sig: FindingSignals) => {
+    const fresh = newFindings(foundRef.current, sig);
+    if (!fresh.length) return;
+    setFound([...foundRef.current, ...fresh]);
+    setToast(`New finding: ${findingById(fresh[0]).title}. Press J for the field journal.`);
+  };
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 4000);
@@ -344,7 +352,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       st.lastPos = pos ? { ...pos } : st.lastPos;
       const phase = (g: typeof state) => (g.storm ? stormPhase(g.storm, g.clockMin) : null);
       const was = phase(prev), now = phase(state);
-      const fresh = newFindings(foundRef.current, {
+      unlockFindings({
         o2Refilled: state.suit.o2Kg > prev.suit.o2Kg + 1e-4,
         underCover: !!pos && modeRef.current === '3d' && underCover(pos, coversRef.current),
         stormOver: was !== null && was !== 'over' && (now === null || now === 'over'),
@@ -353,10 +361,6 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         lakeAt: mapWorldRef.current?.items.find((i) => i.kind === 'science')?.at ?? null,
         salvaged: bagRef.current.salvaged,
       });
-      if (fresh.length) {
-        setFound([...foundRef.current, ...fresh]);
-        setToast(`New finding: ${findingById(fresh[0]).title}. Press J for the field journal.`);
-      }
     }
     game.current = state;
     return { ...r, state };
@@ -499,6 +503,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const e = r.entry;
     setToast(e.blueprint ? `Found the ${e.name.toLowerCase()}. Build it beside the lander: PACK → REPAIRS.`
       : e.kind === 'page' ? `Picked up ${e.name}. Press I to read it.`
+      : e.id === CACHE_SITE ? `Secured the ${e.name.toLowerCase()} · ${e.massKg.toFixed(1)} kg · Perseverance's samples, going home with you`
       : e.kind === 'part' ? `Salvaged ${e.name} · ${e.massKg.toFixed(1)} kg · a NASA part for ship repairs`
       : `Picked up ${e.name} · ${e.massKg.toFixed(1)} kg${e.gives && usable(e) ? ` · ${givesLabel(e.gives)} when used` : ''}`);
   };
@@ -515,6 +520,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     else setShip({ ...shipRef.current, stored: r.entries });
     const rest = r.entries.find((x) => x.id === id);
     setToast(`Used ${e.name}: ${got}${rest ? ` · ${givesLabel(rest.gives).replace(/\+/g, '')} left` : ''}`);
+    if ((r.added.o2Kg ?? 0) > 0) unlockFindings({ o2Refilled: true });
   };
   const dropFromBag = (id: string) => {
     const e = bagRef.current.entries.find((x) => x.id === id);
@@ -857,6 +863,16 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       { linkBuilt: ship.built.includes(COMMS_LINK_ID) || linked, called, suitPatched: !suitLeaking(ship) });
     const nextStep = steps.findIndex((x) => !x.done);
     const next = steps[nextStep];
+    // The quest guide: the current step as one next action, where to go, and why (and a beacon in 3D).
+    const questItems = [...pickWorld.items.filter((i) => isPickable(i, bag.salvaged) && !bag.taken.includes(i.id)), ...droppedItems(bag)];
+    const quest = currentQuest({
+      steps, items: questItems, pack: bag, ship, content: data.content, base, me: astronaut ?? base, suitJob: SUIT_PATCH_JOB, linkJob: commsJob,
+      rover: roverItem, linked, pass: nextRelayPass(s.clockMin, data.relay), fmtMin: formatMinutes, found, allItems: mapWorld?.items ?? [],
+    });
+    const questWay = quest.target ? bearing(astronaut ?? base, quest.target.at) : null;
+    const questWayLabel = quest.target && questWay
+      ? `${quest.target.label} · ${questWay.m < 8 ? 'here' : `${questWay.m >= 1000 ? `${(questWay.m / 1000).toFixed(1)} km` : `${Math.round(questWay.m / 5) * 5} m`} ${questWay.dir}`}`
+      : null;
     const goalPanel = (
       <section className={goalOpen ? 'v-mission open' : 'v-mission'} aria-label="Mission">
         <button className="v-mission-head" aria-expanded={goalOpen} onClick={() => setGoalOpen((o) => !o)}
@@ -869,9 +885,19 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             <span>{next ? next.label : 'Mission complete'}{next?.detail && <em>{next.detail}</em>}</span>
           </p>
         )}
+        <div className="v-quest" aria-label="What to do now">
+          <p className="v-quest-task"><span className="v-quest-tag">NOW</span>{quest.task}</p>
+          {questWayLabel && <p className="v-quest-way">◆ {questWayLabel}</p>}
+        </div>
         {goalOpen && (
           <>
             <p className="v-mission-why">Your lander's radio died in the crash. Perseverance's radio can still reach Earth through the orbiters.</p>
+            <p className="v-mission-why"><b>{quest.title}.</b> {quest.why}</p>
+            {quest.needs.length > 0 && (
+              <ul className="v-quest-needs">
+                {quest.needs.map((n) => <li key={n.label} className={n.done ? 'done' : undefined}>{n.done ? '✓' : '○'} {n.label}</li>)}
+              </ul>
+            )}
             <ol className="v-mission-steps">
               {steps.map((st, i) => (
                 <li key={st.id} className={st.done ? 'done' : i === nextStep ? 'next' : undefined}>
@@ -896,7 +922,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           rover={roverItem ? { at: roverItem.at, visible: roverSeen, linked, called } : null}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
-          map={world3d}
+          map={world3d} questTarget={quest.target}
         />
         </Suspense>
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
@@ -1107,7 +1133,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                 <em>
                   {e.kind === 'supply' && (usable(e) ? givesLabel(e.gives) : e.repairs ? 'tools for repairs' : '')}
                   {e.kind === 'scrap' && Object.entries(e.yields ?? {}).map(([m, v]) => `${matName(m).toLowerCase()} ${v} kg`).join(' · ')}
-                  {e.kind === 'part' && 'NASA part for ship repairs'}
+                  {e.kind === 'part' && (e.id === CACHE_SITE ? 'Perseverance samples · going home with you' : 'NASA part for ship repairs')}
                   {e.kind === 'page' && (e.blueprint ? 'build it in REPAIRS' : 'read to learn how')}
                   {e.massKg > 0 && ` · ${e.massKg.toFixed(1)} kg`}
                 </em>

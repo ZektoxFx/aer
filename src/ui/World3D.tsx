@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { DataPack } from '../data/types';
-import { buildMapWorld, groundStep, type MapWorldState, type Pt } from '../map';
+import { buildMapWorld, buildQuestBeacon, groundStep, type MapWorldState, type Pt } from '../map';
 import { buildAstronaut, cssColor } from './astronaut3d';
 import { coverRocks, stormStrength } from './cover';
 import { buildBase, buildCelestial, buildCoverRock, buildRover, buildSparks, type BaseLook } from './props3d';
@@ -48,6 +48,8 @@ export interface World3DProps {
   rover?: { at: Pt; visible: boolean; linked: boolean; called: boolean } | null;
   /** A repair or build is under way: the astronaut kneels at the job and sparks fly. */
   working?: boolean;
+  /** Map: where the quest guide wants the player to go (a light pillar and an on-screen marker). */
+  questTarget?: { at: Pt; label: string } | null;
 }
 
 /** Mouse-look sensitivity, radians per pixel. */
@@ -167,6 +169,8 @@ export function World3D(props: World3DProps) {
     // LOCAL DRAFT (Map/Aiman): the map in 3D (items, danger zones, route, safe-return wall) plus denser ground.
     const mapWorld = buildMapWorld({ W2, H2, surfaceY: terrain.surfaceY, base });
     scene.add(mapWorld.group);
+    const questBeacon = buildQuestBeacon({ W2, H2, surfaceY: terrain.surfaceY, host: el });
+    scene.add(questBeacon.group);
 
     const astro = buildAstronaut();
     const body = new THREE.Group();
@@ -434,6 +438,8 @@ export function World3D(props: World3DProps) {
       hands.set(gx + Math.sin(shownHeading) * 0.75, gy + 0.85, gz - Math.cos(shownHeading) * 0.75);
       sparks.update(dt, !!P.working && workBlend > 0.6, hands, t);
 
+      camera.updateMatrixWorld();
+      questBeacon.update(P.questTarget ?? null, me, camera, t, el.clientWidth, el.clientHeight);
       renderer.render(scene, camera);
       raf = requestAnimationFrame(frame);
     });
@@ -466,6 +472,7 @@ export function World3D(props: World3DProps) {
       dustGeo.dispose();
       devils.dispose();
       mapWorld.dispose();
+      questBeacon.dispose();
       celestial.dispose();
       el.removeChild(renderer.domElement);
     };
