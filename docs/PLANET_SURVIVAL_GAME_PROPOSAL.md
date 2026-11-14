@@ -10,7 +10,8 @@
 > ⚠️ **Hackathon rules to respect**
 > - The Participant FAQ says teams may not begin working on challenges before the hackathon. Write no project code before November 14, and ask the Local Lead whether this concept document counts as early work.
 > - Teams may work on only one challenge.
-> - Challenge resources and the 2026 Project Submission and Judging guides are published November 13. Re-check this document against them.
+> - Checked November 14 against the 2026 guides: the demo is a video of 30 seconds or less, or up to 7 slides, in English. Exceeding either limit makes the project ineligible for Global judging. Judging criteria: Impact, Creativity, Validity, Relevance (NASA data must be core) and Presentation.
+> - SI rules: SI must not be used to come up with the idea itself. Code and data made with SI must be acknowledged in text and metadata. SI-generated images need a visible watermark. No NASA logos or branding in generated content.
 > - The submission must describe how AI ("Super Intelligence") tools were used, including for this document and its review.
 
 ---
@@ -18,7 +19,7 @@
 ## 🧭 1. Executive Summary & Vision
 
 ### 1.1 The Core Idea
-*AER* is a Marswalk planning tool with a survival simulation inside it. The player is an astronaut whose rocket went wrong during descent and crash-landed in Jezero Crater instead of landing safely. Essential supplies fell out along the way, and rocket pieces lie scattered across the terrain. The immediate mission is to stay alive. **The ultimate goal is to find the Perseverance rover and gather its important data.**
+*AER* is a Marswalk planning tool with a survival simulation inside it. The player is an astronaut whose rocket went wrong during descent and crash-landed in Jezero Crater instead of landing safely. Essential supplies fell out along the way, and rocket pieces lie scattered across the terrain. The immediate mission is to stay alive. **The lander's radio died in the crash. The ultimate goal is to reach the Perseverance rover and use its radio to call Earth for help.**
 
 To get there, the player plans surface excursions on a layered map built from real NASA data, recovers scattered supplies and field manual pages, salvages rocket pieces as scrap, and builds what they need to survive. Astronauts can learn and adapt, but complex electronics still need a manual. Each route has a cost in oxygen, CO₂ scrubber capacity, cooling water, and battery, calculated from thermodynamic, stoichiometric, and physiological models. Things then go wrong during the walk, and the player has to diagnose and recover. When a dust storm is detected, a five-minute countdown starts and the player must reach shelter.
 
@@ -45,7 +46,7 @@ The official statement asks for a map, tool, or interface a Mars astronaut could
 | :--- | :--- |
 | Hyperlocal view, not global | One Jezero traverse area at walking scale |
 | At least three kinds of data | Topographic, thermal, atmospheric, optical, and spectral layers where available (§5) |
-| A science objective | The whole journey is a science goal: recover the rover's data, with science stops along the route (§6.2) |
+| A science objective | The whole journey is a science goal: reach the rover's radio, with science stops along the route (§6.2) |
 | Astronaut safety | Live consumable margins and a calculated point of no return |
 | Updates on current conditions | Dust, temperature, and storm warnings that change route costs |
 | Suit mobility and carried equipment | Slope, pace, and load set metabolic rate along the route |
@@ -173,7 +174,7 @@ $$P_{\text{solar}} = S \cdot A \cdot \eta \cdot f(\tau, \text{sun angle}) \cdot 
 | **Real Mars audio** | NASA publishes Perseverance microphone recordings, and Mars is mostly deeply quiet. | Real wind audio in the suit. Cheap to add, and it makes the storm feel authentic. |
 | **Storm sparks** | Perseverance detected tiny electrical discharges in dust devils and storms, reported in 2025. They carried only 0.1–150 nanojoules. | Crackling audio as a warning cue only, because the energy is too small to cause damage. |
 | **Green aurora** | Perseverance saw the first visible aurora from Mars's surface in March 2024, caused by solar energetic particles. | A beautiful green sky that also warns of raised radiation, so the player takes cover. Could use DONKI data. |
-| **Message delay** | Earth–Mars signals take about 4–24 minutes one way `[verify]`. | Any contact with Earth comes with a long wait, so no help is instant. |
+| **Message delay** | Earth–Mars signals take about 4–24 minutes one way `[verify]`. | Core to the ending: the distress call's reply arrives only after the round trip, so the player must survive the wait. |
 | **Blue sunset** | Martian dust makes sunsets blue `[verify]`. | A visual cue that night is coming. |
 
 ---
@@ -246,13 +247,13 @@ The player's rocket is a fictional crewed lander. It failed during descent, drop
 | **Solar patch** | Solar cells, wiring | Manual page | Extra charging at a site | Near useless in a storm, and needs dust cleared |
 | **Oxygen tap** | Tank parts, wiring | Manual page | Recovers leftover oxidizer from a damaged tank as breathing O₂ | Takes time, and the amount left is limited |
 | **Direction finder** | Electronics, wiring | Manual page | Gives a bearing to the rover's beacon | Each ping costs battery |
-| **Rover data link** | Electronics, wiring | Manual page, required | Connects to the rover and downloads its data | Needed to win, and cannot be improvised |
+| **Rover comms link** | Electronics, wiring | Manual page, required | Connects to the rover's radio to send a distress call to Earth | Needed to win, and cannot be improvised |
 
 **Field manual pages.** Pages from the rocket's field manual are scattered with the supplies. Each page unlocks one electronics build and appears in a field manual screen. Pages are short and in plain language, and each explains one real principle, such as how a solar cell or CO₂ scrubber works, with its source.
 
-**Learn and adapt.** The astronaut can improvise any manual build except the rover data link without its page, at double the materials and time, with a chance of failure. A successful build counts as learned, so repeat builds go faster.
+**Learn and adapt.** The astronaut can improvise any manual build except the rover comms link without its page, at double the materials and time, with a chance of failure. A successful build counts as learned, so repeat builds go faster.
 
-The oxygen tap assumes the fictional lander used liquid oxygen. The rover beacon and data link are also game fiction. The game labels all three as fictional so they are not mistaken for NASA data.
+The oxygen tap assumes the fictional lander used liquid oxygen. The rover beacon and comms link are also game fiction. The game labels all three as fictional so they are not mistaken for NASA data.
 
 ---
 
@@ -294,7 +295,7 @@ Two stretch sources are worth adding if time allows: space weather data (such as
 - **Time frame:** a fictional future crewed mission, using real archived Mars conditions.
 - **Science objective:** science stops along the route, starting with one rock or outcrop target from Perseverance's traverse, selected once the map area is fixed `[verify]`.
 
-**The rover: why it matters.** The astronaut's mission is to recover important data held by Perseverance, so the crash changes how they get there, not why they came. The rover runs on a nuclear MMRTG, not solar panels, so dust storms do not stop it. NASA gives about 110 W at the start of the mission, declining a few percent a year, with a design life of at least 14 years. That steady power also makes it a place to recharge at the end of the journey. What the data contains is still to be decided (§9).
+**The rover: why it matters.** The lander's relay radio was destroyed in the crash, and suit radios only reach the lander. Perseverance can still talk to Earth, directly through its high-gain antenna and through orbiters such as MRO `[verify]`, so it is the astronaut's only way to call for help. The rover runs on a nuclear MMRTG, not solar panels, so dust storms do not stop it. NASA gives about 110 W at the start of the mission, declining a few percent a year, with a design life of at least 14 years. That steady power also makes it a place to recharge while waiting for Earth's reply.
 
 **The rover: why it is lost.** The cabin's maps are old archives, and the rover kept driving after they were made. In the fiction, it has since gone quiet. A seed picks one of three to five hand-placed positions along its real traverse, so each run differs.
 
@@ -303,7 +304,7 @@ Two stretch sources are worth adding if time allows: space weather data (such as
 2. **Wheel tracks:** found on the ground, they narrow the search. A storm erases any tracks not yet followed.
 3. **Clue sites:** real hardware sites along the way give a clue and a history card.
 4. **Direction finder:** built from scrap, it gives a bearing to the rover's beacon.
-5. **Rover data link:** built from scrap using its manual page, it lets the player download the data on arrival.
+5. **Rover comms link:** built from scrap using its manual page, it lets the player send the distress call on arrival.
 
 | Scenario | Failure | Real data used | What it teaches |
 | :--- | :--- | :--- | :--- |
@@ -313,7 +314,7 @@ Two stretch sources are worth adding if time allows: space weather data (such as
 
 The rover always sits at the end of the last scenario that gets built, so the game still has an ending if a scenario is cut.
 
-- **Win:** reach the rover alive, connect the data link, and download the data.
+- **Win:** reach the rover alive, connect the comms link, send the distress call, and survive until Earth's reply arrives after the round-trip signal delay (§3.6).
 - **Lose:** physiological failure, or reserves that cannot reach any shelter or the rover.
 - **Score:** science value, remaining margin, and diagnosis accuracy.
 
@@ -413,10 +414,10 @@ Hour 0 is the start of your Local Event. If your event ends before hour 48, move
 1. Stretch hazards
 2. Sol 2
 3. Improvised builds
-4. Recipes, down to the storm shelter, direction finder, and rover data link
+4. Recipes, down to the storm shelter, direction finder, and rover comms link
 5. The storm countdown
 
-The minimum viable entry is a working map with route costing, supply and scrap pickup, the data link manual page, Sol 1, and a rover to find.
+The minimum viable entry is a working map with route costing, supply and scrap pickup, the comms link manual page, Sol 1, and a rover to find.
 
 ### Recommended Tech Stack
 - **Frontend:** React with TypeScript on Vite, built as a static site.
@@ -428,7 +429,7 @@ The minimum viable entry is a working map with route costing, supply and scrap p
 ### Demo Plan (first 15 seconds)
 Open on a real HiRISE tile with a route drawn on it. Change the sol, and the MEDA temperature, pressure, and dust curves update while the route turns red. Then the storm countdown starts, and the demo ends on the race to shelter and the rover. Every chart carries its mission, instrument, and sol.
 
-The 2025 rules allowed a video of up to 30 seconds or up to seven slides, with English subtitles on video, and the demo had to show how space agency data was used. Confirm the 2026 rules on November 13.
+The 2026 rules (confirmed November 14) allow a video of 30 seconds or less or up to seven slides, with English subtitles on any non-English video, and the demo must show how NASA and space agency data made the project possible.
 
 ---
 
@@ -438,7 +439,7 @@ The 2025 rules allowed a video of up to 30 seconds or up to seven slides, with E
 2. **Scavenge pacing:** 2D plan-and-commit traverse on real imagery, which doubles as the challenge deliverable (§6.5).
 3. **Judge appeal:** real imagery and sol-labeled curves that visibly change the route (§7).
 4. **Planet scope:** Mars only.
-5. **Ultimate goal:** survive the crash, find Perseverance, and download its important data (§6.2).
+5. **Ultimate goal:** survive the crash, reach Perseverance, and use its radio to call Earth (§6.2). Decided November 14, replacing "download its data".
 6. **Storms:** the danger is dust, darkness, and lost power, not wind force (§3.6, §6.3).
 7. **Crafting:** every rocket piece becomes scrap materials, carried mass has a metabolic cost, and electronics builds need manual pages (§4.1).
 8. **Challenge fit:** the planner stays at the center. Scrap, shelter, and the search are all route decisions, so the entry still reads as a tool an astronaut could use.
@@ -466,11 +467,12 @@ Check these before relying on them in the build:
 - [ ] Positions, distances, and current status of Jezero hardware and debris
 - [ ] Science target selection
 - [ ] Perseverance's real traverse, for rover candidate positions
-- [ ] Decide what the rover's important data is, and why it matters to the mission
+- [x] Rover goal decided: the rover is the radio home (November 14)
+- [ ] Perseverance's links to Earth: direct high-gain antenna and UHF relay through orbiters
 - [ ] Which sols of Jezero dust data to use for the storm
 - [ ] How quickly real regional storms build
 - [ ] Thermal inertia as an indicator of loose sand
 - [ ] Dust devils clearing solar panels
 - [ ] Earth–Mars signal delay, and blue sunsets (stretch features)
-- [ ] 2026 Project Submission and Judging guides, plus the challenge Resources tab (November 13)
+- [x] 2026 Project Submission and Judging guides, plus the challenge Resources tab (checked November 14)
 - [ ] Local Lead's view on pre-hackathon concept work
