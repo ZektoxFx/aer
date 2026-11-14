@@ -15,12 +15,10 @@ const REDRAW_RAD = 0.0012; // re-shade the sphere only after it has turned this 
 
 interface Particle { a: number; v: number; k: number; y: number; s: number; hot: number }
 
-function cssVar(name: string, fallback: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
-function rgb(hex: string, fallback: number): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  const n = m ? parseInt(m[1], 16) : fallback;
+/** A :root palette colour as [r, g, b] (colours live only in src/index.css). */
+function rgb(name: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  const n = m ? parseInt(m[1], 16) : 0;
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
@@ -51,8 +49,8 @@ export function EarthGlobe({ still }: { still: boolean }) {
     const canvas = ref.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    const glow = rgb(cssVar('--earth-glow', '#7fb2ff'), 0x7fb2ff);
-    const hot = rgb(cssVar('--metal', '#dcd8d1'), 0xdcd8d1);
+    const glow = rgb('--earth-glow');
+    const hot = rgb('--metal');
     let photo: ImageData | null = null;
     let w = 0, h = 0, R = 0, raf = 0, alive = true, visible = true, shadedYaw = NaN;
     const t0 = performance.now();

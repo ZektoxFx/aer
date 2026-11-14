@@ -25,12 +25,13 @@ const PLANETS: Planet[] = [
   { name: 'Neptune', orbit: 1.12, size: 0.016, period: 1900, phase: 0.2, kind: 'ice', colors: ['--earth-glow', '--sat-panel'] },
 ];
 
+/** A :root palette colour as [r, g, b] (colours live only in src/index.css). */
 function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888888';
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 function rgbOf(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  const n = m ? parseInt(m[1], 16) : 0x888888;
+  const n = m ? parseInt(m[1], 16) : 0;
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 const rgba = (c: [number, number, number], a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;

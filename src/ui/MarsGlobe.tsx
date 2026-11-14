@@ -12,12 +12,10 @@ const TEX_W = 1024;       // texture is downsampled to this width (plenty for a 
 const SPIN_S = 70;        // seconds per turn
 const MAX_PX = 720;       // sphere drawn at most this many pixels across, then scaled smoothly
 
-function cssVar(name: string, fallback: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
-function rgb(hex: string, fallback: number): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  const n = m ? parseInt(m[1], 16) : fallback;
+/** A :root palette colour as [r, g, b] (colours live only in src/index.css). */
+function rgb(name: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  const n = m ? parseInt(m[1], 16) : 0;
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
@@ -53,10 +51,10 @@ export function MarsGlobe({ active, still }: { active: boolean; still: boolean }
     const canvas = ref.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    const sand = rgb(cssVar('--mars-sand', '#b8622f'), 0xb8622f);
-    const rust = rgb(cssVar('--mars-rust', '#7c3417'), 0x7c3417);
-    const sky = rgb(cssVar('--mars-sky', '#c9976a'), 0xc9976a);
-    const dust = rgb(cssVar('--mars-dust', '#ecd2ad'), 0xecd2ad);
+    const sand = rgb('--mars-sand');
+    const rust = rgb('--mars-rust');
+    const sky = rgb('--mars-sky');
+    const dust = rgb('--mars-dust');
     let tex: Uint8ClampedArray | null = null, tw = 0, th = 0;
     let w = 0, R = 0, raf = 0, alive = true;
     const t0 = performance.now();
