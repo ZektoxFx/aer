@@ -465,16 +465,16 @@ Check these before relying on them in the build:
 - [ ] Suited metabolic rate against slope, speed, and load
 - [x] O₂ and CO₂ baselines: 0.84 and 1.0 kg/person-day match NASA's ISS-era averages (BVAD Rev 2 table itself not checked)
 - [ ] CO₂ per O₂ at hard work: NASA uses 1.87 g/min CO₂ at 300 W; the sim gives 1.52 with the daily-average ratio
-- [ ] HiRISE elevation model coverage for the chosen area
-- [ ] Orbital spectral coverage for the science target
-- [ ] Positions, distances, and current status of Jezero hardware and debris
-- [ ] Science target selection
-- [ ] Perseverance's real traverse, for rover candidate positions
+- [x] HiRISE elevation model coverage: the USGS Mars 2020 TRN 1 m DTM covers the whole 6.4 × 4 km map with no gaps, and matches the rover's recorded landing-site height to 0.1 m (`docs/DATA_SOURCES.md`)
+- [ ] Orbital spectral coverage for the science target (CRISM not used yet; stretch)
+- [x] Jezero hardware positions: descent stage ~700 m NW, parachute and backshell ~1.1 km WNW, heat shield ~1.5 km ENE of the landing site, ±40 m, registered from the HiRISE ESP_068294_1985 release. All are static debris. Ingenuity's final site (Valinor Hills) is outside the map (`pois.json`)
+- [x] Science target: Wildcat Ridge, where SHERLOC found organic molecules (NASA/JPL, Sept 2022), with Three Forks and Rochette as alternatives (`content.json`, PR #11)
+- [x] Perseverance's real traverse: NASA/JPL Mars 2020 waypoints; 3 rover hiding spots at its real sol 420, 464 and 686 positions, 2.4–2.8 km from landing (`pois.json`)
 - [x] Rover goal decided: the rover is the radio home (November 14)
-- [ ] Perseverance's links to Earth: direct high-gain antenna and UHF relay through orbiters
-- [ ] Which sols of Jezero dust data to use for the storm
-- [ ] How quickly real regional storms build
-- [ ] Thermal inertia as an indicator of loose sand
+- [x] Perseverance's links to Earth: UHF (~400 MHz, up to 2 Mbit/s) to MRO and MAVEN, which relay to the Deep Space Network; X-band high-gain antenna direct to Earth, mostly for commands; low-gain backup (NASA/JPL Mars 2020 landing press kit, Telecommunications)
+- [x] Storm dust sols: the January 2022 Jezero regional storm, sols 312–319, Mastcam-Z τ 0.33 → 1.38 peak on sol 316 → 0.44 (`dust.json`)
+- [x] How quickly a real storm builds: Jezero's 2022 storm went from τ 0.33 to its peak in about 4 sols (sols 312–316) and cleared in about 3. The 5-minute countdown is a pacing choice, and the game's τ 8 peak is stronger than any Jezero storm on record (highest τ in the 1358-sol record: 1.99)
+- [ ] Thermal inertia as an indicator of loose sand (used with a threshold of 200 in `layers_20m.json`, still a design value)
 - [ ] Dust devils clearing solar panels
 - [x] Earth–Mars signal delay: about 3–22 minutes one way
 - [ ] Blue sunsets (stretch feature)
