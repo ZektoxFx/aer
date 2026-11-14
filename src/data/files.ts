@@ -100,3 +100,46 @@ export interface SunlightTable {
   distanceFactor: { formula: string; byLsDeg: Record<string, number> };
   sunElevation: { formula: string; jezeroLatDeg: number };
 }
+
+/** content.json: game content. Amounts marked `values` are design values to tune, not data. */
+export interface ContentFile {
+  about: string;
+  materials: { id: string; name: string; note: string }[];
+  supplies: { id: string; name: string; massKg: number; gives: Record<string, number>; note: string; values: string }[];
+  rocketPieces: {
+    id: string;
+    name: string;
+    massKg: number;
+    breakdownMin: number;
+    yields: Record<string, number>;           // material id -> kg
+    mayContain?: Record<string, [number, number]>;
+    note?: string;
+    values: string;
+  }[];
+  recipes: {
+    id: string;
+    name: string;
+    needs: Record<string, number>;            // material id -> kg
+    buildMin: number;
+    knowledge: 'training' | 'manual' | 'manual_required';
+    manualPage?: number;                      // pageNumber in jezero_pack.json fieldManualPages
+    does: string;
+    catch: string;
+    values: string;
+  }[];
+  improvise: { materialsMultiplier: number; timeMultiplier: number; failChance: number; rule: string; values: string };
+  historyCards: { poiId: string; title: string; text: string; sources: string[]; photos: string[] }[];
+  scienceTarget: { poiId: string; name: string; why: string; alternatives: string[] };
+}
+
+/** credits.json: text for the credits screen and chart labels. Replace {sol} in chartLabels. */
+export interface CreditsFile {
+  heading: string;
+  intro: string;
+  dataSources: { what: string; mission: string; instrument: string; product: string; provider: string; citation: string; credit: string }[];
+  imageCredits: string[];
+  fiction: string;
+  aiDisclosure: string[];
+  noAffiliation: string;
+  chartLabels: Record<'pressure' | 'airTemp' | 'groundTemp' | 'wind' | 'dust' | 'sunlight' | 'map', string>;
+}

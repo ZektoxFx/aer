@@ -37,7 +37,7 @@ AER helps a Mars astronaut answer one question before every surface walk: *can I
   - a THEMIS thermal-inertia layer that flags likely soft sand
   - real Perseverance hardware, sample sites and the rover's traverse
 - **Route costing.** **CHECK** (Map): the player places waypoints, and the route shows its oxygen, scrubber, water and battery cost. It turns red past its **point of no return**, the last moment the astronaut can turn back and still reach shelter with an oxygen reserve.
-- **Live suit telemetry.** Strip charts of oxygen, inhaled CO₂, battery and core temperature for any archived MEDA sol, with warnings as limits approach.
+- **Live suit telemetry.** Strip charts of oxygen, inhaled CO₂, battery and core temperature on five archived MEDA sols (chosen from the 118 sols in the data pack, including the January 2022 dust storm), with warnings as limits approach.
 - **Survival scenarios.** Each one teaches a real hazard:
   - **Scrubber saturation:** on Mars, the danger is your own breath. Mars air is 95% CO₂ but too thin to poison you; in a sealed suit, every exhalation adds CO₂, and only the scrubber removes it.
   - **Work hot, rest cold:** walking overheats the suit even at −55 °C, while resting at night brings on hypothermia.
@@ -76,7 +76,7 @@ Draft:
 
 - **The idea:** the concept came from team members, both the original crash-survival game and the Marswalk planner proposal that refined it. **TODO (team):** one story detail was suggested by Claude while reviewing the proposal: the rover as the radio to call home, instead of a source of data to download. The team chose it. Decide together how to describe this honestly.
 - **Code:** Claude (Anthropic) helped write and test the simulation, the data pipeline and parts of the interface. Commits it helped with carry a `Co-Authored-By: Claude` line, and the README says so.
-- **Data:** Claude helped write the data-processing scripts. Another AI agent (Antigravity) drafted the original pack, the story content and the rock chemistry. The rock chemistry is marked `[verify]` and has not been checked against PIXL papers.
+- **Data:** Claude helped write the data-processing scripts. Another AI agent (Antigravity) drafted the original pack and the story content, including rock chemistry and field manual pages. We replaced its unsourced numbers: the Máaz and Séítah rock values now come from published SuperCam measurements (Wiens et al. 2022), the manual pages cite real sources, and the delta and regolith entries carry no unchecked numbers. Every data value comes from the sources listed below, not from AI.
 - **Images:** the AER-1 lander image is AI-generated and carries a visible "AI GENERATED ASSET" watermark. No NASA logos or insignia are used.
 - **Fact-checking:** AI was used to look up spacesuit and Mars values. Each one is cited in the code and in this document.
 
@@ -84,10 +84,11 @@ Draft:
 
 - **HiRISE** (Mars Reconnaissance Orbiter): 25 cm orthomosaic and 1 m elevation model of Jezero, from the USGS Mars 2020 terrain-relative-navigation products ([DOI 10.5066/P9REJ9JN](https://doi.org/10.5066/P9REJ9JN)). Used for the base map, shaded relief, slope and route cost.
 - **THEMIS** (Mars Odyssey): thermal inertia (Edwards & Buz 2021, [Zenodo 4931348](https://zenodo.org/record/4931348)). Used for the soft-sand hazard layer.
-- **Perseverance MEDA** ([PDS Atmospheres Node](https://pds-atmospheres.nmsu.edu/data_and_services/atmospheres_data/PERSEVERANCE/meda.html)): 118 sols of pressure, temperature, wind and radiation. Used for the weather in every scenario.
+- **Perseverance MEDA** ([PDS Atmospheres Node](https://pds-atmospheres.nmsu.edu/data_and_services/atmospheres_data/PERSEVERANCE/meda.html)): 118 sols of pressure, air and ground temperature, wind, and long-wave (heat) radiation. Used for the weather in every scenario.
 - **Perseverance Mastcam-Z** dust optical depth for 1358 sols, including the January 2022 Jezero dust storm (M. Lemmon, [Mendeley 10.17632/gktjp9jptb.2](https://data.mendeley.com/datasets/gktjp9jptb/2)). Used for dust and solar power.
 - **Mars 2020 waypoints, traverse and sample list** (NASA/JPL [MMGIS](https://mars.nasa.gov/mmgis-maps/M20), [sample list](https://science.nasa.gov/mission/mars-2020-perseverance/mars-rock-samples/)), and **HiRISE ESP_068294_1985** for the landing hardware. Used for points of interest and the rover's hiding spots.
 - **Mars 2020 raw images** (NASA/JPL-Caltech, ASU): point-of-view photos at waypoints.
+- **Perseverance SuperCam** rock compositions for the Máaz and Séítah formations (Wiens et al. 2022, *Science Advances* 8, eabo3399, [open access](https://www.science.org/doi/10.1126/sciadv.abo3399)). Used for the rock and terrain descriptions.
 - **NASA TM-103623**, Appelbaum & Flood, *Solar Radiation on Mars: Update 1990* ([NTRS](https://ntrs.nasa.gov/citations/19910005804)). Used for surface sunlight under dust.
 - **NASA life-support and spacesuit references:**
   - Apollo PLSS documents ([ALSJ](https://history.nasa.gov/alsj/ALSJ-FlightPLSS.pdf)) and Apollo metabolic rates ([TN D-7883](https://www.nasa.gov/wp-content/uploads/static/history/alsj/tnD7883Metabolic.pdf)).
@@ -96,7 +97,7 @@ Draft:
 
 ## Space Agency Partner Data and Other References
 
-- **Space Agency Partner data:** none used yet. **TODO (optional):** the challenge encourages partner data. A quick, honest option would be to mention ESA's Mars Express and Trace Gas Orbiter as relays in the radio story, since Perseverance relays through them as well as through NASA orbiters. Only add it if it goes into the project itself.
+- **Space Agency Partner data:** none used yet. **TODO (optional):** the challenge encourages partner data. A quick, honest option would be to mention ESA's Mars Express and Trace Gas Orbiter as relays in the radio story. **CHECK:** cite an ESA or NASA source that they relay Perseverance's data before adding this. The NASA Mars 2020 pages we checked only name MRO and MAVEN, and the field manual page names those two. Only add it if it goes into the project itself.
 - Lorenz et al. 2021, *Lander and rover histories of dust accumulation on and removal from solar arrays on Mars*, Planetary and Space Science ([HAL](https://hal.sorbonne-universite.fr/hal-03369920)). Used for panel dust rates.
 - Sánchez-Lavega et al. 2023, Jezero MEDA pressure ([arXiv 2401.12931](https://arxiv.org/abs/2401.12931)).
 - Open-source software: React, Vite, Vitest, TypeScript, NumPy, SciPy, Pillow, tifffile, imagecodecs.
