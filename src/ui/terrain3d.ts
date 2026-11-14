@@ -159,43 +159,62 @@ export function buildFootprints(max = 900) {
   };
 }
 
-/** Two dust devils: tall swirling columns of dust drifting across the plain a few hundred metres away. */
+/**
+ * Up to two dust devils: swirling columns of dust drifting a few hundred metres ahead of the camera, so they show up
+ * when they are about. Sizes follow MEDA (Jackson 2022): about 20 m across on average.
+ */
 export function buildDustDevils() {
-  const PER = 420, H = 140, COUNT = 2;
+  const PER = 420, H = 140;
   const group = new THREE.Group();
-  const devils = Array.from({ length: COUNT }, (_, d) => {
+  // Soft round dust puffs instead of square points.
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 32);
+  const puff = new THREE.CanvasTexture(c);
+  const devils = [{ offset: -0.45, dist: 210, widthM: 22 }, { offset: 0.5, dist: 330, widthM: 14 }].map((cfg) => {
     const pts = new Float32Array(PER * 3);
     const seeds = Array.from({ length: PER }, (_, i) => ({ a: (i * 2.39996) % (Math.PI * 2), h: (i / PER) * H, s: 0.7 + ((i * 37) % 10) / 10 }));
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
-    const mat = new THREE.PointsMaterial({ color: cssColor('--mars-dust'), size: 2.6, transparent: true, opacity: 0, depthWrite: false });
+    const mat = new THREE.PointsMaterial({ color: cssColor('--mars-dust'), map: puff, size: 5, transparent: true, opacity: 0, depthWrite: false });
     const points = new THREE.Points(geo, mat);
     points.frustumCulled = false;
     group.add(points);
-    return { points, geo, mat, pts, seeds, angle: d * 1.9 + 0.6, dist: 170 + d * 120 };
+    return { ...cfg, points, geo, mat, pts, seeds, sway: Math.random() * 6, bearing: NaN };
   });
   return {
     group,
-    update(dt: number, center: THREE.Vector3, active: boolean, surfaceY: (x: number, z: number) => number) {
-      for (const dv of devils) {
-        dv.mat.opacity += ((active ? 0.75 : 0) - dv.mat.opacity) * Math.min(1, dt * 0.8);
-        if (dv.mat.opacity < 0.01) { dv.points.visible = false; continue; }
+    /** `count` devils (0–2) in view; `camYaw` is the camera heading (0 = north, clockwise). */
+    update(dt: number, center: THREE.Vector3, camYaw: number, count: number, surfaceY: (x: number, z: number) => number) {
+      devils.forEach((dv, idx) => {
+        const on = idx < count;
+        dv.mat.opacity += ((on ? 0.55 : 0) - dv.mat.opacity) * Math.min(1, dt * 0.8);
+        if (dv.mat.opacity < 0.01) { dv.points.visible = false; dv.bearing = NaN; return; }
         dv.points.visible = true;
-        dv.angle += dt * 0.03; // drifts slowly around the astronaut
-        const cx = center.x + Math.cos(dv.angle) * dv.dist, cz = center.z + Math.sin(dv.angle) * dv.dist;
-        const gy = surfaceY(cx, cz);
-        dv.points.position.set(cx, gy, cz);
+        // Hold a bearing a little to one side of the view; if the camera turns far away, reappear ahead.
+        const want = camYaw + dv.offset;
+        if (Number.isNaN(dv.bearing) || Math.abs(Math.atan2(Math.sin(want - dv.bearing), Math.cos(want - dv.bearing))) > 1.1) dv.bearing = want;
+        dv.sway += dt * 0.05;
+        const b = dv.bearing + Math.sin(dv.sway) * 0.25;
+        const cx = center.x + Math.sin(b) * dv.dist, cz = center.z - Math.cos(b) * dv.dist;
+        dv.points.position.set(cx, surfaceY(cx, cz), cz);
         for (let i = 0; i < PER; i++) {
           const s = dv.seeds[i];
-          s.a += dt * (2.2 + s.s) ; // spin
-          const r = 0.8 + Math.pow(s.h / H, 1.6) * 26 * s.s; // a narrow funnel that flares at the top
+          s.a += dt * (2.2 + s.s); // spin
+          const r = (dv.widthM / 2) * (0.35 + Math.pow(s.h / H, 1.3) * 1.4) * s.s; // narrow at the ground, flaring up
           dv.pts[i * 3] = Math.cos(s.a) * r;
           dv.pts[i * 3 + 1] = s.h;
           dv.pts[i * 3 + 2] = Math.sin(s.a) * r;
         }
         dv.geo.attributes.position.needsUpdate = true;
-      }
+      });
     },
-    dispose() { devils.forEach((d) => { d.geo.dispose(); d.mat.dispose(); }); },
+    dispose() { devils.forEach((d) => { d.geo.dispose(); d.mat.dispose(); }); puff.dispose(); },
   };
 }

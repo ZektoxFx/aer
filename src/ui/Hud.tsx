@@ -19,7 +19,7 @@ import { hudKeyAction } from './settings';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
 import { World3D } from './World3D';
-import { dustDevilsActive, stormForecastAt, upcomingEvents } from './environment';
+import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
 import './game3d.css';
 import './hud.css';
 
@@ -406,7 +406,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <World3D
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
-          onLookChange={setLookLocked} view={view} dustDevils={dustDevilsActive(s.clockMin) && !stormActive}
+          onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
           map={mapWorld}
         />
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
@@ -421,7 +421,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             </span>
           </div>
           <ul className="v-forecast" aria-label="Environment forecast">
-            {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky).map((e) => (
+            {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky, data.devils).map((e) => (
               <li key={e.id} className={e.hazard ? 'warning' : undefined}>
                 <span>{e.label}</span><b>{e.inMin === 0 ? 'NOW' : formatMinutes(e.inMin)}</b>
               </li>

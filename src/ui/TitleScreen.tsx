@@ -1,10 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BlackHole } from './BlackHole';
-import { CrashSequence } from './CrashSequence';
-import { CRASH_MS } from './edl';
-import { EarthGlobe } from './EarthGlobe';
-import { MarsGlobe } from './MarsGlobe';
-import { SolarSystem } from './SolarSystem';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -22,7 +16,7 @@ type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'blur';
 const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
   cruise: { to: 'fault', ms: 2600 },
   fault: { to: 'crash', ms: 2200 },
-  crash: { to: 'pov', ms: CRASH_MS }, // LOCAL DRAFT: the physics crash (CrashSequence) instead of 2 s
+  crash: { to: 'pov', ms: 2000 },
   pov: { to: 'blur', ms: 5600 },
 };
 const BLUR_MS = 1200;
@@ -34,12 +28,6 @@ const ORBITS: { orbit: Orbit; big?: boolean }[] = [
   { orbit: { rx: 82, ry: 26, tiltDeg: 14, periodS: 40, phase: 0.05 } },
   { orbit: { rx: 64, ry: 12, tiltDeg: 30, periodS: 32, phase: 0.7 }, big: true },
 ];
-
-/** LOCAL DRAFT: title backdrop. 'solar' = Sun in the middle with Earth and Mars as the main pair; 'earth' = the big Earth globe. */
-const TITLE_BACKDROP: 'solar' | 'earth' = 'solar';
-
-/** LOCAL DRAFT: the globe radius (30vmin) over the old photo disc radius (49.5vmin). */
-const ORBIT_SCALE = 30 / 49.5;
 
 type Panel = 'menu' | 'settings' | 'quit';
 
@@ -63,8 +51,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
     if (step) {
       const t = setTimeout(() => {
         setPhase(step.to);
-        // LOCAL DRAFT: the game mounts as the eyes open, so they open onto the live 3D world (not a picture).
-        if (step.to === 'pov' || step.to === 'blur') onReveal();
+        if (step.to === 'blur') onReveal();
       }, step.ms);
       return () => clearTimeout(t);
     }
@@ -90,43 +77,25 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const toggle = (k: keyof Settings) => onSettings({ ...settings, [k]: !settings[k] });
 
   return (
-    <div className={`intro phase-${phase}${still ? ' still' : ''}${TITLE_BACKDROP === 'solar' ? ' solar-mode' : ''}`} onClick={skip} role="dialog" aria-label="AER">
+    <div className={`intro phase-${phase}${still ? ' still' : ''}`} onClick={skip} role="dialog" aria-label="AER">
       {/* Space: Earth with satellites, the rocket, Mars */}
       <div className="space">
         <div className="stars" aria-hidden="true" />
-        {/* LOCAL DRAFT: a black hole in the distance (AURIS style); its pull throws the ship off course. */}
-        <BlackHole active={phase === 'cruise' || phase === 'fault'} still={still} />
-        {TITLE_BACKDROP === 'solar' && <SolarSystem frozen={phase !== 'title'} still={still} />}
         <div className="earth-wrap" aria-hidden="true">
-          {/* LOCAL DRAFT: 3D globe (EarthGlobe) instead of the flat photo + CSS night/atmosphere layers. */}
-          {TITLE_BACKDROP === 'earth' && <EarthGlobe still={still} />}
-          {/* LOCAL DRAFT: the launch flare where the rocket leaves Earth. */}
-          <span className="launch-flash" />
-          {/* LOCAL DRAFT: Earth is smaller and centred now, so the orbits shrink with it (old disc radius 49.5vmin). */}
-          {ORBITS.map((o, i) => <Satellite key={i} orbit={{ ...o.orbit, rx: o.orbit.rx * ORBIT_SCALE, ry: o.orbit.ry * ORBIT_SCALE }} big={o.big} still={still || phase !== 'title'} />)}
+          <img className="earth" src="/data/earth_apollo17.jpg" alt="" />
+          <div className="earth-night" />
+          <div className="earth-atmo" />
+          {ORBITS.map((o, i) => <Satellite key={i} orbit={o.orbit} big={o.big} still={still || phase !== 'title'} />)}
         </div>
-        {/* LOCAL DRAFT: Mars as a lit globe inside the same element, so the landing animation is unchanged. */}
-        <div className="mars" aria-hidden="true">
-          <MarsGlobe active={phase === 'cruise' || phase === 'fault' || phase === 'crash'} still={still} />
-        </div>
+        <div className="mars" aria-hidden="true" />
         <Rocket className="rocket" />
-        {/* LOCAL DRAFT: light round the rocket (launch glow, then the engine failing). Same box and motion as the rocket. */}
-        <div className="rocket-fx" aria-hidden="true">
-          <span className="rocket-glow" />
-          <span className="engine-pop" />
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <span key={i} className={`spark s${i}`} />)}
-        </div>
         <div className="alarm-wash" aria-hidden="true" />
         <div className="impact" aria-hidden="true" />
       </div>
 
-      {/* LOCAL DRAFT: entry, parachute, retro failure and impact, played from the physics in edl.ts. */}
-      <CrashSequence active={phase === 'crash'} />
-
       {/* POV: the astronaut wakes at the wreck */}
       <div className="pov" aria-hidden={phase !== 'pov'}>
-        {/* LOCAL DRAFT: no picture: the live 3D world is underneath, coming into focus as the eyes open. */}
-        <div className="pov-blur" />
+        <img className="pov-scene" src="/data/crashed_lander_aer1.jpg" alt="The crashed AER-1 lander on the Martian surface" />
         <div className="pov-visor" />
         <div className="eyelid top" />
         <div className="eyelid bottom" />
@@ -136,9 +105,10 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
           <p className="alert">LANDER AER-1 ········ DESTROYED</p>
           <p className="alert">RADIO ················ NO SIGNAL</p>
         </div>
+        <p className="ai-mark">AER SIMULATION // AI GENERATED ASSET</p>
       </div>
 
-      {phase === 'fault' && <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT<br /><span className="fault-sub">GRAVITATIONAL ANOMALY · TRAJECTORY LOST</span></p>}
+      {phase === 'fault' && <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT</p>}
 
       <div className="title-content">
         <p className="title-kicker">TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS 2026</p>

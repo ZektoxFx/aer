@@ -24,8 +24,8 @@ export interface World3DProps {
   placeKey: number;
   tau: number;
   sunElevationDeg: number;
-  /** Midday dust devils in view (from the environment timeline). */
-  dustDevils?: boolean;
+  /** How many dust devils are about (0–2, from the environment timeline and MEDA data). */
+  dustDevils?: number;
   /** Called every frame with the astronaut's movement. */
   onMove: (m: MoveResult) => void;
   /** Called when mouse look turns on (cursor captured) or off. */
@@ -371,7 +371,7 @@ export function World3D(props: World3DProps) {
         dustGeo.attributes.position.needsUpdate = true;
         dustCloud.position.copy(body.position);
       }
-      devils.update(dt, body.position, !!P.dustDevils && P.tau < 3, terrain.surfaceY);
+      devils.update(dt, body.position, yaw, P.tau < 3 ? (P.dustDevils ?? 0) : 0, terrain.surfaceY);
       mapWorld.update(P.map ?? null, me, now, dt);
 
       renderer.render(scene, camera);
