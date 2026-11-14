@@ -1,4 +1,5 @@
 import { localHour, sunElevationDeg } from '../sim/game';
+import { sunAzimuthDeg } from '../data/sunlight';
 import { MIN_PER_SOL } from '../sim/storm';
 import type { DustDevilFile } from '../data/files';
 import type { GameState } from '../sim/types';
@@ -6,6 +7,16 @@ import type { GameState } from '../sim/types';
 // The environment timeline for free play, from the proposal:
 // §6.3 a dust storm with a five-minute warning; §3.6 dust devils (MEDA saw nearly 5 vortices per sol at Jezero,
 // peaking around 12:00–13:00 local time) and cold nights. The HUD shows these as a forecast with countdowns.
+
+/**
+ * Where the sun is round the horizon (degrees clockwise from north), for the 3D sky and its shadows. Uses the same
+ * latitude and season as the sun's height, so it rises in the east and sets in the west.
+ */
+export function sunAzimuthAt(clockMin: number, sky?: GameState['sky']): number {
+  const h = localHour(clockMin);
+  if (sky) return sunAzimuthDeg(sky.latDeg, sky.lsDeg, h);
+  return (((90 + ((h - 6) / 12) * 180) % 360) + 360) % 360; // no sky data: east at 06:00, south at noon, west at 18:00
+}
 
 /** Local solar hour when the free-play storm warning arrives on the first day (design value for pacing). */
 export const STORM_FORECAST_HOUR = 15;

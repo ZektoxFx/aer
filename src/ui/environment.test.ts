@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MIN_PER_SOL } from '../sim/storm';
 import type { DustDevilFile } from '../data/files';
-import { dustDevilsActive, dustDevilsInView, minutesToDustDevils, nextSunEvent, stormForecastAt, upcomingEvents } from './environment';
+import { dustDevilsActive, dustDevilsInView, minutesToDustDevils, nextSunEvent, stormForecastAt, sunAzimuthAt, upcomingEvents } from './environment';
 
 const at = (day: number, hour: number) => day * MIN_PER_SOL + (hour / 24) * MIN_PER_SOL;
 
@@ -41,5 +41,20 @@ describe('environment timeline', () => {
     expect(ev.map((e) => e.id)).toEqual(['devils', 'storm', 'sun']);
     expect(ev.find((e) => e.id === 'storm')!.hazard).toBe(true);
     expect(upcomingEvents(at(0, 16), at(0, 15)).some((e) => e.id === 'storm')).toBe(false);
+  });
+});
+
+describe('sun azimuth for the 3D sky', () => {
+  it('without sky data, runs east at 06:00 through south at noon to west at 18:00', () => {
+    expect(sunAzimuthAt(at(0, 6))).toBeCloseTo(90);
+    expect(sunAzimuthAt(at(0, 12))).toBeCloseTo(180);
+    expect(sunAzimuthAt(at(2, 18))).toBeCloseTo(270);
+  });
+
+  it("with Data's sky, uses the real latitude and season", () => {
+    const sky = { table: {} as never, latDeg: 18.4, lsDeg: 153 };
+    expect(sunAzimuthAt(at(0, 12), sky)).toBeCloseTo(180);
+    expect(sunAzimuthAt(at(0, 8), sky)).toBeLessThan(180);
+    expect(sunAzimuthAt(at(0, 16), sky)).toBeGreaterThan(180);
   });
 });

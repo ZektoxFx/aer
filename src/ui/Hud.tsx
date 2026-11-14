@@ -24,7 +24,7 @@ import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
 // three.js is big: load the 3D view on demand so the title screen opens fast (#40).
 const World3D = lazy(() => import('./World3D').then((m) => ({ default: m.World3D })));
-import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
+import { dustDevilsInView, stormForecastAt, sunAzimuthAt, upcomingEvents } from './environment';
 import { missionSteps, nextRelayPass } from './mission';
 import {
   applySupply, BACKPACK_MAX_KG, carriedKg, drop, droppedItems, EMPTY_PACK, entryForPickup, fits, givesLabel, HEAVY_KG, manualPage, pickUp,
@@ -701,7 +701,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <World3D
           pack={pack} base={base} timeScale={timeScale} follow={walk && walk.stoppedAt === null ? followWalk : undefined} placeKey={placeKey}
           startPos={astronaut} moveLocked={mission !== null || flow !== null}
-          tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
+          tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} sunAzimuthDeg={sunAzimuthAt(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
           map={world3d}
         />
