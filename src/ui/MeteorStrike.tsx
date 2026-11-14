@@ -11,10 +11,8 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-/** Seconds into the shot when the rock hits (the intro sound's bang is at 1.1 s into the meteor phase). */
-export const IMPACT_S = 1.1;
-/** Length of the shot. */
-export const METEOR_MS = 3200;
+import { IMPACT_S } from './meteor';
+export { IMPACT_S, METEOR_MS } from './meteor';
 
 function css(name: string): THREE.Color {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
