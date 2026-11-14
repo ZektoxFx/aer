@@ -5,6 +5,7 @@ import dustRaw from '../../public/data/dust.json?raw';
 import packRaw from '../../public/data/jezero_pack.json?raw';
 import layersRaw from '../../public/data/layers_20m.json?raw';
 import poisRaw from '../../public/data/pois.json?raw';
+import referenceRaw from '../../public/data/reference.json?raw';
 import sunRaw from '../../public/data/sunlight.json?raw';
 import weatherRaw from '../../public/data/weather.json?raw';
 import type { ContentFile, CreditsFile, DustFile, PoiFile, SunlightTable, TerrainLayers, WeatherFile } from './files';
@@ -13,7 +14,7 @@ import type { DataPack } from './types';
 
 const raw: Record<string, string> = {
   'content.json': contentRaw, 'credits.json': creditsRaw, 'dust.json': dustRaw, 'jezero_pack.json': packRaw, 'layers_20m.json': layersRaw,
-  'pois.json': poisRaw, 'sunlight.json': sunRaw, 'weather.json': weatherRaw,
+  'pois.json': poisRaw, 'reference.json': referenceRaw, 'sunlight.json': sunRaw, 'weather.json': weatherRaw,
 };
 const load = <T>(name: string): T => JSON.parse(raw[name]) as T;
 
@@ -144,5 +145,22 @@ describe('scenario weather', () => {
       expect(s.windMS, `sol ${s.sol}`).toBeGreaterThan(0);
       if (/No wind data this sol/.test(s.notes ?? '')) expect(s.windMS).toBeCloseTo(3.3, 1);
     }
+  });
+});
+
+describe('cited values', () => {
+  it('no data file still carries a [verify] tag or an open verify flag', () => {
+    for (const [name, text] of Object.entries(raw)) {
+      expect(text, name).not.toMatch(/\[verify/);
+      expect(text, name).not.toMatch(/"verify":\s*true/);
+    }
+  });
+
+  it('the sunlight table uses the MEDA-measured Jezero albedo', () => {
+    const ref = load<{ jezeroMeasured: { surfaceAlbedo: { value: number; noonRange: [number, number] } } }>('reference.json');
+    const a = ref.jezeroMeasured.surfaceAlbedo;
+    expect(sun.albedo).toBe(a.value);
+    expect(a.value).toBeGreaterThanOrEqual(a.noonRange[0]);
+    expect(a.value).toBeLessThanOrEqual(a.noonRange[1]);
   });
 });

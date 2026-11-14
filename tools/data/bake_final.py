@@ -114,7 +114,7 @@ def main(repo):
     _, rows_are_z, k125, f, _ = solar_flux.calibrate()
     taus = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0]
     elevs = [0, 2, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90]
-    albedo = 0.17
+    albedo = 0.12  # Perseverance MEDA traverse mean (Martinez et al. 2023); see reference.json
     G = solar_flux.g_ob(180)  # placeholder, replaced per row by mean distance below
     g_mean = 590.0
     glob_tab, beam_tab = [], []
@@ -147,7 +147,7 @@ def main(repo):
         "beamHorizontalWm2": beam_tab,
         "notes": ["tau below 0.1 uses the 0.1 row of f (the NASA table starts at 0.1)",
                   "sun elevations below 5 deg (zenith > 85) are extrapolated with cos(z)",
-                  "Jezero albedo 0.17 is a working value [verify]; the NASA report gives 0.1 and 0.4 tables"],
+                  "Albedo 0.12: Perseverance MEDA broadband albedo (0.3-3 um) along the traverse, 0.12 +/- 0.01 (Martinez et al. 2023, JGR Planets 128, e2022JE007537); noon values 0.10-0.16, orbital TES ~0.15. Sources in reference.json jezeroMeasured.surfaceAlbedo."],
         "distanceFactor": {
             "formula": "(1 + e*cos(Ls - 248 deg))^2 / (1 - e^2)^2, e = 0.093377",
             "byLsDeg": {str(ls): round(solar_flux.g_ob(ls) / 590.0, 4) for ls in range(0, 360, 15)},

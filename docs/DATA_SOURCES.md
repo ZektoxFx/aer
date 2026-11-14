@@ -23,7 +23,7 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `weather.json` | 118 sols: hourly pressure, air, ground and sky temperature, wind and long-wave flux | Perseverance MEDA, [PDS Atmospheres Node](https://pds-atmospheres.nmsu.edu/data_and_services/atmospheres_data/PERSEVERANCE/meda.html) (DER_PS, CAL_ATS, DER_WS, DER_TIRS) |
 | `dust.json` | Daily dust optical depth for 1358 sols, plus every measurement of the January 2022 Jezero storm | Mastcam-Z solar imaging, M. Lemmon ([Mendeley 10.17632/gktjp9jptb.2](https://data.mendeley.com/datasets/gktjp9jptb/2), preliminary) |
 | `sunlight.json` | Sunlight on flat ground (W/m²) by dust τ and sun elevation, including diffuse light | NASA TM-103623, Appelbaum & Flood 1990 ([NTRS](https://ntrs.nasa.gov/citations/19910005804)) |
-| `reference.json` | Measured Jezero ranges and cited constants for the simulation | Computed from the files above, plus the proposal (flagged `verify`) |
+| `reference.json` | Measured Jezero ranges and cited constants for the simulation | Computed from the files above, plus cited constants (NASA BVAD Rev 2, MEDA albedo and thermal inertia). Anything still `verify: true` is a working assumption |
 | `photos/` | 17 rover photos for points of interest and 5 HiRISE hardware images; `photos/photos.json` lists the credits | NASA Mars 2020 raw images (NASA/JPL-Caltech, ASU for Mastcam-Z); HiRISE (NASA/JPL-Caltech/University of Arizona) |
 | `content.json` | Supplies, rocket pieces and their scrap, the 7 builds (§4.1), the improvising rule, 12 history cards with sources, and the science target (Wildcat Ridge) | Amounts are design values to tune. History cards cite NASA/JPL pages. Built by `tools/data/bake_content.py` |
 | `credits.json` | Credits screen text: 8 data sources with citations, image credits, fiction and AI notes, and chart label templates such as `Perseverance MEDA · air temperature · sol {sol} (archived)` | Built by `tools/data/bake_content.py` |
@@ -42,9 +42,9 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
   - `airTempC` is the min, mean and max of the hourly means. Air temperature is the mean of the five ATS sensors.
   - `windMS` is the mean and 99th percentile of all readings. Ground and sky temperatures are TIRS brightness temperatures, with ground emissivity 0.98 assumed. The 118 sols are sols 300–330 (the storm) plus one sol every 20 from sol 15 to 1755.
 - **Dust:** the 630 nm channel, as the daily median. When a sol has no measurement, `tauFromSol` names the sol used instead.
-- **Sunlight:** the NASA polynomial f(z, τ, albedo) matches the report's own Table I with 0.4% average error (4% worst case). The albedo is set to 0.17 for Jezero `[verify]`.
+- **Sunlight:** the NASA polynomial f(z, τ, albedo) matches the report's own Table I with 0.4% average error (4% worst case). The ground albedo is 0.12, Perseverance MEDA's mean along the traverse (Martínez et al. 2023, *JGR Planets* 128, e2022JE007537; noon values 0.10–0.16, orbital TES ~0.15). It replaced a 0.17 working value; the change lowers sunlight by under 1% at normal dust levels.
 - **Terrain class:** design thresholds, to tune in playtesting:
-  - Loose sand likely where thermal inertia < 200 `[verify]`.
+  - Loose sand likely where thermal inertia < 200. Loose particulate material is below ~350, and Gale's active dunes measure 200–310 from orbit (Edwards et al. 2018, *JGR Planets*, doi:10.1029/2017JE005501). MEDA measured 180 on a Jezero sand dune and 605 on bedrock (Martínez et al. 2023). So 200 picks the loosest material. About a third of the map's 20 m cells fall below it; THEMIS pixels are 100 m, so each value mixes sand and rock.
   - Rocky where roughness is in the top 15%.
   - Steep above 25°, cliff above 35°.
 
@@ -53,11 +53,15 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 1. **Wind:** the MEDA wind sensor was damaged during the sol 313 storm, so there is no wind after sol 313. In `jezero_pack.json`, the scenario sols after that (316, 319, 1695) use 3.3 m/s, the median daily mean wind of the 27 measured sols (55–313), and each sol's `notes` says so. In `weather.json`, `windMS` stays `null` on those sols.
 2. **Real Jezero storms are weaker than the game's:** the January 2022 regional storm peaked at τ = 1.38 (sol 316). The storm sim's default `peakTau = 8` comes from Opportunity's 2018 global storm (τ 10.8). Use the real Jezero curve, or say on screen that the storm is a stronger, fictional one.
 3. **Pressure:** Jezero's daily mean pressure in the sample was 587–797 Pa. The proposal's guess of 0.7–0.9 kPa was too high, so use MEDA values.
-4. **Rock chemistry:** the Máaz and Séítah oxide values in `rockFormations` are SuperCam unit means from Wiens et al. 2022 (*Science Advances* 8, eabo3399, Table 1). The delta and regolith entries carry no oxide values, because none were checked against a publication. The regolith ISRU numbers (2 wt% water, perchlorate) are working assumptions marked `[verify]`.
+4. **Rock chemistry:** the Máaz and Séítah oxide values in `rockFormations` are SuperCam unit means from Wiens et al. 2022 (*Science Advances* 8, eabo3399, Table 1). The delta and regolith entries carry no oxide values, because none were checked against a publication. The regolith ISRU numbers come from other landing sites, not Jezero:
+   - **Water, 2 wt%:** Curiosity's SAM measured 1.5–3 wt% in heated Gale soil, released in a broad peak near 300 °C (Leshin et al. 2013, *Science* 341, 1238937). The 350 °C bake temperature is a game value just past that peak.
+   - **Perchlorate, 0.5 wt%:** Phoenix measured 0.4–0.6 wt% (Hecht et al. 2009, *Science* 325, 64–67); Curiosity's Rocknest soil was comparable.
+   - **Chlorine hazard:** heating released chlorinated compounds and HCl along with oxygen (Leshin et al. 2013; Glavin et al. 2013, *JGR Planets* 118, 1955–1973).
 5. **Fiction:** `crashedLander`, `scatteredSupplies` and `fieldManualPages` are game fiction, and the game should label them so they are not mistaken for NASA data.
 6. **Not used yet:**
    - PSG: replaced by the NASA TM-103623 sunlight model, which includes diffuse light.
    - CRISM mineral maps, DONKI space weather and Mars audio: stretch goals.
+7. **Life support rates** in `reference.json` are checked against NASA's BVAD Rev 2 (NASA/TP-2015-218570/REV2, 2022): 0.84 kg O₂ and 1.01 kg CO₂ per day (Table 3-23), and 2.0 kg drinking water plus 0.5 kg for food preparation (Tables 3-31 and 4-20).
 
 ## Rebuilding
 
