@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { EarthGlobe } from './EarthGlobe';
+import { MarsGlobe } from './MarsGlobe';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -29,6 +30,20 @@ const ORBITS: { orbit: Orbit; big?: boolean }[] = [
   { orbit: { rx: 82, ry: 26, tiltDeg: 14, periodS: 40, phase: 0.05 } },
   { orbit: { rx: 64, ry: 12, tiltDeg: 30, periodS: 32, phase: 0.7 }, big: true },
 ];
+
+/**
+ * LOCAL DRAFT: the scene after the landing. 'lowpoly' = Blender render of the REAL terrain round the AER-1 cabin
+ * (Data pack elevation + HiRISE tint) with the low-poly cabin, descent core and astronaut
+ * (04_3d_assets/aer_landed/build_landed.py). Switch back to 'photo' for the original AI image.
+ */
+const LANDED_SCENES = {
+  lowpoly: { src: '/intro/landed_lowpoly.jpg', alt: 'Low-poly render of the crashed AER-1 cabin and descent core at Jezero, the astronaut beside them' },
+  photo: { src: '/data/crashed_lander_aer1.jpg', alt: 'The crashed AER-1 lander on the Martian surface' },
+};
+const LANDED_SCENE = LANDED_SCENES.lowpoly;
+
+/** LOCAL DRAFT: the globe radius (30vmin) over the old photo disc radius (49.5vmin). */
+const ORBIT_SCALE = 30 / 49.5;
 
 type Panel = 'menu' | 'settings' | 'quit';
 
@@ -85,17 +100,31 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <div className="earth-wrap" aria-hidden="true">
           {/* LOCAL DRAFT: 3D globe (EarthGlobe) instead of the flat photo + CSS night/atmosphere layers. */}
           <EarthGlobe still={still} />
-          {ORBITS.map((o, i) => <Satellite key={i} orbit={o.orbit} big={o.big} still={still || phase !== 'title'} />)}
+          {/* LOCAL DRAFT: the launch flare where the rocket leaves Earth. */}
+          <span className="launch-flash" />
+          {/* LOCAL DRAFT: Earth is smaller and centred now, so the orbits shrink with it (old disc radius 49.5vmin). */}
+          {ORBITS.map((o, i) => <Satellite key={i} orbit={{ ...o.orbit, rx: o.orbit.rx * ORBIT_SCALE, ry: o.orbit.ry * ORBIT_SCALE }} big={o.big} still={still || phase !== 'title'} />)}
         </div>
-        <div className="mars" aria-hidden="true" />
+        {/* LOCAL DRAFT: Mars as a lit globe inside the same element, so the landing animation is unchanged. */}
+        <div className="mars" aria-hidden="true">
+          <MarsGlobe active={phase === 'cruise' || phase === 'fault' || phase === 'crash'} still={still} />
+        </div>
         <Rocket className="rocket" />
+        {/* LOCAL DRAFT: light round the rocket (launch glow, then the engine failing). Same box and motion as the rocket. */}
+        <div className="rocket-fx" aria-hidden="true">
+          <span className="rocket-glow" />
+          <span className="engine-pop" />
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <span key={i} className={`spark s${i}`} />)}
+        </div>
         <div className="alarm-wash" aria-hidden="true" />
         <div className="impact" aria-hidden="true" />
       </div>
 
       {/* POV: the astronaut wakes at the wreck */}
       <div className="pov" aria-hidden={phase !== 'pov'}>
-        <img className="pov-scene" src="/data/crashed_lander_aer1.jpg" alt="The crashed AER-1 lander on the Martian surface" />
+        <img className="pov-scene" src={LANDED_SCENE.src} alt={LANDED_SCENE.alt} />
+        {/* LOCAL DRAFT: dust drifting across the scene (CSS only; the photo and timing are unchanged). */}
+        <div className="pov-dust" />
         <div className="pov-visor" />
         <div className="eyelid top" />
         <div className="eyelid bottom" />
