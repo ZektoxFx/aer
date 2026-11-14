@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { HudMap } from '../map';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HudMap, type Pt, type RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
@@ -16,6 +16,7 @@ import {
 } from './sol1';
 import { Sol1Panel } from './Sol1Panel';
 import { hudKeyAction } from './settings';
+import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import './hud.css';
 
 // Test controls until Map drives the activity from a planned route.
@@ -41,6 +42,15 @@ export function Hud({ data }: { data: GameData }) {
   const [mission, setMission] = useState<Sol1State | null>(null);
   /** Bumped on restart so the map starts again at the cabin with fresh fog. */
   const [mapReset, setMapReset] = useState(0);
+  // Walking a planned route: the Map plans it, the HUD moves the astronaut along it in game time.
+  const [route, setRoute] = useState<RouteResult | null>(null);
+  const onRoute = useCallback((r: RouteResult | null) => setRoute(r), []);
+  const [astronaut, setAstronaut] = useState<Pt | undefined>(undefined); // undefined = at the cabin
+  const [walk, setWalk] = useState<{ plan: WalkPlan; startMin: number; stoppedAt: number | null } | null>(null);
+  const [homePlan, setHomePlan] = useState<WalkPlan | null>(null); // the way back, once out at the destination
+  const walkRef = useRef(walk);
+  const homeAfterRef = useRef<WalkPlan | null>(null);
+  const postedRef = useRef<Pt | null>(null);
   const game = useRef(frame.state);
   const flowRef = useRef<ShelterFlow | null>(null);
   const missionRef = useRef<Sol1State | null>(null);
@@ -72,6 +82,29 @@ export function Hud({ data }: { data: GameData }) {
       }
       setFlow(flowRef.current);
     }
+    const wk = walkRef.current;
+    if (wk && wk.stoppedAt === null) {
+      const w = walkAt(wk.plan, state.clockMin - wk.startMin);
+      state = { ...state, activity: w.activity, shelter: 'none' };
+      // Move the map's astronaut every 20 m, not every frame (the map re-plans from the new spot each time).
+      if (!postedRef.current || distM(postedRef.current, w.at) > 20 || w.done) {
+        postedRef.current = w.at;
+        setAstronaut(w.at);
+      }
+      if (w.done) {
+        walkRef.current = null;
+        setWalk(null);
+        if (wk.plan.toBase) {
+          state = { ...state, shelter: 'cabin' };
+          setAstronaut(undefined);
+          postedRef.current = null;
+          setHomePlan(null);
+          setModeId('cabin');
+        } else {
+          setHomePlan(homeAfterRef.current);
+        }
+      }
+    }
     game.current = state;
     return { ...r, state };
   };
@@ -90,16 +123,43 @@ export function Hud({ data }: { data: GameData }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  const stopWalking = (atCabin: boolean) => {
+    walkRef.current = null; setWalk(null); homeAfterRef.current = null;
+    if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); }
+  };
   const setMode = (id: string) => {
     const m = MODES.find((x) => x.id === id)!;
+    // The test modes override walking; IN CABIN puts the astronaut back at the cabin.
+    stopWalking(id === 'cabin');
     game.current = { ...game.current, activity: m.activity, shelter: m.shelter };
     setModeId(id);
+  };
+  const startWalk = (plan: WalkPlan, homeAfter: WalkPlan | null) => {
+    homeAfterRef.current = homeAfter;
+    setHomePlan(null);
+    const w = { plan, startMin: game.current.clockMin, stoppedAt: null };
+    walkRef.current = w; setWalk(w); setModeId('');
+  };
+  const walkRoute = () => {
+    const plan = route && planFromRoute(route);
+    if (plan && route) startWalk(plan, planHome(route.home));
+  };
+  const toggleStop = () => {
+    const w = walkRef.current;
+    if (!w) return;
+    const now = game.current.clockMin;
+    // Stop: stand still outside. Resume: carry on from the same point along the route.
+    const next = w.stoppedAt === null
+      ? { ...w, stoppedAt: now }
+      : { ...w, startMin: w.startMin + (now - w.stoppedAt), stoppedAt: null };
+    if (next.stoppedAt !== null) game.current = { ...game.current, activity: { speedMS: 0, slopeDeg: 0, loadKg: 0 }, shelter: 'none' };
+    walkRef.current = next; setWalk(next);
   };
   const clearFlow = () => { flowRef.current = null; setFlow(null); setSummary(null); };
   const triggerStorm = () => { clearFlow(); game.current = { ...game.current, storm: makeStorm(game.current.clockMin) }; };
   const setMissionState = (m: Sol1State | null) => { missionRef.current = m; setMission(m); };
   const restart = (i = solIndex) => {
-    clearFlow(); setMissionState(null); game.current = startGame(i); setSolIndex(i); setMode('cabin');
+    clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
   };
 
@@ -124,6 +184,7 @@ export function Hud({ data }: { data: GameData }) {
     setMissionState({ ...r.state, lastClockMin: game.current.clockMin });
   };
   const pick = (c: ShelterChoice) => {
+    stopWalking(false);
     const f = chooseShelter(c, game.current.clockMin, game.current.suit);
     flowRef.current = f;
     setFlow(f);
@@ -206,6 +267,32 @@ export function Hud({ data }: { data: GameData }) {
     </div>
   ) : null;
 
+  const walkBusy = mission !== null || flow !== null;
+  const walkLeft = walk ? walk.plan.minutes - ((walk.stoppedAt ?? s.clockMin) - walk.startMin) : 0;
+  const walkLine = walk ? (
+    <p className="walk-line">
+      {walk.stoppedAt === null
+        ? <>{walk.plan.toBase ? 'WALKING HOME' : 'WALKING THE ROUTE'} · {formatMinutes(walkLeft)} LEFT </>
+        : <>STOPPED · {formatMinutes(walkLeft)} TO GO </>}
+      <button className="choice-btn" onClick={toggleStop}>{walk.stoppedAt === null ? 'STOP' : 'RESUME'}</button>
+    </p>
+  ) : homePlan && !walkBusy ? (
+    <p className="walk-line">
+      AT DESTINATION <button className="choice-btn" onClick={() => startWalk(homePlan, null)}>
+        RETURN TO CABIN · {formatMinutes(homePlan.minutes)}
+      </button>
+    </p>
+  ) : route && !walkBusy && !astronaut ? (
+    <p className="walk-line">
+      <button className="choice-btn walk-go" onClick={walkRoute} disabled={route.status === 'critical'}>
+        ▶ WALK ROUTE · {(route.distM / 1000).toFixed(2)} km · {formatMinutes(route.minutes)}
+      </button>
+      {route.turnBackByMin !== null
+        ? <span className="dim"> TURN BACK BY {formatMinutes(route.turnBackByMin)}</span>
+        : <span className="critical"> NO SAFE RETURN</span>}
+    </p>
+  ) : null;
+
   const gauge = (key: Consumable, value: number, full: number, unit: string, digits = 0) => {
     const pct = Math.max(0, Math.min(100, (value / full) * 100));
     const low = fc[key] < 30;
@@ -266,6 +353,7 @@ export function Hud({ data }: { data: GameData }) {
           {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
           {stormActive && !flow && s.shelter === 'cabin' && <p>SHELTERED: CABIN</p>}
           {mission && !missionCard && sol1Panel}
+          {walkLine}
         </div>
 
         {/* The map stays mounted (it keeps the explored fog and the planned route); cards float over it. */}
@@ -273,6 +361,7 @@ export function Hud({ data }: { data: GameData }) {
           <HudMap
             pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
             night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
+            astronaut={astronaut} onRoute={onRoute}
           />
           {overlay && <div className="centre-overlay">{overlay}</div>}
         </div>

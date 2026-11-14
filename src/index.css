@@ -1,12 +1,13 @@
-/* Colors are on hold (team decision); change them only here. */
+/* Colors live only here. Mars palette sampled from the AER-1 lander image (UI owner, Nov 14).
+   The previous green console palette was: bg #070b08, fg #4dff88, warning #ffb000, critical #ff4d4d, dim #5f7a66. */
 :root {
-  --bg: #070b08;
-  --fg: #4dff88;
-  --warning: #ffb000;
-  --critical: #ff4d4d;
-  --dim: #5f7a66;
+  --bg: #120a06;        /* night-side shadow */
+  --fg: #ecd2ad;        /* sunlit dust: main text, gauge fills, active buttons */
+  --warning: #f29a3a;   /* ochre alarm */
+  --critical: #ff5a3c;  /* hot red */
+  --dim: #a07c5c;       /* dusty sky in shade: secondary text and borders */
 
-  /* Intro only (title, crash, POV). Sampled from the AER-1 lander image; the HUD keeps the palette above. */
+  /* Intro scenes (title, crash, POV), from the same image. */
   --space: #050403;
   --mars-sky: #c9976a;
   --mars-sand: #b8622f;
