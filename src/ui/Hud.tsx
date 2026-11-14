@@ -7,7 +7,7 @@ import type { MapItem, MapWorldState, Pt, RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, outdoorEnv, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
-import type { Activity, Shelter, TickResult } from '../sim/types';
+import type { Activity, Shelter, StormEvent, TickResult } from '../sim/types';
 import { dataCaption, skyFor, type GameData } from './gameData';
 import { CONSUMABLE_LABEL, clockLabel, firstToRunOut, formatMinutes, SPEED_LABEL, type Consumable } from './hudFormat';
 import {
@@ -35,6 +35,10 @@ import {
   type Repair, type Ship,
 } from './ship';
 import { callStage, hasCommsLink, installLink, LIGHT_TIME_MIN, roverInReach, watchFailure, type FailCause, type FailWatch } from './ending';
+import { COVER_RADIUS_M, coverRocks, nearestCover, stormEffort, stormStrength, underCover, type NearCover } from './cover';
+import { compassPoint, sunPosition } from './sun';
+import { SunDial } from './SunDial';
+import type { BaseLook } from './props3d';
 import './game3d.css';
 import './hud.css';
 
@@ -101,10 +105,25 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   useEffect(() => { mapWorldRef.current = mapWorld; }, [mapWorld]);
   // Taken items leave the 3D world.
   // Taken items leave the 3D world; dropped ones lie where they were put down.
+  // Perseverance is drawn by the UI's own rover model (props3d), so the map's simple one is left out of the 3D world.
   const world3d = useMemo(() => {
-    if (!mapWorld || (!bag.taken.length && !bag.dropped.length)) return mapWorld;
-    return { ...mapWorld, items: [...mapWorld.items.filter((i) => !bag.taken.includes(i.id)), ...droppedItems(bag)] };
+    if (!mapWorld) return mapWorld;
+    return { ...mapWorld, items: [...mapWorld.items.filter((i) => i.kind !== 'rover' && !bag.taken.includes(i.id)), ...droppedItems(bag)] };
   }, [mapWorld, bag]);
+  const roverItem = mapWorld?.items.find((i) => i.kind === 'rover') ?? null;
+  const roverSeen = !!roverItem && (!roverItem.hidden || !!mapWorld?.found.has(roverItem.id));
+  // Rock overhangs to shelter under in a dust storm (the same ones the 3D view draws).
+  const covers = useMemo(() => coverRocks(base, pack.area), [base, pack.area]);
+  const [cover, setCover] = useState<NearCover | null>(() => nearestCover(base, covers));
+  const coversRef = useRef(covers);
+  useEffect(() => { coversRef.current = covers; }, [covers]);
+  /** The storm the player chose to ride out under a rock (the shelter cards stay closed for it). */
+  const [coverFor, setCoverFor] = useState<StormEvent | null>(null);
+  // Repairs and builds play out as a short animation before the clock jumps (the astronaut at work, sparks).
+  const [work, setWork] = useState<{ label: string; minutes: number } | null>(null);
+  const workRef = useRef(false);
+  const workTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (workTimer.current) clearTimeout(workTimer.current); }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
   // How to play: shown once per browser on the first 3D visit (the clock holds while it is open); MENU reopens it.
@@ -226,8 +245,18 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       setStormAt(null);
     }
     const mv = moveRef.current;
+    // Dust storm in 3D: in the open, blowing grit, near-zero visibility and hidden footing make every step (and
+    // standing) harder work, so more O₂ (a design value, not a wind-force model); under a rock overhang it doesn't, and
+    // resting there counts as partial shelter (the sim's 'wreck' level).
+    const stormy = modeRef.current === '3d' ? stormStrength(r.env.tau) : 0;
     if (modeRef.current === '3d' && mv && !walkActive() && !missionRef.current && !flowRef.current) {
-      state = { ...state, activity: activityFor(mv, carriedKg(bagRef.current)), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
+      const inCabin = !mv.moving && inCabinZone(mv.pos, base);
+      const covered = underCover(mv.pos, coversRef.current);
+      state = {
+        ...state,
+        activity: inCabin ? activityFor(mv, carriedKg(bagRef.current)) : stormEffort(activityFor(mv, carriedKg(bagRef.current)), stormy, covered),
+        shelter: inCabin ? 'cabin' : covered && !mv.moving && stormy > 0 ? 'wreck' : 'none',
+      };
     }
     // A repaired ship refills the suit while the astronaut is at the lander.
     if (modeRef.current === '3d' && atShipRef.current && shipRef.current.repaired.length) {
@@ -253,7 +282,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (wk && wk.stoppedAt === null) {
       const w = walkAt(wk.plan, state.clockMin - wk.startMin);
       walkPosRef.current = w.at;
-      state = { ...state, activity: w.activity, shelter: 'none' };
+      state = { ...state, activity: stormEffort(w.activity, stormy, underCover(w.at, coversRef.current)), shelter: 'none' };
       // Move the map's astronaut every 20 m, not every frame (the map re-plans from the new spot each time).
       if (!postedRef.current || distM(postedRef.current, w.at) > 20 || w.done) {
         postedRef.current = w.at;
@@ -287,7 +316,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     let raf = requestAnimationFrame(function loop(now) {
       const dt = Math.min(0.25, (now - last) / 1000); // cap so a hidden tab doesn't jump hours
       last = now;
-      const r = stepRef.current(dt, pausedRef.current);
+      const r = stepRef.current(dt, pausedRef.current || workRef.current);
       // In 3D the scene draws itself every frame; the HUD text only needs ~15 updates a second.
       if (modeRef.current !== '3d' || now - lastDraw > 66) { lastDraw = now; setFrame(r); }
       raf = requestAnimationFrame(loop);
@@ -302,6 +331,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
     const here = inCabinZone(m.pos, base);
     if (here !== atShipRef.current) { atShipRef.current = here; setAtShip(here); }
+    const nc = nearestCover(m.pos, coversRef.current);
+    setCover((old) => (old && nc && old.rock.id === nc.rock.id && Math.abs(old.distM - nc.distM) < 5 && (old.distM <= 7) === (nc.distM <= 7) ? old : nc));
     const rover = !!roverInReach(mapWorldRef.current, m.pos);
     if (rover !== nearRoverRef.current) { nearRoverRef.current = rover; setNearRover(rover); }
     if (walkActive()) return; // the route walker owns the position
@@ -312,7 +343,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base, setHintOn, setNear, setAtShip, setWalk, setNearRover]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, setHintOn, setNear, setAtShip, setWalk, setNearRover, setCover]); // eslint-disable-line react-hooks/exhaustive-deps
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; walkPosRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
@@ -443,7 +474,30 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   };
   // The ending: build the comms link, plug it into Perseverance, wait for an orbiter, send the call.
   const commsJob = useMemo(() => commsLinkJob(data.content), [data.content]);
+  const baseLook = useMemo<BaseLook>(() => ({
+    stored: ship.stored.length,
+    materialsKg: Object.values(ship.materials).reduce((a, b) => a + b, 0),
+    repaired: ship.repaired, built: ship.built,
+  }), [ship]);
+  const WORK_MS = 4200;
+  /** Play the work animation, then do the job (the clock holds while it plays, then jumps by the job's minutes). */
+  const startWork = (label: string, minutes: number, finish: () => void) => {
+    if (workRef.current) return;
+    workRef.current = true;
+    setPackOpen(false);
+    setWork({ label, minutes });
+    workTimer.current = setTimeout(() => {
+      workTimer.current = null;
+      finish();
+      workRef.current = false;
+      setWork(null);
+    }, WORK_MS);
+  };
   const buildLink = () => {
+    if (!canBuild(commsJob, bagRef.current, shipRef.current)) return;
+    startWork(`BUILDING · ${commsJob.name.toUpperCase()}`, commsJob.minutes, buildLinkNow);
+  };
+  const buildLinkNow = () => {
     const r = doBuild(commsJob, bagRef.current, shipRef.current, commsLinkEntry(commsJob.name));
     if (!r) return;
     setBag(r.pack); setShip(r.ship);
@@ -475,6 +529,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const closeEnd = () => { setEndCard(null); setPaused(false); };
 
   const repairShip = (rp: Repair) => {
+    if (!canRepair(rp, bagRef.current, shipRef.current)) return;
+    startWork(`REPAIRING · ${rp.name.toUpperCase()}`, rp.minutes, () => repairNow(rp));
+  };
+  const repairNow = (rp: Repair) => {
     const r = doRepair(rp, bagRef.current, shipRef.current);
     if (!r) return;
     setBag(r.pack); setShip(r.ship);
@@ -492,6 +550,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
     if (modeRef.current === '3d') {
       const k = e.key.toLowerCase();
+      if (workRef.current && (k === 'f' || k === 'i')) return;
       if (k === 'f') { if (nearRef.current) pickUpNear(); else if (nearRoverRef.current) roverAction(); return; }
       if (k === 'i') { setPackOpen((o) => !o); setMenuOpen(false); return; }
       if (k === 'escape' && readPage !== null) { closePage(); return; }
@@ -524,7 +583,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const phase = s.storm ? stormPhase(s.storm, s.clockMin) : 'none';
   const stormRealSec = s.storm ? Math.ceil((stormCountdownMin(s.storm, s.clockMin) / SPEED_X.storm) * 60) : 0;
   const stormActive = phase === 'warning' || phase === 'building' || phase === 'peak' || phase === 'clearing';
-  const showChoices = stormActive && !flow && s.shelter !== 'cabin' && (phase === 'warning' || phase === 'building');
+  const showChoices = stormActive && !flow && s.shelter !== 'cabin' && coverFor !== s.storm && (phase === 'warning' || phase === 'building');
+  const stormy = mode === '3d' ? stormStrength(frame.env.tau) : 0;
+  // Under an overhang while a storm is on (the cover list is updated as the astronaut walks).
+  const underRock = mode === '3d' && !flow && stormActive && s.shelter !== 'cabin' && !!cover && cover.distM <= COVER_RADIUS_M;
+  const coverDir = cover ? `${Math.round(cover.distM)} m ${compassPoint(cover.bearingDeg)}` : '';
+  /** How much more O₂ a walk costs in the open right now (×), for the warning line. */
+  const stormCost = stormy > 0 ? metabolicW(stormEffort({ speedMS: 0.8, slopeDeg: 0, loadKg: 10 }, stormy, false)) / metabolicW({ speedMS: 0.8, slopeDeg: 0, loadKg: 10 }) : 1;
   const mapPortal = createPortal(
     <HudMap
       pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
@@ -608,6 +673,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <span className="dim">{c.travelMin ? `${formatMinutes(c.travelMin)} to cover` : 'No cover'}</span>
         </button>
       ))}
+      {mode === '3d' && cover && s.storm && (
+        <button className="shelter-card" onClick={() => { stopWalking(false); setCoverFor(s.storm); }}>
+          <strong>TAKE COVER UNDER A ROCK</strong>
+          <span>+ Out of the blowing dust: O₂ use back to normal</span>
+          <span className="dim">− Walk there yourself: follow the orange beacons</span>
+          <span className="dim">Nearest overhang {coverDir}</span>
+        </button>
+      )}
     </div>
     </div>
   ) : null;
@@ -655,7 +728,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   };
 
   if (mode === '3d') {
-    const holding = paused || endCard !== null || (mission !== null && (isHolding(mission) || isOver(mission)));
+    const holding = paused || work !== null || endCard !== null || (mission !== null && (isHolding(mission) || isOver(mission)));
+    const sun = sunPosition(s.clockMin, s.sky);
     const timeScale = holding ? 0 : SPEED_X[frame.speed];
     // A slim bar along the visor edge: see-through track, soft glow, minutes left.
     const vbar = (key: Consumable, label: string, value: number, full: number) => {
@@ -700,7 +774,9 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <Suspense fallback={<p className="v-loading">LOADING 3D VIEW…</p>}>
         <World3D
           pack={pack} base={base} timeScale={timeScale} follow={walk && walk.stoppedAt === null ? followWalk : undefined} placeKey={placeKey}
-          startPos={astronaut} moveLocked={mission !== null || flow !== null}
+          startPos={astronaut} moveLocked={mission !== null || flow !== null || work !== null}
+          sunDir={sun.dir} baseLook={baseLook} working={work !== null}
+          rover={roverItem ? { at: roverItem.at, visible: roverSeen, linked, called } : null}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
           map={world3d}
@@ -710,12 +786,15 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {/* Top left: time, conditions, oxygen and the first thing to run out. */}
         <header className="v-top">
-          <div className="v-clock">
-            <span className="v-time">{clock.time}</span>
-            <span className="v-sub">LTST · DAY {clock.sol} · MEDA SOL {s.weather.sol}</span>
-            <span className={frame.speed === 'emergency' ? 'v-sub critical' : frame.speed === 'storm' ? 'v-sub warning' : 'v-sub'}>
-              {SPEED_LABEL[frame.speed]} · {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
-            </span>
+          <div className="v-clockrow">
+            <SunDial sun={sun} tau={frame.env.tau} />
+            <div className="v-clock">
+              <span className="v-time">{clock.time}</span>
+              <span className="v-sub">LTST · DAY {clock.sol} · MEDA SOL {s.weather.sol}</span>
+              <span className={frame.speed === 'emergency' ? 'v-sub critical' : frame.speed === 'storm' ? 'v-sub warning' : 'v-sub'}>
+                {SPEED_LABEL[frame.speed]} · {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
+              </span>
+            </div>
           </div>
           <ul className="v-forecast" aria-label="Environment forecast">
             {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky, data.devils).map((e) => (
@@ -740,6 +819,12 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             <p className="warning">DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}</p>
           )}
           {stormActive && phase !== 'warning' && <p className="warning">DUST STORM: {phase.toUpperCase()}</p>}
+          {underRock && <p>SHELTERED UNDER A ROCK OVERHANG · OUT OF THE BLOWING DUST</p>}
+          {stormActive && !flow && !underRock && s.shelter !== 'cabin' && cover && (
+            <p className="warning">
+              {stormy > 0.05 ? `▲ IN THE OPEN: THE STORM RAISES O₂ USE ×${stormCost.toFixed(1)} · ` : ''}TAKE COVER: ROCK OVERHANG {coverDir} (ORANGE BEACON)
+            </p>
+          )}
           {flow && !flow.arrived && (
             <p className="warning">EN ROUTE: {SHELTER_NAME[flow.choice.shelter]} · {formatMinutes(flow.choice.travelMin - (s.clockMin - flow.chosenAtMin))} TO COVER</p>
           )}
@@ -778,7 +863,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             {vbar('batteryMin', 'BAT', s.suit.batteryWh, FULL_SUIT.batteryWh)}
           </div>
           <span className="v-where">
-            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
+            {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : underRock ? 'UNDER ROCK COVER' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
           </span>
           <button className="v-menu-btn v-pack-btn" aria-expanded={packOpen} onClick={() => { setPackOpen((o) => !o); setMenuOpen(false); }}
             title="Backpack, ship storage and repairs (I)">▣ PACK {carriedKg(bag).toFixed(1)}/{BACKPACK_MAX_KG} kg</button>
@@ -813,6 +898,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         )}
 
         {overlay && <div className="g3-overlay">{overlay}</div>}
+        {work && (
+          <section className="v-work" role="status" aria-label="Work in progress">
+            <p className="v-work-title">{work.label}</p>
+            <span className="v-work-bar" style={{ animationDuration: `${WORK_MS}ms` }} aria-hidden="true" />
+            <p className="v-work-sub">{formatMinutes(work.minutes)} OF WORK · THE CLOCK JUMPS WHEN IT IS DONE</p>
+          </section>
+        )}
 
         {nearRover && !near && readPage === null && !endCard && (() => {
           const pass = passNow(s.clockMin);
