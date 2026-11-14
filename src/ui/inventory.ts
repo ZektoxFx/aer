@@ -77,6 +77,10 @@ export const SALVAGE: Record<string, Omit<PackEntry, 'id'>> = {
     kind: 'scrap', name: 'Heat shield tiles', massKg: 3, yields: { insulation: 3 },
     note: 'The heat shield is covered in PICA tiles, a light carbon ablator that kept out the heat of entry (game fiction: salvaging it).',
   },
+  three_forks_depot: {
+    kind: 'part', name: 'Three Forks sample tubes (10)', massKg: 2,
+    note: 'The 10 sealed tubes Perseverance left at Three Forks (sol 653–690) for a future sample return. Carry them home for Earth labs (game fiction: in reality they wait for a sample-return mission; mass is a design value).',
+  },
 };
 
 const PICKABLE = new Set<MapItem['kind']>(['o2', 'lioh', 'water', 'battery', 'repair', 'scrap', 'manual']);

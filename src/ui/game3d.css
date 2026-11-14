@@ -392,3 +392,22 @@
 @keyframes v-alert-in { from { transform: translateY(-10px); opacity: 0; } }
 @keyframes v-alert-pulse { to { box-shadow: 0 0 4px transparent; } }
 @media (prefers-reduced-motion: reduce) { .v-alert, .v-alert.critical { animation: none; } }
+
+/* Field journal (Act 5 of docs/STORY.md): habitability findings unlocked by play. */
+.v-journal {
+  margin: 0; padding: 10px 12px; font-size: 11px; max-height: 46vh; overflow-y: auto;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: g3-pop 0.18s ease-out;
+}
+.v-journal-why { margin: 0 0 6px; color: color-mix(in srgb, var(--fg) 70%, transparent); line-height: 1.45; }
+.v-journal ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.v-journal li { display: grid; gap: 2px; line-height: 1.45; color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-journal li b { font-weight: normal; letter-spacing: 0.06em; }
+.v-journal li.done { color: var(--fg); }
+.v-journal li.done b { color: var(--warning); }
+.v-journal li em { font-style: normal; font-size: 9.5px; color: color-mix(in srgb, var(--fg) 50%, transparent); }
+.end-takehome { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.end-takehome h3 { margin: 0; font-size: 12px; letter-spacing: 0.16em; font-weight: normal; color: var(--warning); }
+.end-takehome ul { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+.end-takehome-note { font-size: 12px; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+@media (prefers-reduced-motion: reduce) { .v-journal { animation: none; } }
