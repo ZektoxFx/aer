@@ -1,0 +1,21 @@
+/* Colors are on hold (team decision); change them only here. */
+:root {
+  --bg: #070b08;
+  --fg: #4dff88;
+  --warning: #ffb000;
+  --critical: #ff4d4d;
+  --dim: #5f7a66;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+h1 { font-size: 18px; letter-spacing: 0.12em; }
+.warning { color: var(--warning); }
+.critical { color: var(--critical); }

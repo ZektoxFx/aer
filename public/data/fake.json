@@ -1,0 +1,16 @@
+{
+  "source": "FAKE placeholder data: replace with the baked NASA data pack",
+  "imageUrl": "",
+  "area": { "name": "Jezero Crater (placeholder)", "lat": 18.44, "lon": 77.45, "widthM": 3000, "heightM": 3000 },
+  "elevation": {
+    "cols": 4, "rows": 4, "cellM": 750,
+    "heightsM": [-2560, -2555, -2548, -2540,
+                 -2565, -2558, -2550, -2545,
+                 -2570, -2562, -2553, -2549,
+                 -2575, -2566, -2557, -2551]
+  },
+  "sols": [
+    { "sol": 1, "pressureKPa": 0.75, "tempMinC": -83, "tempMaxC": -23, "windMS": 5, "tau": 0.5 },
+    { "sol": 2, "pressureKPa": 0.74, "tempMinC": -80, "tempMaxC": -30, "windMS": 12, "tau": 6.0 }
+  ]
+}

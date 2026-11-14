@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Icon Style Test</title>
+<style>
+  :root {
+    --bg: #070b08; --panel: #0d1410; --line: #1c2a20;
+    --nominal: #4dff88; --warning: #ffb000; --critical: #ff4d4d; --dim: #5f7a66;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--nominal);
+    font: 14px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  /* faint CRT scanlines */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(transparent 0 2px, rgba(0,0,0,.25) 2px 3px);
+  }
+  h1 { font-size: 18px; letter-spacing: .12em; margin: 0 0 4px; }
+  .note { color: var(--dim); margin: 0 0 24px; max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); padding: 14px 12px 10px; text-align: center; }
+  .big { width: 48px; height: 48px; filter: drop-shadow(0 0 4px currentColor); }
+  .name { display: block; margin: 8px 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  .states { display: flex; justify-content: center; gap: 10px; }
+  .states svg { width: 24px; height: 24px; }
+  .w { color: var(--warning); } .c { color: var(--critical); }
+  h2 { font-size: 14px; letter-spacing: .12em; margin: 32px 0 10px; color: var(--dim); }
+  .hud { background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 8px; max-width: 420px; }
+  .hud div { display: flex; align-items: center; gap: 10px; }
+  .hud svg { width: 18px; height: 18px; flex: none; }
+  .hud .val { margin-left: auto; }
+  .blink { animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .blink { animation: none; } }
+</style>
+</head>
+<body>
+
+<!-- Icon sprite: 24x24 grid, 1.5 stroke, square caps, currentColor so the game can tint by status -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-o2"><rect x="8" y="7" width="8" height="14" rx="3"/><path d="M8 11h8M10 7V5h4v2M9 3h6M12 3v2"/></g>
+    <g id="i-lioh"><rect x="5" y="4" width="14" height="16" rx="1"/><path d="M5 8h14M5 16h14M9 12h.01M12 12h.01M15 12h.01"/></g>
+    <g id="i-water"><path d="M12 3c3 4.5 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-6.5 6-11z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></g>
+    <g id="i-battery"><rect x="2" y="7" width="17" height="10" rx="1"/><path d="M21 10v4M5.5 10v4M8.5 10v4M11.5 10v4"/></g>
+    <g id="i-repair"><rect x="3" y="7" width="18" height="13" rx="1"/><path d="M9 7V4h6v3M12 10.5v6M9 13.5h6"/></g>
+    <g id="i-manual"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 11h7M9 14h7M9 17h4"/></g>
+    <g id="i-scrap"><path d="M4 8l9-3 7 4-2 10-11 1z"/><path d="M8 10h.01M15 9.5h.01M9 17h.01M15.5 16h.01"/></g>
+    <g id="i-rover"><rect x="4" y="10" width="14" height="4"/><path d="M15 10V5M6 16v-2M11 16v-2M16 16v-2"/><rect x="13" y="2.5" width="6" height="2.5"/><circle cx="6" cy="18" r="2"/><circle cx="11" cy="18" r="2"/><circle cx="16" cy="18" r="2"/></g>
+    <g id="i-cabin"><g transform="rotate(-14 12 14)"><path d="M6 19l3-12h6l3 12z"/><circle cx="12" cy="12" r="1.6"/></g><path d="M2 21h20M3 17l2 1M19 16l2-1"/></g>
+    <g id="i-shelter"><path d="M3 19a9 9 0 0 1 18 0M2 19h20M10 19v-4h4v4"/></g>
+    <g id="i-waypoint"><path d="M12 3l7 9-7 9-7-9z"/><path d="M12 12h.01"/></g>
+    <g id="i-tracks"><path d="M5 21L13 3M11 21L19 3" stroke-dasharray="2 2"/></g>
+    <g id="i-storm"><path d="M12 3l10 18H2z"/><path d="M7 15c1.5-1 3 1 4.5 0s3-1 4.5 0M8.5 18c1.2-.8 2.4.8 3.6 0s2.4-.8 3.6 0"/></g>
+  </defs>
+</svg>
+
+<h1>AER // ICON STYLE TEST</h1>
+<p class="note">Practice sheet for the green/amber telemetry look. Not part of the entry: check with your Local Lead before using these in the hackathon build. Each icon shows nominal / warning / critical tint.</p>
+
+<div class="grid" id="grid"></div>
+
+<h2>IN CONTEXT: SUIT HUD</h2>
+<div class="hud">
+  <div><svg><use href="#i-o2"/></svg>O₂ RESERVE<span class="val">4:52</span></div>
+  <div class="w"><svg><use href="#i-lioh"/></svg>SCRUBBER<span class="val">18%</span></div>
+  <div><svg><use href="#i-battery"/></svg>BATTERY<span class="val">71%</span></div>
+  <div><svg><use href="#i-water"/></svg>COOLING H₂O<span class="val">1.9 kg</span></div>
+  <div class="c blink"><svg><use href="#i-storm"/></svg>DUST STORM<span class="val">05:00</span></div>
+</div>
+
+<script>
+  const icons = [
+    ["o2","O₂ bottle"],["lioh","LiOH canister"],["water","Water pack"],["battery","Battery"],
+    ["repair","Repair kit"],["manual","Manual page"],["scrap","Scrap"],["rover","Rover"],
+    ["cabin","Crashed cabin"],["shelter","Shelter"],["waypoint","Waypoint"],["tracks","Wheel tracks"],["storm","Dust storm"]
+  ];
+  const svg = (id, cls = "") =>
+    `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><use href="#i-${id}"/></svg>`;
+  document.getElementById("grid").innerHTML = icons.map(([id, name]) => `
+    <div class="card">${svg(id, "big")}
+      <span class="name">${name}</span>
+      <div class="states">${svg(id)}<span class="w">${svg(id)}</span><span class="c">${svg(id)}</span></div>
+    </div>`).join("");
+  // HUD icons share the same stroke settings
+  document.querySelectorAll(".hud svg").forEach(s => {
+    s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none");
+    s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "1.5");
+    s.setAttribute("stroke-linecap", "square");
+  });
+</script>
+</body>
+</html>
