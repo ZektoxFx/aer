@@ -15,7 +15,7 @@ import {
   type ActionId, type CauseId, type Sol1State,
 } from './sol1';
 import { Sol1Panel } from './Sol1Panel';
-import { hudKeyAction } from './settings';
+import { browserStorage, hudKeyAction } from './settings';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
 import { World3D } from './World3D';
@@ -47,6 +47,23 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [suitOpen, setSuitOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
+  // How to play: shown once per browser on the first 3D visit (the clock holds while it is open); MENU reopens it.
+  const [howToOpen, setHowToOpen] = useState(() => {
+    try { return mode === '3d' && browserStorage()?.getItem('aer.howto.seen') !== '1'; } catch { return mode === '3d'; }
+  });
+  const closeHowTo = () => {
+    setHowToOpen(false);
+    setPaused(false);
+    try { browserStorage()?.setItem('aer.howto.seen', '1'); } catch { /* private window: show again next time */ }
+  };
+  // The controls hint fades out once the player starts walking (or after 15 s).
+  const [hintOn, setHintOn] = useState(true);
+  const hintOnRef = useRef(true);
+  useEffect(() => {
+    if (howToOpen) return; // count from when the player can actually play
+    const id = setTimeout(() => { hintOnRef.current = false; setHintOn(false); }, 15000);
+    return () => clearTimeout(id);
+  }, [howToOpen]);
   // LOCAL DRAFT (Map/Aiman): first- or third-person camera in the 3D view; V switches.
   // LOCAL DRAFT: start in first person (the eyes open through the visor at the end of the intro), then the camera
   // pulls back to third person after a few seconds, unless the player has already picked a view.
@@ -95,6 +112,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const missionRef = useRef<Sol1State | null>(null);
   const pausedRef = useRef(paused);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { if (howToOpen) setPaused(true); }, [howToOpen]);
 
   /** One step of the game: the sim tick plus the shelter flow (arrival, then the summary once the storm is over). */
   const step = (dt: number, isPaused: boolean): TickResult => {
@@ -178,13 +196,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
   const onMove3d = useCallback((m: MoveResult) => {
     moveRef.current = m;
+    if (m.moving && hintOnRef.current) { hintOnRef.current = false; setHintOn(false); }
     if (walkRef.current) return; // the route walker owns the position
     const atCabin = inCabinZone(m.pos, base);
     if (atCabin ? postedRef.current !== null : !postedRef.current || distM(postedRef.current, m.pos) > 20) {
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base]);
+  }, [base, setHintOn]);
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
@@ -309,6 +328,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     else if (id === 'storm') triggerStorm();
     else if (id === 'skip') skipHour();
     else if (id === 'restart') restart();
+    else if (id === 'howto') { setHowToOpen(true); hintOnRef.current = true; setHintOn(true); }
     else if ((id === 'hud' || id === 'telemetry') && onView) onView(id);
   };
   const missionCard = mission !== null && (isHolding(mission) || isOver(mission));
@@ -332,6 +352,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       <button className="choice-btn" onClick={() => setSummary(null)}>CONTINUE</button>
     </section>
   ) : showChoices ? (
+    <div className="shelter-pick">
+    <h2 className="shelter-title warning">
+      ▲ DUST STORM {phase === 'warning' ? `IN ${Math.floor(stormRealSec / 60)}:${String(stormRealSec % 60).padStart(2, '0')}` : 'IS HERE'} · WHERE WILL YOU WAIT IT OUT?
+    </h2>
     <div className="shelter-choices" role="group" aria-label="Where to wait out the storm">
       {SHELTER_CHOICES.map((c) => (
         <button key={c.id} className="shelter-card" onClick={() => pick(c)}>
@@ -341,6 +365,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <span className="dim">{c.travelMin ? `${formatMinutes(c.travelMin)} to cover` : 'No cover'}</span>
         </button>
       ))}
+    </div>
     </div>
   ) : null;
 
@@ -490,7 +515,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             title="Switch camera (V)">{view === 'first' ? '◉ 1ST PERSON' : '◎ 3RD PERSON'}</button>
           <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
         </footer>
-        <p className="v-hint">
+        <p className={hintOn ? 'v-hint' : 'v-hint off'} aria-hidden={!hintOn}>
           {lookLocked
             ? `MOUSE LOOK ON · WASD move · SHIFT run · ${view === 'first' ? '' : 'scroll to zoom · '}V view · ESC frees the cursor`
             : 'CLICK THE VIEW TO LOOK AROUND WITH THE MOUSE · WASD move · SHIFT run · V first/third person · SPACE pause'}
@@ -506,6 +531,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
               ['TRIGGER DUST STORM', 'storm', stormActive || mission !== null],
               ['SKIP +1 HOUR (TEST)', 'skip', false],
               ['RESTART AT THE CABIN', 'restart', false],
+              ['HOW TO PLAY', 'howto', false],
               ...(onView ? [['SWITCH TO 2D HUD', 'hud', false], ['TELEMETRY CHARTS', 'telemetry', false]] as const : []),
             ] as const).map(([label, id, disabled]) => (
               <button key={id} disabled={disabled} onClick={() => { menuAction(id); setMenuOpen(false); }}>{label}</button>
@@ -515,6 +541,24 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         )}
 
         {overlay && <div className="g3-overlay">{overlay}</div>}
+
+        {howToOpen && (
+          <div className="g3-overlay">
+            <section className="howto" aria-label="How to play">
+              <h2>HOW TO PLAY</h2>
+              <p className="howto-goal">You crash-landed in Jezero Crater. Stay alive: keep an eye on your oxygen and suit, explore, and get under cover when a dust storm comes.</p>
+              <dl>
+                <dt>Walk</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hold <kbd>Shift</kbd> to run</dd>
+                <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>
+                <dt>Map</dt><dd>Top right. Click it to plan a route, then press WALK ROUTE. Stay inside the green line to get home.</dd>
+                <dt>Suit</dt><dd>Bars along the bottom; the big countdown top left is what runs out first. Stand at the lander to recharge.</dd>
+                <dt>Weather</dt><dd>Top-left forecast: dust devils, the storm warning, nightfall.</dd>
+                <dt>Menu</dt><dd>☰ MENU: start the Sol 1 mission, pause, or switch to the 2D view.</dd>
+              </dl>
+              <button className="choice-btn howto-go" onClick={closeHowTo} autoFocus>LET'S GO</button>
+            </section>
+          </div>
+        )}
       </div>
     );
   }
