@@ -32,7 +32,7 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `credits.json` | Credits screen text: 10 data sources with citations, image credits, fiction and AI notes, and chart label templates such as `Perseverance MEDA · air temperature · sol {sol} (archived)` | Built by `tools/data/bake_content.py` |
 | `fieldManualPages` in `jezero_pack.json` | 5 field manual pages: the 4 manual builds plus a CO2 reference page | Rewritten with real sources; the AER-1 tank, rover beacon and radio bridge are labelled game fiction |
 | `earth_apollo17.jpg` | Earth on the title screen (added by UI in PR #23) | NASA photo AS17-148-22727, taken by the Apollo 17 crew on December 7, 1972; credited in `credits.json` |
-| `crashed_lander_aer1.jpg` | The fictional AER-1 lander | **AI-generated**, with a visible watermark |
+| `crashed_lander_aer1.jpg` | The fictional AER-1 lander | **AI-generated**, with a visible watermark. No longer shown in the app (the intro switched to real Perseverance photos in #38) |
 | `fake.json` | The original team placeholder, restored | Not data |
 
 ## How things were measured
