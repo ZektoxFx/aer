@@ -61,6 +61,19 @@
 .storm-summary dt { color: var(--dim); }
 .storm-summary dd { margin: 0; text-align: right; }
 
+.mission-card { width: 100%; max-width: 560px; border: 1px solid var(--fg); padding: 14px 16px; text-align: left; }
+.mission-card.alarm { border-color: var(--warning); }
+.mission-card h2 { margin: 0 0 8px; font-size: 16px; letter-spacing: 0.12em; }
+.mission-card p { margin: 0 0 8px; }
+.mission-card dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; margin: 0 0 12px; }
+.mission-card dt { color: var(--dim); }
+.mission-card dd { margin: 0; text-align: right; }
+.mission-status p { margin: 0 0 8px; letter-spacing: 0.06em; }
+.mission-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.choice-btn:disabled { opacity: 0.4; cursor: default; }
+.choice-btn[aria-pressed='true'] { color: var(--bg); background: var(--warning); }
+.controls .start-sol1 { color: var(--fg); border-color: var(--fg); }
+
 @media (max-width: 520px) { .shelter-choices { grid-template-columns: 1fr; } }
 
 .alarms { display: flex; flex-wrap: wrap; gap: 4px 18px; min-height: 1.5em; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SPEED_X, forecast, newGame, tick } from '../sim/game';
-import { FULL_SUIT } from '../sim/simulate';
+import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
 import type { Activity, Shelter, TickResult } from '../sim/types';
 import { dataCaption, skyFor, type GameData } from './gameData';
@@ -9,6 +9,11 @@ import {
   SHELTER_CHOICES, chooseShelter, flowPosture, summarize, updateFlow,
   type ShelterChoice, type ShelterFlow, type ShelterSummary,
 } from './shelterFlow';
+import {
+  SOL1_START_LIOH_KG, isHolding, isOver, sol1Act, sol1Advance, sol1Begin, sol1Diagnose, sol1Posture, sol1Start,
+  type ActionId, type CauseId, type Sol1State,
+} from './sol1';
+import { Sol1Panel } from './Sol1Panel';
 import './hud.css';
 
 // Test controls until Map drives the activity from a planned route.
@@ -31,15 +36,26 @@ export function Hud({ data }: { data: GameData }) {
   const [modeId, setModeId] = useState('cabin');
   const [flow, setFlow] = useState<ShelterFlow | null>(null);
   const [summary, setSummary] = useState<ShelterSummary | null>(null);
+  const [mission, setMission] = useState<Sol1State | null>(null);
   const game = useRef(frame.state);
   const flowRef = useRef<ShelterFlow | null>(null);
+  const missionRef = useRef<Sol1State | null>(null);
   const pausedRef = useRef(paused);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   /** One step of the game: the sim tick plus the shelter flow (arrival, then the summary once the storm is over). */
   const step = (dt: number, isPaused: boolean): TickResult => {
-    const r = tick(game.current, dt, isPaused);
+    const m = missionRef.current;
+    const holding = m !== null && (isHolding(m) || isOver(m));
+    const r = tick(game.current, dt, isPaused || holding);
     let state = r.state;
+    if (m && !holding) {
+      const fcNow = forecast(state.suit, shelterEnvironment(r.env, state.shelter), state.activity);
+      const next = sol1Advance(m, state.clockMin, state.suit, fcNow);
+      state = { ...state, ...sol1Posture(next) };
+      missionRef.current = next;
+      setMission(next);
+    }
     const f = flowRef.current;
     if (f) {
       const next = updateFlow(f, state.clockMin, state.suit);
@@ -77,7 +93,31 @@ export function Hud({ data }: { data: GameData }) {
   };
   const clearFlow = () => { flowRef.current = null; setFlow(null); setSummary(null); };
   const triggerStorm = () => { clearFlow(); game.current = { ...game.current, storm: makeStorm(game.current.clockMin) }; };
-  const restart = (i = solIndex) => { clearFlow(); game.current = startGame(i); setSolIndex(i); setMode('cabin'); };
+  const setMissionState = (m: Sol1State | null) => { missionRef.current = m; setMission(m); };
+  const restart = (i = solIndex) => {
+    clearFlow(); setMissionState(null); game.current = startGame(i); setSolIndex(i); setMode('cabin');
+  };
+
+  // Sol 1: Scrubber Saturation runs on the pack's Sol 1 scenario day, with the crash-damaged scrubber.
+  const sol1Index = Math.max(0, pack.sols.findIndex((x) => x.scenario?.startsWith('Sol 1')));
+  const startSol1 = () => {
+    restart(sol1Index);
+    game.current = { ...game.current, suit: { ...game.current.suit, liohKg: SOL1_START_LIOH_KG } };
+    setMissionState(sol1Start(game.current.clockMin));
+    setModeId('');
+  };
+  const missionBegin = () => {
+    const m = sol1Begin(missionRef.current!, game.current.clockMin);
+    game.current = { ...game.current, ...sol1Posture(m) };
+    setMissionState(m);
+  };
+  const missionDiagnose = (c: CauseId) => setMissionState(sol1Diagnose(missionRef.current!, c));
+  const missionAct = (a: ActionId) => {
+    const r = sol1Act(missionRef.current!, a);
+    const suit = game.current.suit;
+    game.current = { ...game.current, ...sol1Posture(r.state), suit: { ...suit, liohKg: suit.liohKg + r.addLiohKg } };
+    setMissionState({ ...r.state, lastClockMin: game.current.clockMin });
+  };
   const pick = (c: ShelterChoice) => {
     const f = chooseShelter(c, game.current.clockMin, game.current.suit);
     flowRef.current = f;
@@ -147,7 +187,14 @@ export function Hud({ data }: { data: GameData }) {
         )}
         {stormActive && phase !== 'warning' && <p className="storm warning">DUST STORM: {phase.toUpperCase()}</p>}
 
-        {summary ? (
+        {mission && (
+          <Sol1Panel
+            mission={mission} suit={s.suit} fc={fc} metabolicW={metabolicW(s.activity)} clockMin={s.clockMin}
+            onBegin={missionBegin} onDiagnose={missionDiagnose} onAct={missionAct}
+            onRetry={startSol1} onClose={() => setMissionState(null)}
+          />
+        )}
+        {mission && mission.phase !== 'walkOut' && mission.phase !== 'salvage' && mission.phase !== 'walkBack' ? null : summary ? (
           <section className="storm-summary" aria-label="Storm outcome">
             <h2>STORM OVER</h2>
             <p>{summary.label} · {summary.hours.toFixed(1)} h</p>
@@ -212,11 +259,12 @@ export function Hud({ data }: { data: GameData }) {
             : frame.warnings.map((w) => <span key={w.code} className={w.level}>▲ {w.message}</span>)}
         </div>
         <div className="controls" role="group" aria-label="Test controls">
+          <button className="start-sol1" onClick={startSol1}>{mission ? 'RESTART SOL 1' : 'START SOL 1'}</button>
           {MODES.map((m) => (
-            <button key={m.id} aria-pressed={modeId === m.id} onClick={() => setMode(m.id)}>{m.label}</button>
+            <button key={m.id} aria-pressed={modeId === m.id} onClick={() => setMode(m.id)} disabled={mission !== null}>{m.label}</button>
           ))}
           <button aria-pressed={paused} onClick={() => setPaused((p) => !p)}>{paused ? 'RESUME' : 'PAUSE'}</button>
-          <button onClick={triggerStorm} disabled={stormActive}>TRIGGER STORM</button>
+          <button onClick={triggerStorm} disabled={stormActive || mission !== null}>TRIGGER STORM</button>
           <button onClick={skipHour}>SKIP +1 H</button>
           <button onClick={() => restart()}>RESTART</button>
           <label className="scenario">
