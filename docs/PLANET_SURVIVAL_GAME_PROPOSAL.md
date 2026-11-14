@@ -119,7 +119,7 @@ Rapid total decompression gives 9–14 seconds of useful consciousness. Pulmonar
 
 ### 3.2 Martian Environment
 - **Gravity:** 3.71 m/s², about 38% of Earth's, which applies to carried loads.
-- **Pressure** comes from MEDA data for the selected sol, not a constant. The global average is about 0.61 kPa, with local values around 0.7–0.9 kPa `[verify]`.
+- **Pressure** comes from MEDA data for the selected sol, not a constant. The global average is about 0.61 kPa. Jezero's daily mean ranged 587–797 Pa across the 118 MEDA sols in our data (see `docs/DATA_SOURCES.md`); the five scenario sols read 0.625–0.655 kPa.
 - **Water** boils at about $0$–$5^\circ\text{C}$ across that range.
 - **Suit:** 20.7–29.6 kPa pure O₂, or about 56 kPa N₂/O₂.
 - **Dust** optical depth ($\tau$) from rover data sets solar power and storm conditions.
@@ -129,7 +129,7 @@ Rapid total decompression gives 9–14 seconds of useful consciousness. Pulmonar
 $$\dot{Q}_{\text{net}} = \dot{Q}_{\text{met}} + \dot{Q}_{\text{avionics}} + \dot{Q}_{\text{solar}} - \dot{Q}_{\text{rad}} - \dot{Q}_{\text{conv}} - \dot{Q}_{\text{evap}}$$
 
 - $\dot{Q}_{\text{met}}$: 100 W at rest, 400 W on a heavy traverse.
-- $\dot{Q}_{\text{avionics}}$: 150 W.
+- $\dot{Q}_{\text{avionics}}$: 80 W, the Apollo PLSS power requirement.
 - $\dot{Q}_{\text{solar}}$: from time of day and $\tau$.
 - $\dot{Q}_{\text{rad}} = \varepsilon\sigma A\left[T_s^4 - F_{\text{sky}}T_{\text{sky}}^4 - F_{\text{gnd}}T_{\text{gnd}}^4\right]$. The suit mostly sees ground and sky, not deep space. For a bare 2 m² surface at $20^\circ\text{C}$ with $\varepsilon$ = 0.85, that is about 334–556 W for sink temperatures of 250–200 K. Real suit insulation lowers this `[verify]`.
 - $\dot{Q}_{\text{conv}}$: small, not zero. Rough estimate for the same surface: about 33 W in still air and 120 W in a 5 m/s wind, using wind data from MEDA.
@@ -143,7 +143,7 @@ All consumables derive from one metabolic rate, so pace and terrain drive everyt
 - **LiOH:** 1.09 kg per kg of CO₂ at stoichiometric limit.
 - **Route metabolic rate:** a simple function of slope, speed, and carried load `[verify]`.
 
-**Worked example,** 4-hour walk at 300 W metabolic plus 150 W avionics: about 0.31 kg O₂, 0.36 kg CO₂, 0.40 kg LiOH, and up to 2.6 kg of water if the evaporator carries the whole 450 W.
+**Worked example,** 4-hour walk at 300 W metabolic plus 80 W avionics: about 0.31 kg O₂, 0.36 kg CO₂, 0.40 kg LiOH, and up to 2.2 kg of water if the evaporator carries the whole 380 W.
 
 ### 3.5 Power Model
 
@@ -174,7 +174,7 @@ $$P_{\text{solar}} = S \cdot A \cdot \eta \cdot f(\tau, \text{sun angle}) \cdot 
 | **Real Mars audio** | NASA publishes Perseverance microphone recordings, and Mars is mostly deeply quiet. | Real wind audio in the suit. Cheap to add, and it makes the storm feel authentic. |
 | **Storm sparks** | Perseverance detected tiny electrical discharges in dust devils and storms, reported in 2025. They carried only 0.1–150 nanojoules. | Crackling audio as a warning cue only, because the energy is too small to cause damage. |
 | **Green aurora** | Perseverance saw the first visible aurora from Mars's surface in March 2024, caused by solar energetic particles. | A beautiful green sky that also warns of raised radiation, so the player takes cover. Could use DONKI data. |
-| **Message delay** | Earth–Mars signals take about 4–24 minutes one way `[verify]`. | Core to the ending: the distress call's reply arrives only after the round trip, so the player must survive the wait. |
+| **Message delay** | Earth–Mars signals take about 3–22 minutes one way, depending on where the planets are in their orbits. | Core to the ending: the distress call's reply arrives only after the round trip, so the player must survive the wait. |
 | **Blue sunset** | Martian dust makes sunsets blue `[verify]`. | A visual cue that night is coming. |
 
 ---
@@ -454,14 +454,17 @@ The 2026 rules (confirmed November 14) allow a video of 30 seconds or less or up
 
 Check these before relying on them in the build:
 
-- [ ] Jezero pressure range from MEDA, and the sols used for each scenario
-- [ ] MOXIE power draw (about 300 W)
+- [x] Jezero pressure range from MEDA: 587–797 Pa daily mean across 118 sols; 0.625–0.655 kPa on the five scenario sols
+- [x] MOXIE power draw: rated 300 W for 6–12 g/h (NASA)
+- [x] Suit consumables checked against Apollo and EMU figures (November 14): 80 W avionics, 0.6 kg O₂, 3.9 kg water, 640 Wh battery, LiOH sized to outlast the O₂
+- [x] Panel dust: 0.2%/sol typical, 2%/sol highest observed (Lorenz et al. 2021)
 - [ ] Water content of Jezero regolith (2 wt% assumption) and the absence of accessible shallow ice
 - [ ] Chlorine release when overheating perchlorate-bearing regolith
 - [ ] Suit insulation effect on radiative and convective loss at Mars pressure
 - [ ] Moisture degradation of the sorbent bed
 - [ ] Suited metabolic rate against slope, speed, and load
-- [ ] BVAD Rev 2 values (a Rev 1-based calculator uses 0.816 kg O₂/day)
+- [x] O₂ and CO₂ baselines: 0.84 and 1.0 kg/person-day match NASA's ISS-era averages (BVAD Rev 2 table itself not checked)
+- [ ] CO₂ per O₂ at hard work: NASA uses 1.87 g/min CO₂ at 300 W; the sim gives 1.52 with the daily-average ratio
 - [ ] HiRISE elevation model coverage for the chosen area
 - [ ] Orbital spectral coverage for the science target
 - [ ] Positions, distances, and current status of Jezero hardware and debris
@@ -473,6 +476,7 @@ Check these before relying on them in the build:
 - [ ] How quickly real regional storms build
 - [ ] Thermal inertia as an indicator of loose sand
 - [ ] Dust devils clearing solar panels
-- [ ] Earth–Mars signal delay, and blue sunsets (stretch features)
+- [x] Earth–Mars signal delay: about 3–22 minutes one way
+- [ ] Blue sunsets (stretch feature)
 - [x] 2026 Project Submission and Judging guides, plus the challenge Resources tab (checked November 14)
 - [ ] Local Lead's view on pre-hackathon concept work

@@ -52,16 +52,16 @@ describe('simulate', () => {
     expect(warnings.find((w) => w.code === 'CO2')?.level).toBe('critical');
   });
 
-  it('with no heat leak, the evaporator carries all 450 W: 2.64 kg water in 4 h (§3.4 upper bound)', () => {
+  it('with no heat leak, the evaporator carries all 380 W: 2.23 kg water in 4 h (§3.4 upper bound)', () => {
     const { state } = simulate(FULL_SUIT, { ...env, tempC: 37 }, walk300W, 240);
-    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(2.64, 2);
+    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(2.23, 2); // 300 W body + 80 W electronics
     expect(state.coreTempC).toBeCloseTo(37, 2);
   });
 
   it('work hot: walking at −55 °C holds 37 °C by spending water', () => {
     const { state, warnings } = simulate(FULL_SUIT, env, walk300W, 240);
     expect(state.coreTempC).toBeCloseTo(37, 2);
-    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(0.86, 1); // 450 W in, ~304 W leaks out
+    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(0.88, 1); // 380 W in, ~230 W leaks out
     expect(warnings.some((w) => w.code === 'CORE_TEMP')).toBe(false);
   });
 
