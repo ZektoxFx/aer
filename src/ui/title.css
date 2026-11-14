@@ -442,3 +442,41 @@
 @keyframes spark { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.4); } }
 .phase-crash .rocket-fx, .phase-pov .rocket-fx, .phase-blur .rocket-fx { opacity: 0; animation: none; }
 
+/* ---- LOCAL DRAFT: reveal. After the eyes open, the camera pulls back from the visor to third person. ---- */
+/* Same animations as the pov phase, so they carry on (already finished) instead of restarting. */
+.phase-reveal .pov { opacity: 1; }
+.phase-reveal .pov-scene { animation: pov-focus 5.6s ease-out forwards; }
+.phase-reveal .eyelid.top { animation: lid-top 5.6s ease-in-out forwards; }
+.phase-reveal .eyelid.bottom { animation: lid-bottom 5.6s ease-in-out forwards; }
+.phase-reveal .pov-hud { animation: hud-on 5.6s steps(1) forwards; }
+.phase-reveal .earth-wrap { opacity: 0; }
+.phase-reveal .mars, .phase-reveal .rocket { opacity: 0; animation: none; }
+/* The video sits on the picture with the same end framing as the focus animation, so frame 1 lines up with it. */
+.pov-reveal {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;
+  opacity: 0; transform: scale(1.04) translateX(-1.5%);
+}
+.phase-reveal .pov-reveal, .phase-blur .pov-reveal { opacity: 1; }
+/* The helmet edge goes as the camera leaves the head. */
+.pov-visor { transition: opacity 0.9s ease-in; }
+.phase-reveal .pov-visor, .phase-blur .pov-visor { opacity: 0; }
+
+/* ---- LOCAL DRAFT: solar-system backdrop (AURIS layout: the Sun in the middle). ---- */
+.solar-system { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+/* The Earth group follows Earth's spot in the system (set by SolarSystem), so the launch starts there. */
+.solar-mode .earth-wrap { left: var(--earth-x, 50%); top: var(--earth-y, 38%); --globe: calc(var(--earth-r, 12px) * 2); }
+.solar-mode .satellite { display: none; }
+.solar-mode .launch-flash::before { left: -7vmin; top: -7vmin; width: 14vmin; height: 14vmin; }
+.solar-mode .launch-flash::after { left: -14vmin; width: 28vmin; }
+/* Leaving: the system falls away behind the rocket. */
+.phase-cruise .solar-system { animation: solar-away 2.6s ease-in forwards; }
+.phase-fault .solar-system, .phase-crash .solar-system, .phase-pov .solar-system, .phase-reveal .solar-system, .phase-blur .solar-system { opacity: 0; }
+@keyframes solar-away { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.7); } }
+.solar-mode.phase-cruise .rocket, .solar-mode.phase-cruise .rocket-fx { animation-name: rocket-launch-solar; }
+@keyframes rocket-launch-solar {
+  0% { opacity: 0; transform: translate(calc(var(--earth-x, 50vw) - 50vw), calc(var(--earth-y, 50vh) - 50vh)) rotate(40deg) scale(0.06); }
+  8% { opacity: 1; }
+  40% { opacity: 1; transform: translate(26vw, -30vh) rotate(62deg) scale(0.3); }
+  100% { opacity: 1; transform: translate(10vw, -5vh) rotate(55deg) scale(0.9); }
+}
+

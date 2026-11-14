@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EarthGlobe } from './EarthGlobe';
 import { MarsGlobe } from './MarsGlobe';
+import { SolarSystem } from './SolarSystem';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -12,14 +13,16 @@ export const TEAM_NAME = 'PerformativeLarper';
 /**
  * The intro, one continuous sequence:
  * title (Earth) → cruise (leaving Earth) → fault (engine alarm, tumbling) → crash (Mars rushes up, impact)
- * → pov (the astronaut comes to at the wreck) → blur (dissolves into the game).
+ * → pov (the astronaut comes to at the wreck) → reveal (LOCAL DRAFT: the camera pulls back to third person)
+ * → blur (dissolves into the game).
  */
-type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'blur';
+type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'reveal' | 'blur';
 const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
   cruise: { to: 'fault', ms: 2600 },
   fault: { to: 'crash', ms: 2200 },
   crash: { to: 'pov', ms: 2000 },
-  pov: { to: 'blur', ms: 5600 },
+  pov: { to: 'reveal', ms: 5600 },
+  reveal: { to: 'blur', ms: 3300 }, // LOCAL DRAFT: plays the 3 s pull-back video
 };
 const BLUR_MS = 1200;
 
@@ -37,10 +40,13 @@ const ORBITS: { orbit: Orbit; big?: boolean }[] = [
  * (04_3d_assets/aer_landed/build_landed.py). Switch back to 'photo' for the original AI image.
  */
 const LANDED_SCENES = {
-  lowpoly: { src: '/intro/landed_lowpoly.jpg', alt: 'Low-poly render of the crashed AER-1 cabin and descent core at Jezero, the astronaut beside them' },
+  lowpoly: { src: '/intro/landed_pov.jpg', alt: 'Through the visor: the crashed AER-1 cabin and wreckage at Jezero, low-poly render' },
   photo: { src: '/data/crashed_lander_aer1.jpg', alt: 'The crashed AER-1 lander on the Martian surface' },
 };
 const LANDED_SCENE = LANDED_SCENES.lowpoly;
+
+/** LOCAL DRAFT: title backdrop. 'solar' = Sun in the middle with Earth and Mars as the main pair; 'earth' = the big Earth globe. */
+const TITLE_BACKDROP: 'solar' | 'earth' = 'solar';
 
 /** LOCAL DRAFT: the globe radius (30vmin) over the old photo disc radius (49.5vmin). */
 const ORBIT_SCALE = 30 / 49.5;
@@ -61,6 +67,13 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const [panel, setPanel] = useState<Panel>('menu');
   const [quitTried, setQuitTried] = useState(false);
   const still = settings.reducedMotion;
+  const pullback = useRef<HTMLVideoElement>(null);
+
+  // LOCAL DRAFT: the camera pull-back (Blender render, first frame = the eyes-open view) plays in the reveal phase.
+  useEffect(() => {
+    const v = pullback.current;
+    if (phase === 'reveal' && v) { v.currentTime = 0; v.play().catch(() => {}); }
+  }, [phase]);
 
   useEffect(() => {
     const step = NEXT[phase];
@@ -93,13 +106,14 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const toggle = (k: keyof Settings) => onSettings({ ...settings, [k]: !settings[k] });
 
   return (
-    <div className={`intro phase-${phase}${still ? ' still' : ''}`} onClick={skip} role="dialog" aria-label="AER">
+    <div className={`intro phase-${phase}${still ? ' still' : ''}${TITLE_BACKDROP === 'solar' ? ' solar-mode' : ''}`} onClick={skip} role="dialog" aria-label="AER">
       {/* Space: Earth with satellites, the rocket, Mars */}
       <div className="space">
         <div className="stars" aria-hidden="true" />
+        {TITLE_BACKDROP === 'solar' && <SolarSystem frozen={phase !== 'title'} still={still} />}
         <div className="earth-wrap" aria-hidden="true">
           {/* LOCAL DRAFT: 3D globe (EarthGlobe) instead of the flat photo + CSS night/atmosphere layers. */}
-          <EarthGlobe still={still} />
+          {TITLE_BACKDROP === 'earth' && <EarthGlobe still={still} />}
           {/* LOCAL DRAFT: the launch flare where the rocket leaves Earth. */}
           <span className="launch-flash" />
           {/* LOCAL DRAFT: Earth is smaller and centred now, so the orbits shrink with it (old disc radius 49.5vmin). */}
@@ -121,8 +135,11 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
       </div>
 
       {/* POV: the astronaut wakes at the wreck */}
-      <div className="pov" aria-hidden={phase !== 'pov'}>
+      <div className="pov" aria-hidden={phase !== 'pov' && phase !== 'reveal'}>
         <img className="pov-scene" src={LANDED_SCENE.src} alt={LANDED_SCENE.alt} />
+        {LANDED_SCENE === LANDED_SCENES.lowpoly && (
+          <video ref={pullback} className="pov-reveal" src="/intro/landed_pullback.mp4" muted playsInline preload="auto" aria-hidden="true" />
+        )}
         {/* LOCAL DRAFT: dust drifting across the scene (CSS only; the photo and timing are unchanged). */}
         <div className="pov-dust" />
         <div className="pov-visor" />
