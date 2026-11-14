@@ -75,6 +75,10 @@ export function Hud({ data }: { data: GameData }) {
   };
 
   return (
+    <>
+    <p className="hud-note">
+      SIMULATED ASTRONAUT · REAL ARCHIVED NASA WEATHER (PERSEVERANCE MEDA, MEDA SOL {s.weather.sol}) · NOT LIVE
+    </p>
     <div className={critical ? 'visor critical-frame' : 'visor'}>
       <header className="visor-top">
         <span>DAY {clock.sol} · {clock.time} LTST · MEDA SOL {s.weather.sol}</span>
@@ -147,5 +151,6 @@ export function Hud({ data }: { data: GameData }) {
         <p className="source dim">{dataCaption(pack, s.weather)}</p>
       </footer>
     </div>
+    </>
   );
 }

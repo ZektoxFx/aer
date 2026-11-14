@@ -8,6 +8,7 @@
 .view-nav button[aria-pressed='true'] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
 .view-nav button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .dim { color: var(--dim); }
+.hud-note { margin: 0 0 10px; color: var(--dim); font-size: 12px; letter-spacing: 0.08em; }
 
 .visor {
   display: grid; gap: 12px 24px;
