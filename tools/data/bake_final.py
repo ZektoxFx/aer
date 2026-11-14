@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WORK, RAW = ROOT / "work", ROOT / "raw"
 sys.path.insert(0, str(Path(__file__).parent))
 import solar_flux  # noqa: E402
+from mars_ls import ls_for_sol  # noqa: E402
 
 MARS_R = 3396190.0
 
@@ -57,7 +58,9 @@ def main(repo):
     sols = []
     for r in merged["sols"]:
         s = {
-            "sol": r["sol"], "ls": r["ls"],
+            # Ls of the sol itself: the Mastcam-Z record where that sol was measured, otherwise
+            # Allison & McEwen 2000 (tools/data/mars_ls.py). r["ls"] was the Ls of the tau sol.
+            "sol": r["sol"], "ls": round(ls_by_sol[r["sol"]], 1) if r["sol"] in ls_by_sol else round(ls_for_sol(r["sol"]), 1),
             "tau": r["tau"], "tauFromSol": r["tauSol"],
             "pressurePa": r.get("pressurePa"), "airTempC": r.get("airTempC"), "windMS": r.get("windMS"),
             "hourly": {k.replace("_hourly", ""): r[k] for k in r if k.endswith("_hourly")},
@@ -173,7 +176,7 @@ def main(repo):
 
     def sol_entry(sol, label, scenario, note):
         w = next(x for x in sols if x["sol"] == sol)
-        return {"sol": sol, "pressureKPa": round(w["pressurePa"][1] / 1000, 3), "tempMinC": w["airTempC"][0],
+        return {"sol": sol, "ls": w["ls"], "pressureKPa": round(w["pressurePa"][1] / 1000, 3), "tempMinC": w["airTempC"][0],
                 "tempMaxC": w["airTempC"][2], "windMS": (w["windMS"] or [None])[0], "tau": w["tau"],
                 "label": label, "scenario": scenario, "notes": note}
 

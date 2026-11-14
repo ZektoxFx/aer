@@ -4,6 +4,7 @@
 /** One sol of Perseverance MEDA weather, already averaged by the Data role. */
 export interface SolWeather {
   sol: number;          // Perseverance mission sol number
+  ls?: number;          // solar longitude, degrees: the Mars season (sun height and distance); set in real packs
   pressureKPa: number;  // mean surface pressure
   tempMinC: number;
   tempMaxC: number;

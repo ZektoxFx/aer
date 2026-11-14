@@ -61,7 +61,7 @@ export interface WeatherFile {
 
 export interface WeatherSol {
   sol: number;
-  ls: number;                 // solar longitude, degrees (season)
+  ls: number;                 // solar longitude of this sol, degrees (season)
   tau: number;                // Mastcam-Z dust optical depth, 630 nm
   tauFromSol: number;         // the sol the tau was measured on (nearest available)
   pressurePa: [number, number, number] | null;   // lowest, mean, highest of all 1 Hz readings

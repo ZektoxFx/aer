@@ -344,6 +344,15 @@ SCIENCE_TARGET = {
 OLD_WIND_NOTE = " windMS=0 means no data (sensor damaged), not calm air."
 
 
+def set_pack_ls(pack, weather):
+    """Copy each scenario sol's Ls (Mars season) from weather.json, so the game needs only the pack for the sun.
+    Placed right after `sol`. Asked for in issue #16."""
+    ls = {x["sol"]: x["ls"] for x in weather["sols"]}
+    for i, s in enumerate(pack["sols"]):
+        rest = {k: v for k, v in s.items() if k not in ("sol", "ls")}
+        pack["sols"][i] = {"sol": s["sol"], "ls": ls[s["sol"]], **rest}
+
+
 def fill_missing_wind(pack, weather):
     """Scenario sols after the sol 313 storm have no wind data. A 0 would read as calm air in the UI and
     the suit sim, so fill with the median daily mean wind of the measured sols and say so in the note."""
@@ -389,7 +398,9 @@ def main(repo):
     pack = json.loads(pack_path.read_text(encoding="utf-8"))
     pack["fieldManualPages"] = MANUAL_PAGES
     pack["rockFormations"] = ROCKS
-    fill_missing_wind(pack, json.loads((out / "weather.json").read_text(encoding="utf-8")))
+    weather = json.loads((out / "weather.json").read_text(encoding="utf-8"))
+    fill_missing_wind(pack, weather)
+    set_pack_ls(pack, weather)
     pack_path.write_text(json.dumps(pack, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print("content.json:", len(SUPPLIES), "supplies,", len(ROCKET_PIECES), "pieces,", len(RECIPES), "recipes,",
           len(HISTORY), "history cards; manual pages:", len(MANUAL_PAGES))
