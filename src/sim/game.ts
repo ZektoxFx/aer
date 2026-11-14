@@ -1,7 +1,7 @@
 import type { SunlightTable } from '../data/files';
 import { sunElevationDeg as nasaSunElevationDeg, solarWm2 as nasaSolarWm2 } from '../data/sunlight';
 import type { SolWeather } from '../data/types';
-import { CABIN_POWER, approxSolarWm2, powerStep } from './power';
+import { BASE_LOADS, CABIN_POWER, approxSolarWm2, powerStep } from './power';
 import { FULL_SUIT, simulate } from './simulate';
 import { MIN_PER_SOL, conditionsAt, shelterEnvironment, soilingAfter, stormPhase, type SolarFn } from './storm';
 import type { Activity, ClockSpeed, Environment, Forecast, GameState, SuitState, TickResult } from './types';
@@ -11,12 +11,24 @@ export const SPEED_X: Record<ClockSpeed, number> = { paused: 0, traverse: 60, st
 
 const REST: Activity = { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 
-/** A new run: in the cabin at 08:00 local time on sol 0, with a full suit. Pass `sky` to use NASA sunlight data. */
+/** LiOH left in the canister the crash leaves behind (Sol 1, §6.2): ~4 h at 300 W, so a round trip turns back by ~2 h. */
+export const CRASH_CANISTER_LIOH_KG = 0.4;
+
+/**
+ * Suit at the start of a scenario. The Scrubber Saturation scenario starts with the partly used canister;
+ * every other scenario starts full. Keyed on the pack's scenario name, since that is what Data bakes per sol.
+ */
+export function startingSuit(weather: SolWeather): SuitState {
+  const scrubberScenario = /scrubber/i.test(weather.scenario ?? '');
+  return { ...FULL_SUIT, liohKg: scrubberScenario ? CRASH_CANISTER_LIOH_KG : FULL_SUIT.liohKg };
+}
+
+/** A new run: in the cabin at 08:00 local time on sol 0. Pass `sky` to use NASA sunlight data. */
 export function newGame(weather: SolWeather, sky?: GameState['sky']): GameState {
   const clockMin = (8 / 24) * MIN_PER_SOL;
   return {
     clockMin, weather, activity: REST, shelter: 'cabin', power: CABIN_POWER, loads: [], storm: null, sky,
-    suit: { ...FULL_SUIT, elapsedMin: clockMin },
+    suit: { ...startingSuit(weather), elapsedMin: clockMin },
   };
 }
 
@@ -87,13 +99,32 @@ export function tick(s: GameState, realSeconds: number, paused = false): TickRes
   const speed: ClockSpeed = paused ? 'paused' : pickSpeed(s, env);
   const gameMin = (realSeconds / 60) * SPEED_X[speed];
 
-  const suit = simulate(s.suit, shelterEnvironment(env, s.shelter), s.activity, gameMin);
-  const power = powerStep(s.power, env, s.loads, gameMin);
+  const suitEnv = shelterEnvironment(env, s.shelter);
+  const suit = simulate(s.suit, suitEnv, s.activity, gameMin);
+
+  // In the cabin the suit plugs into cabin power. The charger refills what the suit's electronics used, up to its
+  // rating, and goes first in the load list so it is the last load cut when the cabin runs short.
+  const docked = s.shelter === 'cabin';
+  const charger = BASE_LOADS.suitCharger;
+  const chargerW = docked && gameMin > 0
+    ? Math.min(charger.watts, ((FULL_SUIT.batteryWh - suit.state.batteryWh) * 60) / gameMin)
+    : 0;
+  const loads = docked
+    ? [...(chargerW > 0 ? [{ id: charger.id, watts: chargerW }] : []), ...s.loads.filter((l) => l.id !== charger.id)]
+    : s.loads;
+  const power = powerStep(s.power, env, loads, gameMin);
   const soiling = soilingAfter(power.state.soiling, env.tau, gameMin);
 
+  const chargedWh = docked ? (power.deliveredWh[charger.id] ?? 0) : 0;
+  const suitState = { ...suit.state, batteryWh: Math.min(FULL_SUIT.batteryWh, suit.state.batteryWh + chargedWh) };
+  const warnings = docked ? simulate(suitState, suitEnv, s.activity, 0).warnings : suit.warnings;
+  const fc = forecast(suitState, suitEnv, s.activity);
+  const charging = docked && !power.shed.includes(charger.id);
+
   return {
-    state: { ...s, clockMin: s.clockMin + gameMin, suit: suit.state, power: { ...power.state, soiling } },
-    env, speed, warnings: suit.warnings, power,
+    state: { ...s, clockMin: s.clockMin + gameMin, suit: suitState, power: { ...power.state, soiling } },
+    env, speed, warnings, power,
+    forecast: charging ? { ...fc, batteryMin: Infinity } : fc,
   };
 }
 

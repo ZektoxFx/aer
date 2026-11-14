@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { SPEED_X, forecast, newGame, tick } from '../sim/game';
+import { SPEED_X, newGame, tick } from '../sim/game';
 import { FULL_SUIT } from '../sim/simulate';
-import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
+import { makeStorm, stormCountdownMin, stormPhase } from '../sim/storm';
 import type { Activity, Shelter, TickResult } from '../sim/types';
 import { dataCaption, skyFor, type GameData } from './gameData';
 import { CONSUMABLE_LABEL, clockLabel, firstToRunOut, formatMinutes, SPEED_LABEL, type Consumable } from './hudFormat';
@@ -94,7 +94,7 @@ export function Hud({ data }: { data: GameData }) {
   };
 
   const s = frame.state;
-  const fc = forecast(s.suit, shelterEnvironment(frame.env, s.shelter), s.activity);
+  const fc = frame.forecast; // from the sim, so it counts the suit charging in the cabin
   const hero = firstToRunOut(fc);
   const clock = clockLabel(s.clockMin);
   const critical = frame.warnings.some((w) => w.level === 'critical');
