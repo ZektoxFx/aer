@@ -43,6 +43,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [placeKey, setPlaceKey] = useState(0);
   const [suitOpen, setSuitOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lookLocked, setLookLocked] = useState(false);
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
@@ -362,6 +363,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <World3D
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
+          onLookChange={setLookLocked}
         />
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
@@ -434,7 +436,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           </span>
           <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
         </footer>
-        <p className="v-hint">WASD move · SHIFT run · Q/E or drag to look · scroll to zoom · SPACE pause</p>
+        <p className="v-hint">
+          {lookLocked
+            ? 'MOUSE LOOK ON · WASD move · SHIFT run · scroll to zoom · ESC frees the cursor'
+            : 'CLICK THE VIEW TO LOOK AROUND WITH THE MOUSE · WASD move · SHIFT run · SPACE pause'}
+        </p>
         <p className="v-credit">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</p>
 
         {menuOpen && (

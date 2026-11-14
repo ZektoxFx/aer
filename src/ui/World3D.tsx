@@ -23,7 +23,15 @@ export interface World3DProps {
   sunElevationDeg: number;
   /** Called every frame with the astronaut's movement. */
   onMove: (m: MoveResult) => void;
+  /** Called when mouse look turns on (cursor captured) or off. */
+  onLookChange?: (locked: boolean) => void;
 }
+
+/** Mouse-look sensitivity, radians per pixel. */
+const LOOK_SENS = 0.0022;
+const PITCH_MIN = 0.06, PITCH_MAX = 1.25;
+/** Fraction of the way to close per frame for a smoothing rate (per second), whatever the frame rate. */
+const ease = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
 
 const keyInput = (keys: Set<string>): MoveInput => ({
   forward: (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0),
@@ -135,9 +143,17 @@ export function World3D(props: World3DProps) {
     const start = { x: base.x + 8, y: base.y + 6 };
     let me: Pt = start;
     let heading = 0;
+    let shownHeading = 0; // the body turns smoothly toward `heading`
     let phase = 0;
     let moveBlend = 0;
-    let yaw = 0, pitch = 0.32, dist = 16;
+    // Camera: targets set by the mouse/keys, smoothed values used for drawing.
+    let yawT = 0, pitchT = 0.32, distT = 16;
+    let yaw = yawT, pitch = pitchT, dist = distT;
+    let camPos: THREE.Vector3 | null = null;
+    const lookAt = new THREE.Vector3();
+    // Walking eases in and out; the last direction is kept while slowing down.
+    let ramp = 0;
+    let lastInput: MoveInput = { forward: 0, right: 0, run: false };
 
     // ---- Input ----
     const keys = new Set<string>();
@@ -152,23 +168,40 @@ export function World3D(props: World3DProps) {
     };
     const up = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
     const blur = () => keys.clear();
+    // Mouse look: click the view to capture the cursor, then moving the mouse turns the camera (Esc frees it).
+    // Dragging also works, for browsers or frames that don't allow capturing the cursor.
+    const canvas = renderer.domElement;
+    const locked = () => document.pointerLockElement === canvas;
+    const turn = (dx: number, dy: number) => {
+      yawT += dx * LOOK_SENS;
+      pitchT = Math.min(PITCH_MAX, Math.max(PITCH_MIN, pitchT + dy * LOOK_SENS * 0.8));
+    };
     let dragging = false, lastX = 0, lastY = 0;
-    const pdown = (e: PointerEvent) => { dragging = true; lastX = e.clientX; lastY = e.clientY; renderer.domElement.setPointerCapture(e.pointerId); };
+    const pdown = (e: PointerEvent) => {
+      if (locked()) return;
+      dragging = true; lastX = e.clientX; lastY = e.clientY;
+      try {
+        const req = canvas.requestPointerLock?.() as unknown;
+        if (req instanceof Promise) req.catch(() => {});
+      } catch { /* not allowed here: dragging still works */ }
+    };
     const pmove = (e: PointerEvent) => {
+      if (locked()) return turn(e.movementX, e.movementY);
       if (!dragging) return;
-      yaw += (e.clientX - lastX) * 0.005;
-      pitch = Math.min(1.2, Math.max(0.08, pitch + (e.clientY - lastY) * 0.004));
+      turn((e.clientX - lastX) * 2.2, (e.clientY - lastY) * 2.2);
       lastX = e.clientX; lastY = e.clientY;
     };
     const pup = () => { dragging = false; };
-    const wheel = (e: WheelEvent) => { e.preventDefault(); dist = Math.min(80, Math.max(5, dist * (1 + Math.sign(e.deltaY) * 0.1))); };
+    const lockChange = () => { dragging = false; live.current.onLookChange?.(locked()); };
+    const wheel = (e: WheelEvent) => { e.preventDefault(); distT = Math.min(80, Math.max(4, distT * (1 + Math.sign(e.deltaY) * 0.12))); };
+    document.addEventListener('pointerlockchange', lockChange);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
-    renderer.domElement.addEventListener('pointerdown', pdown);
-    renderer.domElement.addEventListener('pointermove', pmove);
-    renderer.domElement.addEventListener('pointerup', pup);
-    renderer.domElement.addEventListener('wheel', wheel, { passive: false });
+    canvas.addEventListener('pointerdown', pdown);
+    window.addEventListener('pointermove', pmove);
+    window.addEventListener('pointerup', pup);
+    canvas.addEventListener('wheel', wheel, { passive: false });
 
     // ---- Size ----
     const resize = () => {
@@ -188,9 +221,13 @@ export function World3D(props: World3DProps) {
       last = now;
       const P = live.current;
 
-      if (placeRef.current !== P.placeKey) { placeRef.current = P.placeKey; me = start; }
-      if (keys.has('q')) yaw -= dt * 1.6;
-      if (keys.has('e')) yaw += dt * 1.6;
+      if (placeRef.current !== P.placeKey) { placeRef.current = P.placeKey; me = start; camPos = null; ramp = 0; }
+      if (keys.has('q')) yawT -= dt * 1.8;
+      if (keys.has('e')) yawT += dt * 1.8;
+      // Smooth the camera toward where the mouse and keys point it.
+      yaw += (yawT - yaw) * ease(14, dt);
+      pitch += (pitchT - pitch) * ease(14, dt);
+      dist += (distT - dist) * ease(8, dt);
 
       let m: MoveResult;
       if (P.followPos) {
@@ -199,28 +236,41 @@ export function World3D(props: World3DProps) {
         const moving = Math.hypot(dx, dy) > 0.05;
         if (moving) heading = Math.atan2(dx, -dy);
         me = P.followPos;
+        ramp = 0;
         m = { pos: me, moving, speedMS: moving ? 1 : 0, slopeDeg: 0, heading };
       } else {
-        m = moveStep(me, heading, keyInput(keys), yaw, dt * P.timeScale, elev, area);
+        // Ease into and out of walking instead of starting and stopping dead.
+        const raw = keyInput(keys);
+        const pressing = raw.forward !== 0 || raw.right !== 0;
+        if (pressing) lastInput = raw;
+        ramp += ((pressing ? 1 : 0) - ramp) * ease(pressing ? 7 : 10, dt);
+        if (!pressing && ramp < 0.03) ramp = 0;
+        const input = ramp > 0 ? lastInput : { forward: 0, right: 0, run: false };
+        m = moveStep(me, heading, input, yaw, dt * P.timeScale * ramp, elev, area);
         me = m.pos; heading = m.heading;
       }
       P.onMove(m);
 
-      // Pose and place the astronaut.
-      moveBlend += ((m.moving ? 1 : 0) - moveBlend) * Math.min(1, dt * 8);
-      if (m.moving) phase += dt * (m.speedMS > 1.5 ? 13 : 8);
+      // Pose and place the astronaut; the body turns smoothly to face the way it walks.
+      moveBlend += ((m.moving ? 1 : 0) - moveBlend) * ease(8, dt);
+      if (m.moving) phase += dt * (m.speedMS > 1.5 ? 13 : 8) * Math.max(0.4, ramp || 1);
       astro.pose(phase, moveBlend, now / 1000);
       body.position.copy(toWorld(me));
-      body.rotation.y = -heading;
+      const turnBy = Math.atan2(Math.sin(heading - shownHeading), Math.cos(heading - shownHeading));
+      shownHeading += turnBy * ease(10, dt);
+      body.rotation.y = -shownHeading;
 
-      // Camera behind and above, kept above the ground.
+      // Camera: glide to a point behind and above, kept above the ground.
       const target = body.position.clone().add(new THREE.Vector3(0, 1.4, 0));
       const back = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-      const cam = target.clone().addScaledVector(back, dist);
-      const camGround = groundY({ x: cam.x + area.widthM / 2, y: cam.z + area.heightM / 2 }) + 1.5;
-      if (cam.y < camGround) cam.y = camGround;
-      camera.position.copy(cam);
-      camera.lookAt(target);
+      const want = target.clone().addScaledVector(back, dist);
+      if (!camPos) { camPos = want.clone(); lookAt.copy(target); }
+      camPos.lerp(want, ease(10, dt));
+      const camGround = groundY({ x: camPos.x + area.widthM / 2, y: camPos.z + area.heightM / 2 }) + 1.2;
+      if (camPos.y < camGround) camPos.y = camGround;
+      lookAt.lerp(target, ease(16, dt));
+      camera.position.copy(camPos);
+      camera.lookAt(lookAt);
 
       // Sun, night and dust: the sky dims at night and closes in with dust.
       const elevRad = (Math.max(-10, P.sunElevationDeg) * Math.PI) / 180;
@@ -262,6 +312,10 @@ export function World3D(props: World3DProps) {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', blur);
+      window.removeEventListener('pointermove', pmove);
+      window.removeEventListener('pointerup', pup);
+      document.removeEventListener('pointerlockchange', lockChange);
+      if (locked()) document.exitPointerLock();
       renderer.dispose();
       geo.dispose();
       tex.dispose();
