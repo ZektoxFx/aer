@@ -14,8 +14,8 @@ describe('settings', () => {
 
   it('round-trips through storage', () => {
     const st = memoryStorage();
-    saveSettings({ skipIntro: true, reducedMotion: false, largeText: true }, st);
-    expect(loadSettings(st)).toEqual({ skipIntro: true, reducedMotion: false, largeText: true });
+    saveSettings({ skipIntro: true, reducedMotion: false, largeText: true, sound: false }, st);
+    expect(loadSettings(st)).toEqual({ skipIntro: true, reducedMotion: false, largeText: true, sound: false });
   });
 
   it('ignores malformed or wrongly typed values', () => {
@@ -23,6 +23,11 @@ describe('settings', () => {
     expect(loadSettings(bad)).toEqual(DEFAULT_SETTINGS);
     const typed = { getItem: () => '{"skipIntro":"yes","largeText":true,"extra":1}' };
     expect(loadSettings(typed)).toEqual({ ...DEFAULT_SETTINGS, largeText: true });
+  });
+
+  it('keeps sound on for players who saved settings before the sound option existed', () => {
+    const old = { getItem: () => '{"skipIntro":true,"reducedMotion":false,"largeText":false}' };
+    expect(loadSettings(old).sound).toBe(true);
   });
 
   it('survives storage that throws', () => {

@@ -1,4 +1,4 @@
-/* Intro: Earth title → cruise → engine fault → crash → astronaut POV → blur into the game.
+/* Intro: Earth title → cruise → meteor strike → engine fault (radio) → crash → hatch opens (radio) → blur into the game.
    Colors come only from the :root variables in src/index.css (the intro uses the --mars-*, --metal*, --sat-panel,
    --earth-glow, --space and --alarm set). */
 
@@ -136,33 +136,95 @@
 .title-meta p { margin: 0; }
 .intro-skip { position: absolute; bottom: 16px; right: 16px; margin: 0; z-index: 6; color: var(--mars-sky); font-size: 11px; letter-spacing: 0.12em; }
 
-/* ---------- POV ---------- */
-.pov { position: absolute; inset: 0; opacity: 0; pointer-events: none; z-index: 4; background: var(--space); }
-.pov-scene { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* ---------- Meteor ---------- */
+/* The streak flies in from the top right to the rocket (which sits at 60% / 45% at the end of the cruise). */
+.meteor {
+  position: absolute; left: 60%; top: 45%; width: 26vmin; height: 5px; margin-top: -2px; opacity: 0;
+  transform-origin: 0 50%; border-radius: 3px; pointer-events: none;
+  background: linear-gradient(to right, var(--mars-dust), var(--warning) 12%, color-mix(in srgb, var(--alarm) 50%, transparent) 40%, transparent);
+  box-shadow: 0 0 14px 2px var(--warning);
+}
+.meteor-hit {
+  position: absolute; left: 60%; top: 45%; width: 30vmin; height: 30vmin; margin: -15vmin 0 0 -15vmin; border-radius: 50%;
+  background: radial-gradient(circle, var(--mars-dust) 0%, var(--warning) 22%, color-mix(in srgb, var(--alarm) 60%, transparent) 45%, transparent 70%);
+  opacity: 0; pointer-events: none;
+}
+
+/* ---------- Door: inside the wrecked cabin, the hatch opens onto Jezero ---------- */
+.door { position: absolute; inset: 0; opacity: 0; pointer-events: none; z-index: 4; background: var(--space); overflow: hidden; }
+/* Two real Perseverance frames side by side make a wide view to look around in. */
+.door-view {
+  position: absolute; left: 50%; top: calc(50% - 57.5vh); height: 115vh; display: flex;
+  transform: translateX(-130vh); will-change: transform, filter;
+}
+.door-view img { height: 100%; width: auto; display: block; user-select: none; }
+/* Crop the camera frames' thin borders; the second photo fades in over the first where they overlap. */
+.door-view img:first-child { clip-path: inset(0.8% 1.4% 0 1.8%); }
+.door-view img + img {
+  margin-left: -14vh;
+  clip-path: inset(0.8% 1.4% 0 1.8%);
+  -webkit-mask-image: linear-gradient(to right, transparent 1.8%, black 7%);
+  mask-image: linear-gradient(to right, transparent 1.8%, black 7%);
+}
+.door-glare { position: absolute; inset: 0; background: var(--mars-dust); opacity: 0; mix-blend-mode: screen; }
+/* The cabin: the hatch doors, and the dark wall on top with the opening in the middle (the doors slide into it). */
+.cabin { position: absolute; inset: 0; transform-origin: 50% 52%; }
+.cabin-wall {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 34% 40% at 50% 52%, transparent 96%, var(--mars-shadow) 97%, var(--space) 140%);
+}
+.hatch {
+  position: absolute; top: 12%; bottom: 8%; width: 34%;
+  background:
+    repeating-linear-gradient(135deg, var(--mars-rust) 0 10px, var(--space) 10px 20px) bottom / 100% 6% no-repeat,
+    linear-gradient(var(--metal-dark), var(--mars-shadow));
+  border: 2px solid var(--space);
+  display: grid; place-items: center;
+}
+.hatch span { color: var(--mars-sky); font-size: clamp(11px, 1.8vw, 16px); letter-spacing: 0.3em; opacity: 0.6; }
+.hatch.left { right: 50%; border-radius: 40% 0 0 40% / 50% 0 0 50%; }
+.hatch.right { left: 50%; border-radius: 0 40% 40% 0 / 0 50% 50% 0; }
+.cabin-light { position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, var(--alarm), transparent 60%); opacity: 0; mix-blend-mode: screen; }
+.hatch-msg {
+  position: absolute; top: 14%; left: 0; right: 0; margin: 0; text-align: center; z-index: 2;
+  color: var(--warning); font-size: clamp(11px, 2vw, 15px); letter-spacing: 0.2em; opacity: 0;
+}
 /* Helmet visor: dark curved edges and a faint reflection. */
 .pov-visor {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 75% 70% at 50% 50%, transparent 55%, var(--space) 100%),
-    linear-gradient(120deg, transparent 20%, var(--mars-dust) 21%, transparent 32%);
+    radial-gradient(ellipse 85% 80% at 50% 50%, transparent 40%, color-mix(in srgb, var(--space) 25%, transparent) 68%, var(--space) 108%),
+    linear-gradient(120deg, transparent 20%, color-mix(in srgb, var(--mars-dust) 35%, transparent) 21%, transparent 32%);
   opacity: 0.85;
 }
-.eyelid { position: absolute; left: -5%; right: -5%; height: 52%; background: var(--space); }
-.eyelid.top { top: 0; border-radius: 0 0 50% 50%; }
-.eyelid.bottom { bottom: 0; border-radius: 50% 50% 0 0; }
 .pov-hud {
-  position: absolute; left: 6%; bottom: 10%; z-index: 1; padding: 8px 12px;
+  position: absolute; left: 4%; top: 7%; z-index: 1; padding: 8px 12px; border-radius: 8px;
   background: color-mix(in srgb, var(--space) 70%, transparent);
   color: var(--mars-dust); font-size: clamp(10px, 1.6vw, 13px); letter-spacing: 0.1em;
   text-shadow: 0 1px 6px var(--space); opacity: 0;
 }
 .pov-hud p { margin: 0 0 2px; }
 .pov-hud .alert { color: var(--alarm); }
-/* The source image's watermark can be cropped by the pan, so the label is repeated here (AI-image rule). */
-.ai-mark {
+.pov-hud .goal { color: var(--warning); margin-top: 6px; }
+.door-credit {
   position: absolute; right: 12px; top: 10px; margin: 0; z-index: 2;
-  color: var(--mars-dust); font-size: 10px; letter-spacing: 0.08em; opacity: 0.85; text-shadow: 0 1px 4px var(--space);
+  color: var(--mars-dust); font-size: 10px; letter-spacing: 0.06em; opacity: 0; text-shadow: 0 1px 4px var(--space);
 }
+
+/* ---------- Radio caption ---------- */
+.radio {
+  position: absolute; left: 50%; bottom: 9%; z-index: 7; transform: translateX(-50%);
+  width: min(640px, calc(100vw - 32px)); padding: 10px 14px;
+  background: color-mix(in srgb, var(--space) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent); border-radius: 10px;
+  text-shadow: none; animation: radio-in 0.25s ease-out;
+}
+.radio-from { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; color: var(--warning); font-size: 11px; letter-spacing: 0.16em; }
+.radio-text { margin: 0; color: var(--mars-dust); font-size: clamp(13px, 2vw, 16px); line-height: 1.45; }
+.radio-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.radio-bars i { width: 3px; background: var(--warning); animation: radio-bar 0.5s ease-in-out infinite alternate; }
+.radio-bars i:nth-child(1) { height: 30%; } .radio-bars i:nth-child(2) { height: 60%; animation-delay: 0.12s; }
+.radio-bars i:nth-child(3) { height: 90%; animation-delay: 0.24s; } .radio-bars i:nth-child(4) { height: 50%; animation-delay: 0.36s; }
 
 /* ---------- Timeline ---------- */
 /* cruise: title fades, Earth and its satellites fall away, the rocket climbs out, Mars appears far off. */
@@ -173,11 +235,21 @@
 .phase-cruise .stars { animation: stars-streak 2.6s ease-in forwards; }
 .phase-cruise .mars { animation: mars-appear 2.6s ease-in forwards; }
 
-/* fault: alarm wash pulses, the rocket tumbles and smokes, Mars swells. */
-.phase-fault .earth-wrap, .phase-crash .earth-wrap, .phase-pov .earth-wrap, .phase-blur .earth-wrap { opacity: 0; }
+/* meteor: everything holds where the cruise left it; a meteor streaks in and hits the rocket. */
+.phase-meteor .earth-wrap { transform: translate(-60vw, 20vh) scale(0.12); }
+.phase-meteor .stars { transform: scale(1.6); opacity: 0.25; animation: none; }
+.phase-meteor .mars { opacity: 1; transform: translate(30vw, -20vh) scale(0.14); }
+.phase-meteor .rocket { opacity: 1; animation: rocket-hit 1.7s ease-out forwards; }
+.phase-meteor .meteor { animation: meteor-in 1.1s cubic-bezier(0.5, 0, 1, 1) forwards; }
+.phase-meteor .meteor-hit { animation: meteor-hit 0.6s ease-out 1.08s forwards; }
+.phase-meteor .space { animation: shake 0.45s linear 1.1s; }
+.phase-meteor .rocket-smoke { animation: smoke 0.45s ease-out 1.15s infinite; }
+
+/* fault: alarm wash pulses, the rocket tumbles and smokes, Mars swells (then holds while Control talks). */
+.phase-fault .earth-wrap, .phase-crash .earth-wrap, .phase-door .earth-wrap, .phase-blur .earth-wrap { opacity: 0; }
 .phase-fault .stars, .phase-crash .stars { opacity: 0.2; animation: none; }
-.phase-fault .mars { opacity: 1; animation: mars-near 2.2s ease-in forwards; }
-.phase-fault .rocket { opacity: 1; animation: rocket-tumble 2.2s linear forwards; }
+.phase-fault .mars { opacity: 1; animation: mars-near 5s ease-in-out forwards; }
+.phase-fault .rocket { opacity: 1; animation: rocket-tumble 5s ease-out forwards; }
 .phase-fault .rocket-smoke { animation: smoke 0.45s ease-out infinite; }
 .phase-fault .alarm-wash { animation: alarm 0.5s ease-in-out infinite; }
 .phase-fault .space { animation: jitter 0.12s linear infinite; }
@@ -189,13 +261,19 @@
 .phase-crash .impact { animation: impact 0.7s ease-out 1.25s forwards; }
 .phase-crash .space { animation: shake 0.5s linear 1.25s; }
 
-/* pov: black, eyes open slowly and blink, the scene comes into focus, the suit HUD flickers on. */
-.phase-pov .pov, .phase-blur .pov { opacity: 1; }
-.phase-pov .pov-scene, .phase-blur .pov-scene { animation: pov-focus 5.6s ease-out forwards; }
-.phase-pov .eyelid.top, .phase-blur .eyelid.top { animation: lid-top 5.6s ease-in-out forwards; }
-.phase-pov .eyelid.bottom, .phase-blur .eyelid.bottom { animation: lid-bottom 5.6s ease-in-out forwards; }
-.phase-pov .pov-hud, .phase-blur .pov-hud { animation: hud-on 5.6s steps(1) forwards; }
-.phase-pov .mars, .phase-blur .mars, .phase-pov .rocket, .phase-blur .rocket { opacity: 0; animation: none; }
+/* door: dark cabin under a red emergency light; the hatch releases and slides open, light floods in, the astronaut
+   steps through and looks around Jezero (left, then right across the plain); the suit HUD flickers on. */
+.phase-door .door, .phase-blur .door { opacity: 1; }
+.phase-door .cabin-light { animation: emergency 1.1s ease-in-out 3 alternate; }
+.phase-door .hatch-msg { animation: hatch-msg 3s steps(1) forwards; }
+.phase-door .hatch.left, .phase-blur .hatch.left { animation: hatch-left 2s cubic-bezier(0.6, 0, 0.3, 1) 1.25s forwards; }
+.phase-door .hatch.right, .phase-blur .hatch.right { animation: hatch-right 2s cubic-bezier(0.6, 0, 0.3, 1) 1.25s forwards; }
+.phase-door .door-glare { animation: glare 3.2s ease-out 1.4s forwards; }
+.phase-door .cabin, .phase-blur .cabin { animation: step-out 2.4s ease-in-out 3.3s forwards; }
+.phase-door .door-view, .phase-blur .door-view { animation: look-around 15s ease-in-out forwards; }
+.phase-door .pov-hud, .phase-blur .pov-hud { animation: hud-on 7s steps(1) forwards; }
+.phase-door .door-credit, .phase-blur .door-credit { animation: fade-in 0.6s ease-out 4s forwards; }
+.phase-door .mars, .phase-blur .mars, .phase-door .rocket, .phase-blur .rocket { opacity: 0; animation: none; }
 
 /* blur: everything dissolves into the game underneath. */
 .phase-blur { animation: blur-out 1.2s ease-in forwards; pointer-events: none; }
@@ -213,7 +291,7 @@
   0% { opacity: 0; transform: translate(60vw, -30vh) scale(0.04); }
   100% { opacity: 1; transform: translate(30vw, -20vh) scale(0.14); }
 }
-@keyframes mars-near { to { transform: translate(10vw, 10vh) scale(0.55); } }
+@keyframes mars-near { from { transform: translate(30vw, -20vh) scale(0.14); } to { transform: translate(10vw, 10vh) scale(0.55); } }
 @keyframes mars-impact {
   from { transform: translate(10vw, 10vh) scale(0.55); }
   to { transform: translate(0, 40vh) scale(4); }
@@ -243,21 +321,35 @@
   0%, 100% { transform: translate(0, 0); } 20% { transform: translate(-14px, 8px); }
   40% { transform: translate(10px, -10px); } 60% { transform: translate(-8px, 6px); } 80% { transform: translate(6px, -3px); }
 }
-@keyframes pov-focus {
-  0% { filter: blur(14px) brightness(0.5); transform: scale(1.14) rotate(-3deg); }
-  45% { filter: blur(6px) brightness(0.8); transform: scale(1.1) rotate(1deg); }
-  100% { filter: blur(0) brightness(1); transform: scale(1.04) translateX(-1.5%); }
+@keyframes meteor-in {
+  0% { opacity: 1; transform: translate(45vmin, -45vmin) rotate(135deg); }
+  100% { opacity: 1; transform: translate(0, 0) rotate(135deg); }
 }
-/* Eyes: shut → half open → blink → open. */
-@keyframes lid-top {
-  0% { transform: translateY(0); } 20% { transform: translateY(-45%); } 30% { transform: translateY(-20%); }
-  38% { transform: translateY(0); } 46% { transform: translateY(-70%); } 100% { transform: translateY(-110%); }
+@keyframes meteor-hit { 0% { opacity: 0; transform: scale(0.2); } 20% { opacity: 1; } 100% { opacity: 0; transform: scale(1.3); } }
+@keyframes rocket-hit {
+  0%, 63% { opacity: 1; transform: translate(10vw, -5vh) rotate(55deg) scale(0.9); }
+  70% { transform: translate(8.5vw, -3.5vh) rotate(80deg) scale(0.9); }
+  100% { opacity: 1; transform: translate(10vw, -5vh) rotate(55deg) scale(0.9); }
 }
-@keyframes lid-bottom {
-  0% { transform: translateY(0); } 20% { transform: translateY(45%); } 30% { transform: translateY(20%); }
-  38% { transform: translateY(0); } 46% { transform: translateY(70%); } 100% { transform: translateY(110%); }
+@keyframes emergency { from { opacity: 0.05; } to { opacity: 0.45; } }
+@keyframes hatch-msg { 0%, 30% { opacity: 0; } 33%, 55% { opacity: 1; } 58% { opacity: 0.2; } 61%, 90% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes hatch-left { 0% { transform: translateX(0); } 8% { transform: translateX(1%); } 100% { transform: translateX(-112%); } }
+@keyframes hatch-right { 0% { transform: translateX(0); } 8% { transform: translateX(-1%); } 100% { transform: translateX(112%); } }
+@keyframes glare { 0% { opacity: 0; } 25% { opacity: 0.85; } 100% { opacity: 0; } }
+@keyframes step-out { to { transform: scale(3.2); opacity: 0; } }
+/* The view: bright and blurred at first (eyes adjusting), then the head turns left, sweeps right, settles. */
+@keyframes look-around {
+  0% { transform: translateX(-140vh) translateY(1vh) scale(1.08); filter: blur(6px) brightness(1.6); }
+  22% { transform: translateX(-140vh) translateY(0) scale(1.04); filter: blur(2px) brightness(1.2); }
+  38% { transform: translateX(-124vh) translateY(-1.5vh) scale(1); filter: blur(0) brightness(1); }
+  52% { transform: translateX(-130vh) translateY(0.5vh) scale(1); }
+  82% { transform: translateX(-196vh) translateY(-1vh) scale(1); }
+  100% { transform: translateX(-188vh) translateY(0) scale(1); filter: blur(0) brightness(1); }
 }
-@keyframes hud-on { 0%, 55% { opacity: 0; } 58% { opacity: 1; } 60% { opacity: 0.2; } 62%, 100% { opacity: 1; } }
+@keyframes fade-in { to { opacity: 0.85; } }
+@keyframes radio-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+@keyframes radio-bar { to { transform: scaleY(0.35); } }
+@keyframes hud-on { 0%, 70% { opacity: 0; } 72% { opacity: 1; } 74% { opacity: 0.2; } 76%, 100% { opacity: 1; } }
 @keyframes blur-out { 0% { filter: blur(0); opacity: 1; } 100% { filter: blur(16px); opacity: 0; } }
 @keyframes game-in { from { filter: blur(10px); opacity: 0; } to { filter: blur(0); opacity: 1; } }
 
