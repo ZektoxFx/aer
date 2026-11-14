@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { ORBIT_ZOOM_MS, OrbitZoom } from '../map';
-import { CabinCruise } from './CabinCruise';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+// Timings come from small modules without three.js; the 3D scenes themselves load on demand (below), so three.js
+// stays out of the first download and the title screen opens fast (#40).
+import { ORBIT_ZOOM_MS } from '../map/locate';
 import { CABIN_S } from './cabin';
-import { CrashSequence } from './CrashSequence';
-import { LaunchScene } from './LaunchScene';
 import { LAUNCH_MS } from './launch';
 import { CRASH_MS, FLY_S } from './edl';
 import { createIntroAudio, RADIO, readingMs, type IntroAudio, type IntroCue, type RadioLine } from './introAudio';
 import { MarsGlobe } from './MarsGlobe';
-import { METEOR_MS, MeteorStrike } from './MeteorStrike';
+import { METEOR_MS } from './meteor';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -20,6 +19,14 @@ import { TEAM_NAME } from './team';
 import { Credits } from './Credits';
 
 export { TEAM_NAME };
+
+// The intro's 3D scenes, each its own lazy chunk sharing three.js with the game's 3D view. They start loading
+// as soon as the title screen is up (they are rendered, inactive, inside Suspense), long before START.
+const MeteorStrike = lazy(() => import('./MeteorStrike').then((m) => ({ default: m.MeteorStrike })));
+const LaunchScene = lazy(() => import('./LaunchScene').then((m) => ({ default: m.LaunchScene })));
+const CabinCruise = lazy(() => import('./CabinCruise').then((m) => ({ default: m.CabinCruise })));
+const CrashSequence = lazy(() => import('./CrashSequence').then((m) => ({ default: m.CrashSequence })));
+const OrbitZoom = lazy(() => import('../map/OrbitZoom').then((m) => ({ default: m.OrbitZoom })));
 
 /**
  * The intro, one continuous sequence:
@@ -217,6 +224,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <div className="impact" aria-hidden="true" />
       </div>
 
+      <Suspense fallback={null}>
       {/* The meteor strike, in 3D; it keeps running through the fault (the mayday call). */}
       <MeteorStrike active={phase === 'meteor' || phase === 'fault'} alarm={phase === 'fault'} />
 
@@ -231,6 +239,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
 
       {/* Map: the locating shot (orbit → Jezero → the crash site), built during the cruise so it is ready in time. */}
       <OrbitZoom prepare={phase !== 'title'} active={phase === 'locate'} />
+      </Suspense>
 
       {/* Door: the cabin hatch opens onto Jezero. With LIVE_DOOR the live 3D world shows through; otherwise the
           real Perseverance photos. */}
