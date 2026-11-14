@@ -293,6 +293,7 @@ CREDITS = {
         "Rover photos (Navcam, Hazcam): NASA/JPL-Caltech",
         "Rover photos (Mastcam-Z): NASA/JPL-Caltech/ASU",
         "Orbital photos (HiRISE): NASA/JPL-Caltech/University of Arizona",
+        "Earth on the title screen: NASA, Apollo 17 crew, photo AS17-148-22727 (December 7, 1972)",
         "Per-photo details: /data/photos/photos.json",
     ],
     "fiction": "The AER-1 lander, its crew, its supplies and tank, the rover's beacon and the radio bridge are game "
