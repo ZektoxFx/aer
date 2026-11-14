@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { SPEED_X, forecast, newGame, tick } from '../sim/game';
+import { HudMap } from '../map';
+import { SPEED_X, forecast, newGame, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
 import type { Activity, Shelter, TickResult } from '../sim/types';
@@ -38,6 +39,8 @@ export function Hud({ data }: { data: GameData }) {
   const [flow, setFlow] = useState<ShelterFlow | null>(null);
   const [summary, setSummary] = useState<ShelterSummary | null>(null);
   const [mission, setMission] = useState<Sol1State | null>(null);
+  /** Bumped on restart so the map starts again at the cabin with fresh fog. */
+  const [mapReset, setMapReset] = useState(0);
   const game = useRef(frame.state);
   const flowRef = useRef<ShelterFlow | null>(null);
   const missionRef = useRef<Sol1State | null>(null);
@@ -97,6 +100,7 @@ export function Hud({ data }: { data: GameData }) {
   const setMissionState = (m: Sol1State | null) => { missionRef.current = m; setMission(m); };
   const restart = (i = solIndex) => {
     clearFlow(); setMissionState(null); game.current = startGame(i); setSolIndex(i); setMode('cabin');
+    setMapReset((n) => n + 1);
   };
 
   // Sol 1: Scrubber Saturation runs on the pack's Sol 1 scenario day, with the crash-damaged scrubber.
@@ -169,6 +173,39 @@ export function Hud({ data }: { data: GameData }) {
   const stormActive = phase === 'warning' || phase === 'building' || phase === 'peak' || phase === 'clearing';
   const showChoices = stormActive && !flow && s.shelter !== 'cabin' && (phase === 'warning' || phase === 'building');
 
+  const missionCard = mission !== null && (isHolding(mission) || isOver(mission));
+  const sol1Panel = mission && (
+    <Sol1Panel
+      mission={mission} suit={s.suit} fc={fc} metabolicW={metabolicW(s.activity)} clockMin={s.clockMin}
+      onBegin={missionBegin} onDiagnose={missionDiagnose} onAct={missionAct}
+      onRetry={startSol1} onClose={() => setMissionState(null)}
+    />
+  );
+  const overlay = missionCard ? sol1Panel : summary ? (
+    <section className="storm-summary" aria-label="Storm outcome">
+      <h2>STORM OVER</h2>
+      <p>{summary.label} · {summary.hours.toFixed(1)} h</p>
+      <dl>
+        <dt>O₂ used</dt><dd>{summary.o2UsedG.toFixed(0)} g</dd>
+        <dt>Water used</dt><dd>{summary.waterUsedKg.toFixed(2)} kg</dd>
+        <dt>Battery used</dt><dd>{summary.batteryUsedWh.toFixed(0)} Wh</dd>
+        <dt>Core temp</dt><dd>{summary.minCoreTempC.toFixed(1)}–{summary.maxCoreTempC.toFixed(1)} °C</dd>
+      </dl>
+      <button className="choice-btn" onClick={() => setSummary(null)}>CONTINUE</button>
+    </section>
+  ) : showChoices ? (
+    <div className="shelter-choices" role="group" aria-label="Where to wait out the storm">
+      {SHELTER_CHOICES.map((c) => (
+        <button key={c.id} className="shelter-card" onClick={() => pick(c)}>
+          <strong>{c.label}</strong>
+          <span>+ {c.benefit}</span>
+          <span className="dim">− {c.cost}</span>
+          <span className="dim">{c.travelMin ? `${formatMinutes(c.travelMin)} to cover` : 'No cover'}</span>
+        </button>
+      ))}
+    </div>
+  ) : null;
+
   const gauge = (key: Consumable, value: number, full: number, unit: string, digits = 0) => {
     const pct = Math.max(0, Math.min(100, (value / full) * 100));
     const low = fc[key] < 30;
@@ -205,63 +242,40 @@ export function Hud({ data }: { data: GameData }) {
       </div>
 
       <div className="visor-centre">
-        {phase === 'warning' && (
-          <p className="storm warning">
-            DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}
-          </p>
-        )}
-        {stormActive && phase !== 'warning' && <p className="storm warning">DUST STORM: {phase.toUpperCase()}</p>}
+        {/* Status above the map: storm countdown, the first consumable to run out, travel and mission progress. */}
+        <div className="centre-status">
+          {phase === 'warning' && (
+            <p className="storm warning">
+              DUST STORM APPROACHING {Math.floor(stormRealSec / 60)}:{String(stormRealSec % 60).padStart(2, '0')}
+            </p>
+          )}
+          {stormActive && phase !== 'warning' && <p className="storm warning">DUST STORM: {phase.toUpperCase()}</p>}
+          {hero ? (
+            <div className={hero.min < 30 ? 'hero warning' : 'hero'}>
+              <span className="hero-label">{CONSUMABLE_LABEL[hero.key]} OUT IN</span>
+              <span className="hero-num">{formatMinutes(hero.min)}</span>
+            </div>
+          ) : (
+            <div className="hero"><span className="hero-label">NO CONSUMABLES IN USE</span></div>
+          )}
+          {flow && !flow.arrived && (
+            <p className="warning">
+              EN ROUTE: {SHELTER_NAME[flow.choice.shelter]} · {formatMinutes(flow.choice.travelMin - (s.clockMin - flow.chosenAtMin))} TO COVER
+            </p>
+          )}
+          {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
+          {stormActive && !flow && s.shelter === 'cabin' && <p>SHELTERED: CABIN</p>}
+          {mission && !missionCard && sol1Panel}
+        </div>
 
-        {mission && (
-          <Sol1Panel
-            mission={mission} suit={s.suit} fc={fc} metabolicW={metabolicW(s.activity)} clockMin={s.clockMin}
-            onBegin={missionBegin} onDiagnose={missionDiagnose} onAct={missionAct}
-            onRetry={startSol1} onClose={() => setMissionState(null)}
+        {/* The map stays mounted (it keeps the explored fog and the planned route); cards float over it. */}
+        <div className="centre-map">
+          <HudMap
+            pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
+            night={sunElevationDeg(s.clockMin, s.sky) < 0} resetKey={mapReset}
           />
-        )}
-        {mission && mission.phase !== 'walkOut' && mission.phase !== 'salvage' && mission.phase !== 'walkBack' ? null : summary ? (
-          <section className="storm-summary" aria-label="Storm outcome">
-            <h2>STORM OVER</h2>
-            <p>{summary.label} · {summary.hours.toFixed(1)} h</p>
-            <dl>
-              <dt>O₂ used</dt><dd>{summary.o2UsedG.toFixed(0)} g</dd>
-              <dt>Water used</dt><dd>{summary.waterUsedKg.toFixed(2)} kg</dd>
-              <dt>Battery used</dt><dd>{summary.batteryUsedWh.toFixed(0)} Wh</dd>
-              <dt>Core temp</dt><dd>{summary.minCoreTempC.toFixed(1)}–{summary.maxCoreTempC.toFixed(1)} °C</dd>
-            </dl>
-            <button className="choice-btn" onClick={() => setSummary(null)}>CONTINUE</button>
-          </section>
-        ) : showChoices ? (
-          <div className="shelter-choices" role="group" aria-label="Where to wait out the storm">
-            {SHELTER_CHOICES.map((c) => (
-              <button key={c.id} className="shelter-card" onClick={() => pick(c)}>
-                <strong>{c.label}</strong>
-                <span>+ {c.benefit}</span>
-                <span className="dim">− {c.cost}</span>
-                <span className="dim">{c.travelMin ? `${formatMinutes(c.travelMin)} to cover` : 'No cover'}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <>
-            {hero ? (
-              <div className={hero.min < 30 ? 'hero warning' : 'hero'}>
-                <span className="hero-label">{CONSUMABLE_LABEL[hero.key]} OUT IN</span>
-                <span className="hero-num">{formatMinutes(hero.min)}</span>
-              </div>
-            ) : (
-              <div className="hero"><span className="hero-label">NO CONSUMABLES IN USE</span></div>
-            )}
-            {flow && !flow.arrived && (
-              <p className="warning">
-                EN ROUTE: {SHELTER_NAME[flow.choice.shelter]} · {formatMinutes(flow.choice.travelMin - (s.clockMin - flow.chosenAtMin))} TO COVER
-              </p>
-            )}
-            {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
-            {stormActive && !flow && s.shelter === 'cabin' && <p>SHELTERED: CABIN</p>}
-            <p className="centre-note">[ map / surface photo view ]</p>
-          </>
-        )}
+          {overlay && <div className="centre-overlay">{overlay}</div>}
+        </div>
       </div>
 
       <div className="visor-right">

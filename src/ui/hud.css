@@ -22,8 +22,21 @@
 .visor-left { grid-area: left; display: flex; flex-direction: column; gap: 14px; }
 .visor-right { grid-area: right; display: flex; flex-direction: column; gap: 14px; }
 .visor-centre {
-  grid-area: centre; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-  border: 1px dashed var(--dim); border-radius: 12px; padding: 16px; text-align: center;
+  grid-area: centre; display: flex; flex-direction: column; align-items: stretch; gap: 10px; min-width: 0;
+  border: 1px dashed var(--dim); border-radius: 12px; padding: 12px; text-align: center;
+}
+/* Status line above the map: the hero countdown sits on one line beside its label. */
+.centre-status { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 18px; }
+.centre-status p { margin: 0; }
+.centre-status .hero { flex-direction: row; align-items: baseline; gap: 10px; }
+.centre-status .hero-num { font-size: clamp(30px, 4.5vw, 52px); }
+.centre-status .mission-status { width: 100%; }
+/* The map; mission, storm and summary cards float over it so it never unmounts. */
+.centre-map { position: relative; display: flex; flex: 1; min-height: 0; }
+.centre-overlay {
+  position: absolute; inset: 0; z-index: 5; overflow: auto; padding: 12px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--bg) 78%, transparent); border-radius: 8px;
 }
 .visor-bottom { grid-area: bottom; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--dim); padding-top: 10px; }
 
