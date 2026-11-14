@@ -4,6 +4,7 @@ import type { Environment } from './types';
 
 const env: Environment = { pressureKPa: 0.75, tempC: -55, windMS: 5, tau: 0.5 };
 const walk300W = { speedMS: 1, slopeDeg: 0, loadKg: 0 };
+const rest = { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 
 describe('physiology checks from proposal §3.1', () => {
   it('normal resting alveolar CO₂ is 5.35 kPa', () => {
@@ -30,7 +31,6 @@ describe('simulate', () => {
     const { state } = simulate(FULL_SUIT, env, walk300W, 240);
     expect(FULL_SUIT.o2Kg - state.o2Kg).toBeCloseTo(0.306, 3);
     expect(FULL_SUIT.liohKg - state.liohKg).toBeCloseTo(0.397, 3); // 0.364 kg CO₂ × 1.09
-    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(2.64, 2); // 450 W through the evaporator
     expect(state.elapsedMin).toBe(240);
   });
 
@@ -50,6 +50,53 @@ describe('simulate', () => {
     expect(state.liohKg).toBe(0);
     expect(state.inspiredPCO2KPa).toBeGreaterThan(8);
     expect(warnings.find((w) => w.code === 'CO2')?.level).toBe('critical');
+  });
+
+  it('with no heat leak, the evaporator carries all 450 W: 2.64 kg water in 4 h (§3.4 upper bound)', () => {
+    const { state } = simulate(FULL_SUIT, { ...env, tempC: 37 }, walk300W, 240);
+    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(2.64, 2);
+    expect(state.coreTempC).toBeCloseTo(37, 2);
+  });
+
+  it('work hot: walking at −55 °C holds 37 °C by spending water', () => {
+    const { state, warnings } = simulate(FULL_SUIT, env, walk300W, 240);
+    expect(state.coreTempC).toBeCloseTo(37, 2);
+    expect(FULL_SUIT.waterKg - state.waterKg).toBeCloseTo(0.86, 1); // 450 W in, ~304 W leaks out
+    expect(warnings.some((w) => w.code === 'CORE_TEMP')).toBe(false);
+  });
+
+  it('rest cold: resting at −83 °C at night cools the core and uses no water', () => {
+    const { state, warnings } = simulate(FULL_SUIT, { ...env, tempC: -83 }, rest, 60);
+    expect(state.coreTempC).toBeLessThan(36);
+    expect(state.waterKg).toBe(FULL_SUIT.waterKg);
+    expect(warnings.find((w) => w.code === 'CORE_TEMP')?.level).toBe('warning');
+  });
+
+  it('sunlight slows cooling at rest', () => {
+    const night = simulate(FULL_SUIT, { ...env, tempC: -83 }, rest, 60).state;
+    const day = simulate(FULL_SUIT, { ...env, tempC: -83, solarWm2: 600 }, rest, 60).state;
+    expect(day.coreTempC).toBeGreaterThan(night.coreTempC);
+  });
+
+  it('running out of water overheats a walker', () => {
+    const warmDay = { ...env, tempC: -23, solarWm2: 500 };
+    const { state, warnings } = simulate({ ...FULL_SUIT, waterKg: 0.05 }, warmDay, walk300W, 60);
+    expect(state.waterKg).toBe(0);
+    expect(state.coreTempC).toBeGreaterThan(39);
+    expect(warnings.find((w) => w.code === 'CORE_TEMP')?.level).toBe('critical');
+    expect(warnings.some((w) => w.code === 'WATER_OUT')).toBe(true);
+  });
+
+  it('hard work beyond evaporator capacity overheats even with water', () => {
+    const hard = { speedMS: 1.5, slopeDeg: 5, loadKg: 20 }; // 820 W
+    const { state } = simulate(FULL_SUIT, { ...env, tempC: -23 }, hard, 30);
+    expect(state.waterKg).toBeGreaterThan(0);
+    expect(state.coreTempC).toBeGreaterThan(38);
+  });
+
+  it('a cold astronaut warms back up to 37 °C before the evaporator cools', () => {
+    const { state } = simulate({ ...FULL_SUIT, coreTempC: 36 }, env, walk300W, 60);
+    expect(state.coreTempC).toBeCloseTo(37, 2);
   });
 
   it('warns when O₂ is low and when it runs out', () => {
