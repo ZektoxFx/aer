@@ -71,6 +71,24 @@ export type StormPhase = 'none' | 'warning' | 'building' | 'peak' | 'clearing' |
 /** Where the astronaut waits out a storm, best to worst. §6.3 */
 export type Shelter = 'cabin' | 'builtShelter' | 'wreck' | 'none';
 
+/** One straight stretch of a planned walk. Map turns waypoints into legs. */
+export interface RouteLeg {
+  activity: Activity;
+  minutes: number;
+}
+
+export interface RouteAssessment {
+  totalMin: number;
+  /** The suit on arriving at the end of the route (warnings show whether you get there alive). */
+  end: StepResult;
+  /**
+   * Point of no return: the latest minute after setting out at which turning back along the same path
+   * still reaches shelter safely. Equals totalMin when you could turn back even at the end.
+   * null when turning back is unsafe even right now.
+   */
+  turnBackByMin: number | null;
+}
+
 export interface StepResult {
   state: SuitState;
   warnings: SimWarning[];
