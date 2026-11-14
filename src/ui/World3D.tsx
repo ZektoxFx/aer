@@ -18,8 +18,12 @@ export interface World3DProps {
   base: Pt;
   /** Game seconds per real second right now (0 while paused or holding). */
   timeScale: number;
-  /** When set, the astronaut is walked here by the route walker; the keyboard is ignored. */
-  followPos?: Pt;
+  /** When set, the route walker owns the position: read every frame, and the keyboard is ignored. */
+  follow?: () => Pt | null;
+  /** Where the astronaut is when the view opens (default: beside the lander). */
+  startPos?: Pt;
+  /** The keyboard can't move the astronaut (a scripted mission or the storm shelter flow is running). */
+  moveLocked?: boolean;
   /** Bump to put the astronaut back at the cabin. */
   placeKey: number;
   tau: number;
@@ -153,7 +157,7 @@ export function World3D(props: World3DProps) {
 
     // ---- Player and camera state ----
     const start = { x: base.x + 8, y: base.y + 6 };
-    let me: Pt = start;
+    let me: Pt = live.current.startPos ?? start; // open where the astronaut is, not back at the lander (#40)
     let heading = 0, shownHeading = 0, phase = 0, moveBlend = 0;
     let yawT = 0, pitchT = 0.32, distT = 16;
     let yaw = yawT, pitch = pitchT, dist = distT;
@@ -257,9 +261,10 @@ export function World3D(props: World3DProps) {
       // ---- Move ----
       const before = me;
       let m: MoveResult;
-      if (P.followPos) {
-        // The route walker moves the astronaut (updated a few times a second): glide toward it, face the way they go.
-        const dx = P.followPos.x - me.x, dy = P.followPos.y - me.y;
+      const followPos = P.follow?.() ?? null;
+      if (followPos) {
+        // The route walker moves the astronaut (its position each frame): glide toward it, face the way they go.
+        const dx = followPos.x - me.x, dy = followPos.y - me.y;
         const gap = Math.hypot(dx, dy);
         const moving = gap > 0.05;
         if (moving) heading = Math.atan2(dx, -dy);
@@ -274,7 +279,7 @@ export function World3D(props: World3DProps) {
         ramp += ((pressing ? 1 : 0) - ramp) * ease(pressing ? 7 : 10, dt);
         if (!pressing && ramp < 0.03) ramp = 0;
         const input = ramp > 0 ? lastInput : { forward: 0, right: 0, run: false };
-        m = moveStep(me, heading, input, yaw, dt * P.timeScale * ramp, elev, area);
+        m = moveStep(me, heading, input, yaw, dt * (P.moveLocked ? 0 : P.timeScale) * ramp, elev, area);
         // LOCAL DRAFT (Map/Aiman): the map's ground rules, the same ones a planned route is costed with. Slopes over
         // 25° stop you; soft sand and boulder fields slow you and cost extra effort (more O₂) in the suit model.
         if (m.moving && P.map) {
@@ -388,6 +393,18 @@ export function World3D(props: World3DProps) {
       window.removeEventListener('pointerup', pup);
       document.removeEventListener('pointerlockchange', lockChange);
       if (locked()) document.exitPointerLock();
+      // Free everything on the GPU (geometries, materials, textures), then the context itself, so switching
+      // views many times doesn't run out of GPU memory (#40).
+      scene.traverse((o) => {
+        const obj = o as THREE.Mesh;
+        obj.geometry?.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : [];
+        for (const mt of mats) {
+          for (const v of Object.values(mt)) if (v instanceof THREE.Texture) v.dispose();
+          mt.dispose();
+        }
+      });
+      renderer.forceContextLoss();
       renderer.dispose();
       terrain.dispose();
       rocks.geometry.dispose();

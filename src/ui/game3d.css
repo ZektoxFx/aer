@@ -297,3 +297,7 @@
 .v-needs li { color: color-mix(in srgb, var(--fg) 60%, transparent); border: 0; padding: 0; }
 .v-needs li.have { color: var(--fg); }
 .v-pickup.full { border-color: var(--warning); }
+
+/* One map, moved between the 2D and 3D layouts: the wrappers take no space of their own. */
+.hud-map-slot, .hud-map-host { display: contents; }
+.v-loading { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 12px; letter-spacing: 0.2em; color: var(--fg); }
