@@ -18,8 +18,9 @@ export const BASE_LOADS = {
 } satisfies Record<string, Load>;
 
 /**
- * Rough surface sunlight from dust τ and sun elevation, including diffuse light.
- * shortcut: one exponential fit (≈84% at τ 0.5, ≈2% at τ 10.8, near Opportunity's 2018 storm); replace with PSG values from the data pack.
+ * Rough surface sunlight from dust τ and sun elevation.
+ * shortcut: one exponential fit (≈84% at τ 0.5, ≈2% at τ 10.8). The game uses NASA's table (data/sunlight.ts) when it has
+ * one; this remains the fallback without data and the extrapolation beyond the table's largest τ.
  */
 export function approxSolarWm2(tau: number, sunElevationDeg: number): number {
   if (sunElevationDeg <= 0) return 0;

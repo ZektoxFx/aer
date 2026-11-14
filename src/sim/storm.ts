@@ -43,10 +43,15 @@ export function stormTau(s: StormEvent, baseTau: number, tMin: number): number {
   return baseTau;
 }
 
+/** Surface sunlight (W/m²) from dust τ and sun elevation. */
+export type SolarFn = (tau: number, sunElevationDeg: number) => number;
+
 /** The outdoor environment at time t, with storm dust and the resulting sunlight applied. */
-export function conditionsAt(base: Environment, storm: StormEvent | null, tMin: number, sunElevationDeg: number): Environment {
+export function conditionsAt(
+  base: Environment, storm: StormEvent | null, tMin: number, sunElevationDeg: number, solar: SolarFn = approxSolarWm2,
+): Environment {
   const tau = storm ? stormTau(storm, base.tau, tMin) : base.tau;
-  return { ...base, tau, solarWm2: approxSolarWm2(tau, sunElevationDeg) };
+  return { ...base, tau, solarWm2: solar(tau, sunElevationDeg) };
 }
 
 // How much of the outside cold reaches the astronaut in each shelter [verify]: 0 = fully protected, 1 = outside.
@@ -63,7 +68,7 @@ export function shelterEnvironment(env: Environment, shelter: Shelter): Environm
 // 2%/sol, the highest rate observed (Lorenz et al. 2021).
 const SOILING_PER_SOL_PER_TAU = 0.004;
 const MAX_SOILING_PER_SOL = 0.02;
-const MIN_PER_SOL = 1477.6; // 24 h 39.6 min
+export const MIN_PER_SOL = 1477.6; // 24 h 39.6 min
 
 /** Panel soiling after `minutes` exposed to dust τ. Covered or sheltered panels collect nothing. */
 export function soilingAfter(soiling: number, tau: number, minutes: number, covered = false): number {
