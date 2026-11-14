@@ -18,7 +18,7 @@ function rgb(name: string): RGB {
 const css = (k: RGB, a = 1) => `rgba(${k[0]},${k[1]},${k[2]},${a})`;
 const col = (k: RGB) => new THREE.Color(k[0] / 255, k[1] / 255, k[2] / 255);
 
-interface Pal { metal: RGB; dark: RGB; fg: RGB; dim: RGB; warn: RGB; alarm: RGB; space: RGB; sand: RGB; rust: RGB; shadow: RGB; dust: RGB; sky: RGB; blue: RGB }
+interface Pal { metal: RGB; dark: RGB; fg: RGB; dim: RGB; warn: RGB; alarm: RGB; space: RGB; sand: RGB; rust: RGB; shadow: RGB; dust: RGB; sky: RGB; blue: RGB; sat: RGB }
 
 function canvas(w: number, h: number) { const c = document.createElement('canvas'); c.width = w; c.height = h; return { c, g: c.getContext('2d')! }; }
 
@@ -55,6 +55,72 @@ function marsTexture(p: Pal) {
   return t;
 }
 
+/** Window glass: faint smudges, a reflection streak and frost creeping in from the cold frame. Transparent canvas. */
+function glassTexture(p: Pal) {
+  const W = 360, H = 250, { c, g } = canvas(W, H);
+  let s = 11; const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  const edge = (x0: number, y0: number, x1: number, y1: number) => {
+    const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, css(p.dust, 0.32)); gr.addColorStop(1, css(p.dust, 0)); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  };
+  edge(0, 0, 34, 0); edge(W, 0, W - 34, 0); edge(0, H, 0, H - 30); edge(0, 0, 0, 22);
+  for (let i = 0; i < 900; i++) { // frost crystals, denser toward the frame
+    const side = Math.floor(r() * 4), d = Math.pow(r(), 2.2) * 40, t = r();
+    const x = side === 0 ? d : side === 1 ? W - d : t * W, y = side === 2 ? H - d : side === 3 ? d : t * H;
+    g.fillStyle = css(p.fg, 0.08 + r() * 0.25); g.fillRect(x, y, 1 + r() * 2, 1 + r() * 2);
+  }
+  g.globalCompositeOperation = 'lighter';
+  const st = g.createLinearGradient(W * 0.15, 0, W * 0.55, H); st.addColorStop(0, css(p.fg, 0)); st.addColorStop(0.5, css(p.fg, 0.07)); st.addColorStop(1, css(p.fg, 0));
+  g.fillStyle = st; g.beginPath(); g.moveTo(W * 0.22, 0); g.lineTo(W * 0.38, 0); g.lineTo(W * 0.62, H); g.lineTo(W * 0.46, H); g.fill();
+  for (let i = 0; i < 6; i++) { const x = r() * W, y = r() * H, R = 10 + r() * 26; const gr = g.createRadialGradient(x, y, 0, x, y, R); gr.addColorStop(0, css(p.fg, 0.05)); gr.addColorStop(1, css(p.fg, 0)); g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** A stencilled label or a small placard, drawn on a canvas. */
+function labelTexture(lines: string[], fg: RGB, bg: RGB | null, w = 256, h = 96) {
+  const { c, g } = canvas(w, h);
+  if (bg) { g.fillStyle = css(bg); g.fillRect(0, 0, w, h); g.strokeStyle = css(fg, 0.8); g.lineWidth = 4; g.strokeRect(4, 4, w - 8, h - 8); }
+  g.fillStyle = css(fg); g.textAlign = 'center'; g.textBaseline = 'middle';
+  const fs = Math.floor((h * 0.62) / lines.length); g.font = `700 ${fs}px ui-monospace, Consolas, monospace`;
+  lines.forEach((l, i) => g.fillText(l, w / 2, (h / (lines.length + 1)) * (i + 1)));
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+/** Soft cargo-bag fabric: woven noise, stitched seams and a tag. */
+function fabricTexture(p: Pal, tag: string) {
+  const { c, g } = canvas(256, 256);
+  g.fillStyle = css(p.dust); g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 3000; i++) { g.fillStyle = css(i % 2 ? p.dim : p.fg, 0.08); g.fillRect(Math.random() * 256, Math.random() * 256, 2, 1); }
+  g.strokeStyle = css(p.dim, 0.7); g.setLineDash([5, 4]); g.lineWidth = 2; g.strokeRect(10, 10, 236, 236); g.setLineDash([]);
+  g.fillStyle = css(p.fg); g.fillRect(70, 96, 116, 50); g.fillStyle = css(p.space); g.font = '700 22px ui-monospace, Consolas, monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(tag, 128, 122);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** The panel above the windows: guarded switches, labels and status lamps. */
+function overheadTexture(p: Pal) {
+  const { c, g } = canvas(1024, 180);
+  g.fillStyle = css(p.dark); g.fillRect(0, 0, 1024, 180);
+  g.font = '600 15px ui-monospace, Consolas, monospace'; g.textAlign = 'center';
+  const names = ['PWR BUS A', 'PWR BUS B', 'O₂ ISOL', 'N₂ ISOL', 'CO₂ SCRUB', 'FANS', 'HEATERS', 'XPDR', 'RCS A', 'RCS B', 'PYRO ARM', 'CHUTE ARM'];
+  names.forEach((n, i) => {
+    const x = 50 + i * 84;
+    g.fillStyle = css(p.fg, 0.85); g.fillText(n, x, 30);
+    g.strokeStyle = css(i >= 10 ? p.alarm : p.metal, 0.8); g.lineWidth = 3; g.strokeRect(x - 22, 44, 44, 70);
+    g.fillStyle = css(p.metal, 0.35); g.fillRect(x - 6, 52, 12, 54);
+    g.fillStyle = css(i % 4 === 3 ? p.warn : p.fg, 0.9); g.beginPath(); g.arc(x, 140, 6, 0, 7); g.fill();
+  });
+  g.fillStyle = css(p.dim); g.textAlign = 'left'; g.fillText('AER-1 · OVERHEAD 1', 14, 170);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+
+const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/** The proximity warning runs over the last PROX_S seconds of the time-lapse, just before the meteor strike. */
+const PROX_S = 1.1;
+
 function roundRect(path: THREE.Path | THREE.Shape, cx: number, cy: number, w: number, h: number, r: number) {
   const x = cx - w / 2, y = cy - h / 2;
   path.moveTo(x + r, y); path.lineTo(x + w - r, y); path.absarc(x + w - r, y + r, r, -Math.PI / 2, 0, false);
@@ -68,7 +134,7 @@ const WIN_W = 0.72, WIN_H = 0.5;
 const CAM = new THREE.Vector3(0, 1.28, 0.42), LOOK = new THREE.Vector3(0, 1.36, -1.5);
 
 /** Draw the three console screens for the current state. */
-function drawScreens(gs: CanvasRenderingContext2D[], st: CruiseState, p: Pal, blink: boolean) {
+function drawScreens(gs: CanvasRenderingContext2D[], st: CruiseState, p: Pal, blink: boolean, prox = 0) {
   const [L, C, R] = gs, W = 512, H = 300, alarm = st.alarm > 0;
   for (const g of gs) { g.fillStyle = css(p.space); g.fillRect(0, 0, W, H); g.font = '600 22px ui-monospace, Consolas, monospace'; g.textBaseline = 'top'; }
   // Left: the transfer orbit, with the ship's place along it.
@@ -95,8 +161,14 @@ function drawScreens(gs: CanvasRenderingContext2D[], st: CruiseState, p: Pal, bl
   C.fillText(`TO MARS    ${toMars}`, 20, 180);
   C.fillText(`SIGNAL     ${st.signalMin.toFixed(1)} min to Earth`, 20, 210);
   C.fillText(`SPIN       ${CRUISE.rpm} rpm (cruise)`, 20, 240);
-  // Right: systems, then the alarm.
-  if (!alarm) {
+  // Right: systems; the debris warning just before the strike; then the alarm.
+  if (!alarm && prox > 0) {
+    R.fillStyle = css(blink ? p.warn : p.space); R.fillRect(0, 0, W, H);
+    R.fillStyle = css(blink ? p.space : p.warn); R.font = '700 32px ui-monospace, Consolas, monospace';
+    R.fillText('PROXIMITY ALERT', 36, 60); R.font = '600 22px ui-monospace, Consolas, monospace';
+    R.fillText('UNTRACKED OBJECT', 36, 128); R.fillText('ON INTERCEPT · AFT', 36, 164);
+    R.fillText(`T-${Math.max(0, (1 - prox) * 1.1).toFixed(1)} s`, 36, 214);
+  } else if (!alarm) {
     const rows: [string, string][] = [['O₂ SUPPLY', 'NOMINAL'], ['CABIN PRESS', 'NOMINAL'], ['POWER', 'SOLAR OK'], ['COMMS', 'LINK'], ['NAV', 'ON COURSE'], ['DESCENT ENG', 'STANDBY']];
     R.fillStyle = css(p.dim); R.fillText('SYSTEMS', 20, 14); R.font = '18px ui-monospace, Consolas, monospace';
     rows.forEach(([k, v], i) => { R.fillStyle = css(p.fg); R.fillText(k, 20, 56 + i * 38); R.fillStyle = css(p.fg, 0.8); R.fillText(v, 300, 56 + i * 38); });
@@ -123,7 +195,7 @@ export function CabinCruise({ prepare, active }: Props) {
     let alive = true, raf = 0;
     const p: Pal = {
       metal: rgb('--metal'), dark: rgb('--metal-dark'), fg: rgb('--fg'), dim: rgb('--dim'), warn: rgb('--warning'), alarm: rgb('--alarm'),
-      space: rgb('--space'), sand: rgb('--mars-sand'), rust: rgb('--mars-rust'), shadow: rgb('--mars-shadow'), dust: rgb('--mars-dust'), sky: rgb('--mars-sky'), blue: rgb('--earth-glow'),
+      space: rgb('--space'), sand: rgb('--mars-sand'), rust: rgb('--mars-rust'), shadow: rgb('--mars-shadow'), dust: rgb('--mars-dust'), sky: rgb('--mars-sky'), blue: rgb('--earth-glow'), sat: rgb('--sat-panel'),
     };
     const dispose: { dispose(): void }[] = [];
     const keep = <T extends { dispose(): void }>(x: T) => { dispose.push(x); return x; };
@@ -167,7 +239,7 @@ export function CabinCruise({ prepare, active }: Props) {
     const panel = keep(panelTexture(p));
     const wallMat = keep(new THREE.MeshStandardMaterial({ map: panel, roughness: 0.75, metalness: 0.25, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }));
     const darkMat = keep(new THREE.MeshStandardMaterial({ color: col(p.dark), roughness: 0.6, metalness: 0.5 }));
-    const add = (g: THREE.BufferGeometry, m: THREE.Material, cast = true) => { keep(g); const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; cabin.add(o); return o; };
+    const add = (g: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], cast = true) => { keep(g); const o = new THREE.Mesh(g, m); o.castShadow = cast; o.receiveShadow = true; cabin.add(o); return o; };
     // Front wall with two windows.
     const front = new THREE.Shape(); front.moveTo(-2.2, -0.3); front.lineTo(2.2, -0.3); front.lineTo(2.2, 2.8); front.lineTo(-2.2, 2.8); front.lineTo(-2.2, -0.3);
     for (const w of WIN) { const h = new THREE.Path(); roundRect(h, w.x, w.y, WIN_W, WIN_H, 0.09); front.holes.push(h); }
@@ -220,10 +292,55 @@ export function CabinCruise({ prepare, active }: Props) {
     const card = add(new THREE.BoxGeometry(0.13, 0.18, 0.003), keep(new THREE.MeshStandardMaterial({ map: cardTex, roughness: 0.9 })));
     const cardV = new THREE.Vector3(), cardSpin = new THREE.Vector3(0.25, 0.4, 0.15), cardHome = new THREE.Vector3(0.28, 1.3, -0.62);
     card.position.copy(cardHome);
+    // Window glass behind each frame (the front wall hides its square corners): frost at the cold edges, smudges.
+    const glassMat = keep(new THREE.MeshBasicMaterial({ map: keep(glassTexture(p)), transparent: true, depthWrite: false }));
+    for (const w of WIN) { const gl = add(new THREE.PlaneGeometry(WIN_W + 0.04, WIN_H + 0.04), glassMat, false); gl.position.set(w.x, w.y, -1.51); gl.receiveShadow = false; }
+    // Overhead switch panel above the windows.
+    const ohMat = keep(new THREE.MeshStandardMaterial({ map: keep(overheadTexture(p)), roughness: 0.7, metalness: 0.3 }));
+    add(new THREE.BoxGeometry(1.7, 0.3, 0.05), [darkMat, darkMat, darkMat, darkMat, ohMat, darkMat]).position.set(0, 2.12, -1.475);
+    const tg = new THREE.InstancedMesh(keep(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6)), keep(new THREE.MeshStandardMaterial({ color: col(p.metal), metalness: 0.8, roughness: 0.3 })), 12);
+    for (let i = 0; i < 12; i++) {
+      m4.compose(new THREE.Vector3(-0.85 + ((50 + i * 84) / 1024) * 1.7, 2.12 + 0.01, -1.43), new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 + (i % 3 ? 0.35 : -0.35), 0, 0)), new THREE.Vector3(1, 1, 1));
+      tg.setMatrixAt(i, m4);
+    }
+    cabin.add(tg);
+    // Fire extinguisher (left) and a portable O₂ bottle (right), strapped to the front wall, with stencils.
+    const bottle = (x: number, colour: RGB, lines: string[]) => {
+      const b = add(new THREE.CylinderGeometry(0.055, 0.055, 0.34, 20), keep(new THREE.MeshStandardMaterial({ color: col(colour), roughness: 0.45, metalness: 0.2 })));
+      b.position.set(x, 1.12, -1.43);
+      const neck = add(new THREE.CylinderGeometry(0.02, 0.03, 0.07, 12), darkMat); neck.position.set(x, 1.32, -1.43);
+      for (const y of [1.02, 1.22]) { const strap = add(new THREE.BoxGeometry(0.13, 0.025, 0.12), darkMat); strap.position.set(x, y, -1.44); }
+      const tag = add(new THREE.PlaneGeometry(0.2, 0.075), keep(new THREE.MeshStandardMaterial({ map: keep(labelTexture(lines, p.fg, p.dark)), roughness: 0.8 })), false);
+      tag.position.set(x, 0.86, -1.495);
+    };
+    bottle(-1.32, p.alarm, ['FIRE']); bottle(1.32, p.metal, ['O₂ · PBA']);
+    // Soft cargo bags strapped to the side walls, near the front.
+    ([[-1, 1.85, 'CTB-04'], [-1, 0.45, 'FOOD 7'], [1, 1.85, 'MED KIT'], [1, 0.45, 'CTB-11']] as const).forEach(([s, y, tagText]) => {
+      const bag = add(new THREE.BoxGeometry(0.22, 0.42, 0.55), keep(new THREE.MeshStandardMaterial({ map: keep(fabricTexture(p, tagText)), roughness: 1 })));
+      bag.position.set(s * 1.48, y, -1.05); bag.rotation.y = s < 0 ? Math.PI / 2 : -Math.PI / 2;
+      bag.scale.set(1, 1, 1 - Math.abs(y - 1) * 0.05);
+      for (const dz of [-0.16, 0.16]) { const strap = add(new THREE.BoxGeometry(0.235, 0.44, 0.03), railMat); strap.position.set(s * 1.48, y, -1.05 + dz); }
+    });
+    // Cable bundles along the upper corners, sagging between clips.
+    ([-1, 1] as const).forEach((s) => {
+      const pts = [new THREE.Vector3(s * 1.55, 2.38, -1.46), new THREE.Vector3(s * 1.54, 2.3, -0.9), new THREE.Vector3(s * 1.55, 2.37, -0.4), new THREE.Vector3(s * 1.54, 2.29, 0.2), new THREE.Vector3(s * 1.55, 2.36, 0.8)];
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.022, 8, false), darkMat);
+    });
+    // Loose things in zero-g: a drink pouch, a pen, a coiled cable and a few water droplets.
+    const floaters: { o: THREE.Object3D; home: THREE.Vector3; spin: THREE.Vector3; ph: number }[] = [];
+    const float = (o: THREE.Object3D, home: [number, number, number], spin: [number, number, number]) => {
+      o.position.set(...home); floaters.push({ o, home: o.position.clone(), spin: new THREE.Vector3(...spin), ph: floaters.length * 1.7 });
+    };
+    float(add(new THREE.BoxGeometry(0.075, 0.11, 0.02), keep(new THREE.MeshStandardMaterial({ color: col(p.metal), metalness: 0.85, roughness: 0.25 }))), [-0.42, 1.12, -0.6], [0.3, 0.5, 0.2]);
+    float(add(new THREE.CylinderGeometry(0.004, 0.004, 0.13, 8), keep(new THREE.MeshStandardMaterial({ color: col(p.sat), roughness: 0.4 }))), [0.12, 1.42, -0.8], [0.9, 0.2, 0.6]);
+    float(add(new THREE.TorusGeometry(0.05, 0.005, 8, 32), darkMat), [0.5, 1.08, -0.75], [0.2, 0.7, 0.35]);
+    const dropMat = keep(new THREE.MeshStandardMaterial({ color: col(p.fg), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.55 }));
+    for (let i = 0; i < 7; i++) float(add(new THREE.SphereGeometry(0.004 + (i % 3) * 0.003, 12, 8), dropMat, false), [-0.15 + i * 0.05, 1.22 + Math.sin(i * 2.1) * 0.06, -0.55 - (i % 2) * 0.1], [0, 0, 0]);
     // Light: dim cabin light, the alarm light, and the Sun through the windows (casts the window shapes).
     cabin.add(new THREE.AmbientLight(col(p.dust), 0.35));
     const lamp = new THREE.PointLight(col(p.fg), 6, 6, 1.6); lamp.position.set(0, 2.3, -0.2); cabin.add(lamp);
     const red = new THREE.PointLight(col(p.alarm), 0, 6, 1.4); red.position.set(0, 2.0, -0.6); cabin.add(red);
+    const glow = new THREE.PointLight(col(p.fg), 1.4, 1.3, 2); glow.position.set(0, 1.0, -1.0); cabin.add(glow); // screens light the gloves
     const sun = new THREE.DirectionalLight(col(p.fg), 4.5);
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0008;
     Object.assign(sun.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5, near: 0.5, far: 14 });
@@ -251,6 +368,7 @@ export function CabinCruise({ prepare, active }: Props) {
       if (!play.current.on) return;
       const T = (now - play.current.t0) / 1000, dt = Math.min(0.05, Math.max(0, T - lastT)); lastT = T;
       const st = cruiseAt(T), alarm = st.alarm, blink = Math.floor(T * 4) % 2 === 0;
+      const prox = smooth(CABIN_S.lapse - PROX_S, CABIN_S.lapse - PROX_S + 0.15, T);
       // The ship's slow spin (shown slower than the time-lapse would, so it reads): the stars, Mars' lit side and
       // the sunlight all turn about the axis out through the windows.
       const spin = T * 0.55;
@@ -270,8 +388,10 @@ export function CabinCruise({ prepare, active }: Props) {
       // Camera: breathing sway; a hard shake once the alarm sounds.
       const sh = alarm ? 0.012 : 0;
       shake.set((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, 0);
+      // The astronaut glances down at the orbit screen mid-cruise, then snaps to the alert screen when it goes off.
+      const gl = smooth(1.4, 2.0, T) * (1 - smooth(2.9, 3.6, T)), ga = smooth(CABIN_S.lapse - PROX_S + 0.1, CABIN_S.lapse - PROX_S + 0.45, T);
       cam.position.set(CAM.x + Math.sin(T * 0.7) * 0.004, CAM.y + Math.sin(T * 1.1) * 0.006, CAM.z).add(shake);
-      cam.lookAt(LOOK.x + shake.x * 2, LOOK.y + shake.y * 2, LOOK.z);
+      cam.lookAt(LOOK.x - gl * 0.55 + ga * 0.5 + shake.x * 2, LOOK.y - gl * 0.42 - ga * 0.3 + shake.y * 2, LOOK.z);
       spCam.quaternion.copy(cam.quaternion);
       // Cabin: the card drifts; the alarm turns the lights red and jolts things.
       if (alarm > 0 && cardV.lengthSq() === 0) cardV.set(0.12, 0.25, 0.18);
@@ -279,23 +399,29 @@ export function CabinCruise({ prepare, active }: Props) {
       card.position.addScaledVector(cardV, dt);
       card.position.y += Math.sin(T * 0.8) * 0.0008;
       card.rotation.x += cardSpin.x * dt * (1 + alarm * 6); card.rotation.y += cardSpin.y * dt * (1 + alarm * 6); card.rotation.z += cardSpin.z * dt;
-      red.intensity = alarm * (blink ? 14 : 2); lamp.intensity = alarm ? 2 : 6;
-      hands.forEach((h, i) => { h.setGrip(0.35 + alarm * 0.55); h.group.position.y = 0.85 + Math.sin(T * 1.3 + i) * 0.003 + shake.y; });
-      for (let i = 0; i < ledN; i++) leds.setColorAt(i, col(alarm ? (blink && i % 2 ? p.alarm : p.warn) : (i * 7 + Math.floor(T * 2)) % 11 === 0 ? p.warn : p.fg));
+      for (const f of floaters) {
+        f.o.position.set(f.home.x + Math.sin(T * 0.37 + f.ph) * 0.035, f.home.y + Math.sin(T * 0.29 + f.ph * 1.3) * 0.045, f.home.z + Math.sin(T * 0.23 + f.ph) * 0.025);
+        f.o.rotation.x += f.spin.x * dt; f.o.rotation.y += f.spin.y * dt; f.o.rotation.z += f.spin.z * dt;
+      }
+      red.color.copy(col(prox > 0 && !alarm ? p.warn : p.alarm));
+      red.intensity = Math.max(alarm * (blink ? 14 : 2), prox * (blink ? 9 : 1.5)); lamp.intensity = alarm ? 2 : prox ? 4 : 6;
+      hands.forEach((h, i) => { h.setGrip(0.35 + Math.max(alarm, prox * 0.6) * 0.55); h.group.position.y = 0.85 + Math.sin(T * 1.3 + i) * 0.003 + shake.y; });
+      for (let i = 0; i < ledN; i++) leds.setColorAt(i, col(alarm || prox ? (blink && i % 2 ? p.alarm : p.warn) : (i * 7 + Math.floor(T * 2)) % 11 === 0 ? p.warn : p.fg));
       if (leds.instanceColor) leds.instanceColor.needsUpdate = true;
       const tick = Math.floor(T * 10);
-      if (tick !== lastScreen) { lastScreen = tick; drawScreens(screenGs, st, p, blink); for (const t of screenTex) t.needsUpdate = true; }
+      if (tick !== lastScreen) { lastScreen = tick; drawScreens(screenGs, st, p, blink, prox); for (const t of screenTex) t.needsUpdate = true; }
       renderer.clear(); renderer.render(space, spCam); renderer.clearDepth(); renderer.render(cabin, cam);
       // Captions.
       if (cap.current) {
         const msg = alarm ? '▲ MASTER ALARM · DESCENT ENGINE FAULT'
+          : prox ? '▲ PROXIMITY ALERT · UNTRACKED OBJECT ON INTERCEPT'
           : st.day < 20 ? `DAY ${Math.floor(st.day)} · LEFT EARTH ORBIT · CRUISE TO MARS`
           : st.day < 199 ? `DAY ${Math.floor(st.day)} · DEEP SPACE CRUISE`
           : 'DAY 203 · MARS APPROACH · PREPARING FOR ENTRY';
         if (cap.current.textContent !== msg) cap.current.textContent = msg;
-        cap.current.dataset.alert = alarm ? '1' : '0';
+        cap.current.dataset.alert = alarm || prox ? '1' : '0';
       }
-      if (fade.current) fade.current.style.opacity = String(Math.max(0, 1 - T / 0.6, (T - (CABIN_S.lapse + CABIN_S.alarm - 0.3)) / 0.3));
+      if (fade.current) fade.current.style.opacity = String(Math.min(1, Math.max(0, 1 - T / 0.6, (T - (CABIN_S.lapse - 0.3)) / 0.3)));
     };
     raf = requestAnimationFrame(frame);
 
@@ -308,6 +434,7 @@ export function CabinCruise({ prepare, active }: Props) {
 
   return (
     <div ref={root} className={`cabin-cruise${active ? ' on' : ''}`} aria-hidden={!active}>
+      <div className="cab-visor" />
       <p ref={cap} className="cab-cap" />
       <p className="cab-note">Simulated cabin · AER-1 is fictional · 203 days, ~472 million km and the 2 rpm cruise spin follow NASA's Perseverance (2020–21) · time-lapse</p>
       <div ref={fade} className="cab-fade" />

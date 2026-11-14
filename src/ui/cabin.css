@@ -10,3 +10,14 @@
 .cab-note { position: absolute; left: 16px; right: 140px; bottom: 14px; margin: 0; z-index: 1; font: 10px ui-monospace, Consolas, monospace; color: var(--dim); text-shadow: 0 1px 3px var(--space); }
 .cab-fade { position: absolute; inset: 0; z-index: 2; background: var(--space); opacity: 1; pointer-events: none; }
 @media (max-width: 600px) { .cab-cap { font-size: 11px; top: 12%; } .cab-note { right: 16px; bottom: 34px; } }
+/* Seen through the suit helmet: the visor rim darkens the edges, a faint reflection streak, and breath fog
+   that comes and goes at the bottom of the visor (about one breath every 4 s). */
+.cab-visor { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(ellipse 72% 78% at 50% 48%, transparent 62%, color-mix(in srgb, var(--space) 70%, transparent) 88%, var(--space) 100%),
+    linear-gradient(115deg, transparent 18%, color-mix(in srgb, var(--fg) 5%, transparent) 24%, transparent 30%); }
+.cab-visor::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: 0; height: 26%;
+  background: radial-gradient(ellipse 60% 70% at 50% 100%, color-mix(in srgb, var(--fg) 16%, transparent), transparent 70%);
+  filter: blur(6px); animation: cab-breath 4s ease-in-out infinite; }
+@keyframes cab-breath { 0%, 100% { opacity: 0.15; } 45% { opacity: 0.85; } 70% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .cab-visor::after { animation: none; opacity: 0.3; } }

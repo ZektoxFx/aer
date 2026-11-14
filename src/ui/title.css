@@ -593,3 +593,28 @@
 }
 .eyes-open .wake-msg { opacity: 0; animation: none; transition: opacity 0.3s; }
 @keyframes wake-blink { 0%, 60% { opacity: 0.9; } 61%, 100% { opacity: 0.25; } }
+
+/* ---------- Launch from Earth (LaunchScene) ---------- */
+.launch-scene { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none; background: var(--space); transition: opacity 0.4s ease-out; }
+.launch-scene.on { opacity: 1; }
+.launch-scene canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.launch-count { position: absolute; left: 0; right: 0; top: 40%; margin: 0; z-index: 1; text-align: center; font: 600 clamp(28px, 6vw, 56px) ui-monospace, Consolas, monospace; letter-spacing: 0.12em; color: var(--fg); text-shadow: 0 2px 18px var(--space); }
+.launch-hud { position: absolute; left: 16px; top: 16px; margin: 0; z-index: 1; padding: 8px 10px; font: 11px/1.5 ui-monospace, Consolas, monospace; color: var(--fg); background: color-mix(in srgb, var(--space) 55%, transparent); }
+.launch-hud:empty { display: none; }
+.launch-cap { position: absolute; top: 9%; left: 0; right: 0; margin: 0; z-index: 1; text-align: center; font: 600 15px ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--fg); text-shadow: 0 1px 6px var(--space); }
+.launch-note { position: absolute; top: calc(9% + 24px); left: 0; right: 0; margin: 0; z-index: 1; text-align: center; font: 10px ui-monospace, Consolas, monospace; color: var(--fg); opacity: 0.6; }
+.launch-fade { position: absolute; inset: 0; z-index: 2; background: var(--space); opacity: 0; pointer-events: none; }
+.phase-launch .solar-system { opacity: 0; }
+
+/* ---------- Meteor strike (MeteorStrike) ---------- */
+.meteor-strike { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none; background: var(--space); }
+.meteor-strike.on { opacity: 1; transition: opacity 0.45s ease-out; }
+.meteor-strike canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.meteor-cap { position: absolute; top: 9%; left: 0; right: 0; margin: 0; z-index: 1; text-align: center; font: 600 15px ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--alarm); text-shadow: 0 1px 6px var(--space); }
+.meteor-note { position: absolute; bottom: 14px; left: 16px; margin: 0; z-index: 1; font: 10px ui-monospace, Consolas, monospace; color: var(--fg); opacity: 0.5; }
+.meteor-flash { position: absolute; inset: 0; z-index: 2; background: var(--fg); opacity: 0; pointer-events: none; mix-blend-mode: screen; }
+.meteor-alarm { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse 80% 75% at 50% 50%, transparent 45%, color-mix(in srgb, var(--alarm) 55%, transparent) 100%); }
+.meteor-strike.alarm .meteor-alarm { animation: alarm 0.9s ease-in-out infinite; }
+/* The 3D shot keeps running under the mayday call, so lift the alarm line above its canvas. */
+.phase-fault .fault-msg { z-index: 5; text-shadow: 0 0 10px var(--space); }
