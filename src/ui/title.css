@@ -618,3 +618,9 @@
 .meteor-strike.alarm .meteor-alarm { animation: alarm 0.9s ease-in-out infinite; }
 /* The 3D shot keeps running under the mayday call, so lift the alarm line above its canvas. */
 .phase-fault .fault-msg { z-index: 5; text-shadow: 0 0 10px var(--space); }
+/* Leaving the strike: it stays on top while the camera dives at Mars, the air starts to glow, and it dissolves
+   into the 3D entry underneath. */
+.meteor-strike.leaving { z-index: 4; opacity: 0; transition: opacity 0.9s ease-in 1.05s; }
+.meteor-strike.leaving .meteor-note, .meteor-strike.leaving .meteor-alarm { opacity: 0; animation: none; }
+.meteor-entry { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(ellipse 70% 65% at 50% 55%, color-mix(in srgb, var(--mars-dust) 45%, transparent), color-mix(in srgb, var(--warning) 35%, transparent) 55%, color-mix(in srgb, var(--alarm) 30%, transparent) 100%); }

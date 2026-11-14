@@ -226,7 +226,8 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
 
       <Suspense fallback={null}>
       {/* The meteor strike, in 3D; it keeps running through the fault (the mayday call). */}
-      <MeteorStrike active={phase === 'meteor' || phase === 'fault'} alarm={phase === 'fault'} />
+      {/* The 3D strike runs on through the mayday call, then dives at Mars and dissolves into the entry. */}
+      <MeteorStrike active={phase === 'meteor' || phase === 'fault' || phase === 'crash'} alarm={phase === 'fault'} leaving={phase === 'crash'} />
 
       {/* The launch from Earth, in 3D. */}
       <LaunchScene active={phase === 'launch'} />
