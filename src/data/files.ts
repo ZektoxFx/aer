@@ -131,3 +131,15 @@ export interface ContentFile {
   historyCards: { poiId: string; title: string; text: string; sources: string[]; photos: string[] }[];
   scienceTarget: { poiId: string; name: string; why: string; alternatives: string[] };
 }
+
+/** credits.json: text for the credits screen and chart labels. Replace {sol} in chartLabels. */
+export interface CreditsFile {
+  heading: string;
+  intro: string;
+  dataSources: { what: string; mission: string; instrument: string; product: string; provider: string; citation: string; credit: string }[];
+  imageCredits: string[];
+  fiction: string;
+  aiDisclosure: string[];
+  noAffiliation: string;
+  chartLabels: Record<'pressure' | 'airTemp' | 'groundTemp' | 'wind' | 'dust' | 'sunlight' | 'map', string>;
+}

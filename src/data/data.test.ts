@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import creditsRaw from '../../public/data/credits.json?raw';
 import contentRaw from '../../public/data/content.json?raw';
 import dustRaw from '../../public/data/dust.json?raw';
 import packRaw from '../../public/data/jezero_pack.json?raw';
@@ -6,12 +7,12 @@ import layersRaw from '../../public/data/layers_20m.json?raw';
 import poisRaw from '../../public/data/pois.json?raw';
 import sunRaw from '../../public/data/sunlight.json?raw';
 import weatherRaw from '../../public/data/weather.json?raw';
-import type { ContentFile, DustFile, PoiFile, SunlightTable, TerrainLayers, WeatherFile } from './files';
+import type { ContentFile, CreditsFile, DustFile, PoiFile, SunlightTable, TerrainLayers, WeatherFile } from './files';
 import { distanceFactor, solarWm2, sunElevationDeg } from './sunlight';
 import type { DataPack } from './types';
 
 const raw: Record<string, string> = {
-  'content.json': contentRaw, 'dust.json': dustRaw, 'jezero_pack.json': packRaw, 'layers_20m.json': layersRaw,
+  'content.json': contentRaw, 'credits.json': creditsRaw, 'dust.json': dustRaw, 'jezero_pack.json': packRaw, 'layers_20m.json': layersRaw,
   'pois.json': poisRaw, 'sunlight.json': sunRaw, 'weather.json': weatherRaw,
 };
 const load = <T>(name: string): T => JSON.parse(raw[name]) as T;
@@ -112,5 +113,27 @@ describe('game content', () => {
     const ids = new Set(load<PoiFile>('pois.json').pois.map((p) => p.id));
     for (const h of content.historyCards) expect(ids, h.title).toContain(h.poiId);
     expect(ids).toContain(content.scienceTarget.poiId);
+  });
+});
+
+describe('rocks and credits', () => {
+  it('rock oxides are only given where a source is named', () => {
+    for (const r of pack.rockFormations ?? []) {
+      if (Object.keys(r.elementsOxidesWtPercent).length > 0) expect(r.description, r.id).toMatch(/Source: /);
+    }
+  });
+
+  it('Séítah is far richer in magnesium than Máaz (Wiens et al. 2022)', () => {
+    const rock = (id: string) => pack.rockFormations!.find((r) => r.id === id)!.elementsOxidesWtPercent;
+    expect(rock('formation-seitah').MgO).toBeGreaterThan(5 * rock('formation-maaz').MgO);
+  });
+
+  it('credits name every data source, and every chart label says archived or names its model', () => {
+    const credits = load<CreditsFile>('credits.json');
+    expect(credits.dataSources.length).toBeGreaterThanOrEqual(8);
+    for (const s of credits.dataSources) expect(s.citation.length, s.what).toBeGreaterThan(5);
+    for (const [k, v] of Object.entries(credits.chartLabels)) {
+      if (k !== 'map' && k !== 'sunlight') expect(v, k).toMatch(/sol \{sol\} \(archived\)/);
+    }
   });
 });

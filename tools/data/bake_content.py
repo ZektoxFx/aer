@@ -203,6 +203,117 @@ HISTORY = [
      "sources": ["https://science.nasa.gov/mission/mars-2020-perseverance/mars-rock-samples/"]},
 ]
 
+WIENS = ("SuperCam unit means, Wiens et al. 2022, 'Compositionally and density stratified igneous terrain in "
+         "Jezero crater, Mars', Science Advances 8, eabo3399, Table 1 (open access, PMC9410274). Totals are below 100% "
+         "because water and other light elements are not measured.")
+
+# Rock units. Oxides only where a published table gives them; everything else is description.
+ROCKS = [
+    {
+        "id": "formation-maaz", "name": "Máaz formation (crater-floor lava)", "type": "Igneous: basaltic to andesitic lava",
+        "associatedTarget": "Roubion, Rochette (Guillaumes and Bellegarde abrasion patches)",
+        "mineralogy": "Pyroxene and plagioclase feldspar with iron-titanium oxides, altered in places by water.",
+        "elementsOxidesWtPercent": {"SiO2": 49.6, "TiO2": 0.57, "Al2O3": 9.4, "FeO": 18.4, "MgO": 2.7, "CaO": 5.1,
+                                    "Na2O": 2.9, "K2O": 1.07},
+        "description": "Iron-rich lava flows that cover the crater floor around the landing site, later altered by "
+                       "water. Source: " + WIENS,
+        "survivalApplication": "Hard, stable ground for walking (design note).",
+    },
+    {
+        "id": "formation-seitah", "name": "Séítah formation (olivine cumulate)", "type": "Igneous: olivine cumulate",
+        "associatedTarget": "Brac, Issole (Garde and Dourbes abrasion patches)",
+        "mineralogy": "Mostly olivine crystals (about 40% in the published norm) with pyroxene; olivine about Fo55-63.",
+        "elementsOxidesWtPercent": {"SiO2": 45.1, "TiO2": 0.24, "Al2O3": 4.1, "FeO": 23.0, "MgO": 21.4, "CaO": 3.8,
+                                    "Na2O": 1.3, "K2O": 0.21},
+        "description": "Olivine crystals that settled to the bottom of a thick, slowly cooling body of magma. Much "
+                       "richer in magnesium than Máaz. Source: " + WIENS,
+        "survivalApplication": "Rough, ridged ground with sand between the ridges: slow going (design note).",
+    },
+    {
+        "id": "formation-delta", "name": "Western delta front", "type": "Sedimentary: lake and river deposits",
+        "associatedTarget": "Skinner Ridge, Wildcat Ridge, Amalik, Hidden Harbor",
+        "mineralogy": "Fine-grained sandstone and mudstone with salts. SHERLOC found aromatic organic molecules in "
+                      "Wildcat Ridge.",
+        "elementsOxidesWtPercent": {},
+        "description": "Sediment carried by the river that once flowed into Lake Jezero. No bulk oxide values are "
+                       "given here: none were checked against a publication. Source for the organics: NASA/JPL, Sept "
+                       "2022 (jpl.nasa.gov/news/nasas-perseverance-rover-investigates-geologically-rich-mars-terrain).",
+        "survivalApplication": "The science target: see content.json scienceTarget.",
+    },
+    {
+        "id": "formation-regolith", "name": "Regolith (loose soil and dust)", "type": "Wind-blown sand and dust",
+        "associatedTarget": "Observation Mountain regolith samples (Atmo Mountain, Crosswind Lake)",
+        "mineralogy": "Basaltic sand with fine iron-oxide dust and salts, including perchlorates.",
+        "elementsOxidesWtPercent": {},
+        "isruYields": {"extractableWaterWtPercent": 2.0, "bakingTempRequiredC": 350, "perchlorateContentWtPercent": 0.5,
+                       "hazardWarning": "[verify] Overheating perchlorate-bearing soil can release chlorine compounds "
+                                        "that contaminate the water (proposal §4). The 0.5 wt% perchlorate is the "
+                                        "level Phoenix measured in polar soil (Hecht et al. 2009, Science), not a "
+                                        "Jezero measurement."},
+        "description": "Loose soil that covers much of the crater floor. The ISRU numbers are the proposal's working "
+                       "assumptions (2 wt% water, §4) and are marked [verify]; no bulk oxide values are given.",
+    },
+]
+
+CREDITS = {
+    "heading": "Data and credits",
+    "intro": "AER is built on archived NASA mission data. Nothing is live: all data was downloaded before the "
+             "hackathon and bundled with the app.",
+    "dataSources": [
+        {"what": "Base map photo and terrain (elevation, slope, shaded relief)",
+         "mission": "Mars Reconnaissance Orbiter", "instrument": "HiRISE",
+         "product": "Mars 2020 Terrain Relative Navigation HiRISE DTM and orthomosaic",
+         "provider": "USGS Astrogeology Science Center", "citation": "DOI 10.5066/P9REJ9JN",
+         "credit": "NASA/JPL-Caltech/University of Arizona/USGS"},
+        {"what": "Soft-ground layer (thermal inertia)", "mission": "Mars Odyssey", "instrument": "THEMIS",
+         "product": "THEMIS-derived thermal inertia of Jezero crater", "provider": "Edwards & Buz 2021",
+         "citation": "Zenodo, DOI 10.5281/zenodo.4931348, CC BY 4.0", "credit": "C. S. Edwards and J. Buz"},
+        {"what": "Weather: pressure, air and ground temperature, wind", "mission": "Mars 2020 Perseverance",
+         "instrument": "MEDA", "product": "mars2020_meda bundle (derived and calibrated)",
+         "provider": "NASA Planetary Data System, Atmospheres Node", "citation": "pds-atmospheres.nmsu.edu",
+         "credit": "NASA/JPL-Caltech/CAB(CSIC-INTA)"},
+        {"what": "Dust in the air (optical depth)", "mission": "Mars 2020 Perseverance", "instrument": "Mastcam-Z",
+         "product": "Mastcam-Z visible aerosol optical depth record (preliminary)", "provider": "M. T. Lemmon",
+         "citation": "Mendeley Data, DOI 10.17632/gktjp9jptb.2", "credit": "NASA/JPL-Caltech/ASU/M. Lemmon"},
+        {"what": "Sunlight reaching the ground", "mission": "-", "instrument": "-",
+         "product": "Solar radiation on Mars: Update 1990 (NASA TM-103623)", "provider": "J. Appelbaum and D. J. Flood",
+         "citation": "NASA Technical Reports Server 19910005804", "credit": "NASA"},
+        {"what": "Rover route, waypoints and sample sites", "mission": "Mars 2020 Perseverance", "instrument": "-",
+         "product": "Mars 2020 waypoints and traverse; Mars rock samples list", "provider": "NASA/JPL-Caltech",
+         "citation": "mars.nasa.gov/mmgis-maps/M20; science.nasa.gov/mission/mars-2020-perseverance/mars-rock-samples",
+         "credit": "NASA/JPL-Caltech"},
+        {"what": "Rock compositions", "mission": "Mars 2020 Perseverance", "instrument": "SuperCam",
+         "product": "Unit-average compositions", "provider": "Wiens et al. 2022",
+         "citation": "Science Advances 8, eabo3399", "credit": "R. C. Wiens et al."},
+        {"what": "Landing hardware positions", "mission": "Mars Reconnaissance Orbiter", "instrument": "HiRISE",
+         "product": "ESP_068294_1985 annotated release", "provider": "University of Arizona HiRISE team",
+         "citation": "uahirise.org/ESP_068294_1985", "credit": "NASA/JPL-Caltech/University of Arizona"},
+    ],
+    "imageCredits": [
+        "Rover photos (Navcam, Hazcam): NASA/JPL-Caltech",
+        "Rover photos (Mastcam-Z): NASA/JPL-Caltech/ASU",
+        "Orbital photos (HiRISE): NASA/JPL-Caltech/University of Arizona",
+        "Per-photo details: /data/photos/photos.json",
+    ],
+    "fiction": "The AER-1 lander, its crew, its supplies and tank, the rover's beacon and the radio bridge are game "
+               "fiction. Perseverance, Ingenuity, the landing hardware, the sample sites and all data layers are real.",
+    "aiDisclosure": [
+        "The AER-1 lander image was generated with AI and carries a visible watermark.",
+        "Parts of the code, the data pipeline and the game text were written with help from AI assistants "
+        "(Claude and Antigravity). All data values come from the sources above, not from AI.",
+    ],
+    "noAffiliation": "AER is a NASA Space Apps Challenge 2026 entry. It is not endorsed by NASA and uses no NASA logos.",
+    "chartLabels": {
+        "pressure": "Perseverance MEDA · surface pressure · sol {sol} (archived)",
+        "airTemp": "Perseverance MEDA · air temperature · sol {sol} (archived)",
+        "groundTemp": "Perseverance MEDA/TIRS · ground temperature · sol {sol} (archived)",
+        "wind": "Perseverance MEDA · wind speed · sol {sol} (archived)",
+        "dust": "Perseverance Mastcam-Z · dust optical depth · sol {sol} (archived)",
+        "sunlight": "Sunlight model: NASA TM-103623 · dust from Mastcam-Z, sol {sol}",
+        "map": "Base map: MRO HiRISE (USGS Mars 2020 TRN mosaic)",
+    },
+}
+
 SCIENCE_TARGET = {
     "poiId": "sample_12",
     "name": "Wildcat Ridge",
@@ -231,9 +342,12 @@ def main(repo):
     }
     (out / "content.json").write_text(json.dumps(content, ensure_ascii=False, indent=1), encoding="utf-8")
 
+    (out / "credits.json").write_text(json.dumps(CREDITS, ensure_ascii=False, indent=1), encoding="utf-8")
+
     pack_path = out / "jezero_pack.json"
     pack = json.loads(pack_path.read_text(encoding="utf-8"))
     pack["fieldManualPages"] = MANUAL_PAGES
+    pack["rockFormations"] = ROCKS
     pack_path.write_text(json.dumps(pack, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print("content.json:", len(SUPPLIES), "supplies,", len(ROCKET_PIECES), "pieces,", len(RECIPES), "recipes,",
           len(HISTORY), "history cards; manual pages:", len(MANUAL_PAGES))
