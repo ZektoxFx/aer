@@ -59,13 +59,15 @@ export function shelterEnvironment(env: Environment, shelter: Shelter): Environm
   return { ...env, tempC: 37 - (37 - env.tempC) * exposure, windMS: 0, solarWm2: 0 };
 }
 
-// Dust settling on panels: ~0.2%/sol at τ 0.5, the rate Mars rovers saw in clear weather [verify].
+// Dust settling on panels: 0.2%/sol at τ 0.5, the typical rate across six landed missions; never above
+// 2%/sol, the highest rate observed (Lorenz et al. 2021).
 const SOILING_PER_SOL_PER_TAU = 0.004;
+const MAX_SOILING_PER_SOL = 0.02;
 const MIN_PER_SOL = 1477.6; // 24 h 39.6 min
 
 /** Panel soiling after `minutes` exposed to dust τ. Covered or sheltered panels collect nothing. */
 export function soilingAfter(soiling: number, tau: number, minutes: number, covered = false): number {
   if (covered) return soiling;
-  const rate = (SOILING_PER_SOL_PER_TAU * tau * minutes) / MIN_PER_SOL;
+  const rate = (Math.min(MAX_SOILING_PER_SOL, SOILING_PER_SOL_PER_TAU * tau) * minutes) / MIN_PER_SOL;
   return soiling + (1 - soiling) * Math.min(1, rate);
 }

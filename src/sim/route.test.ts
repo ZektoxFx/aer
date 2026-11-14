@@ -27,21 +27,20 @@ describe('assessRoute', () => {
     expect(r.end.state.elapsedMin).toBe(60);
   });
 
-  it('on a long flat walk the CO₂ scrubber, not oxygen, sets the point of no return', () => {
-    // 0.5 kg LiOH lasts ~302 min at 300 W, so a round trip must turn back by about half of that.
-    // O₂ alone would allow ~215 min out.
+  it('with a fresh suit, oxygen sets the point of no return on a long flat walk', () => {
     const r = assessRoute(FULL_SUIT, legs([480, 0]), always);
-    expect(r.turnBackByMin).toBeGreaterThanOrEqual(148);
-    expect(r.turnBackByMin).toBeLessThanOrEqual(155);
+    // (0.6 − 0.05 reserve) kg ÷ 2 ÷ 76.5 g/h ≈ 216 min
+    expect(r.turnBackByMin).toBeGreaterThanOrEqual(212);
+    expect(r.turnBackByMin).toBeLessThanOrEqual(218);
     // carrying on to the end of the route is fatal
     expect(r.end.warnings.some((w) => w.level === 'critical')).toBe(true);
   });
 
-  it('with spare scrubber capacity, oxygen sets the limit instead', () => {
-    const r = assessRoute({ ...FULL_SUIT, liohKg: 5 }, legs([480, 0]), always);
-    // (0.6 − 0.05 reserve) kg ÷ 2 ÷ 76.5 g/h ≈ 216 min
-    expect(r.turnBackByMin).toBeGreaterThanOrEqual(212);
-    expect(r.turnBackByMin).toBeLessThanOrEqual(218);
+  it('Sol 1: with a partly used scrubber after the crash, CO₂ sets it instead', () => {
+    // 0.4 kg LiOH lasts ~242 min at 300 W, so a round trip must turn back by about half of that
+    const r = assessRoute({ ...FULL_SUIT, liohKg: 0.4 }, legs([480, 0]), always);
+    expect(r.turnBackByMin).toBeGreaterThanOrEqual(117);
+    expect(r.turnBackByMin).toBeLessThanOrEqual(124);
   });
 
   it('is null when even turning back right now is unsafe', () => {

@@ -4,25 +4,32 @@ import type { Activity, Environment, SimWarning, StepResult, SuitState } from '.
 export const O2_G_PER_WH = 0.255;   // g O₂ per hour per watt of metabolic rate
 export const CO2_PER_O2 = 1.19;     // kg CO₂ made per kg O₂ used (RQ ≈ 0.87)
 export const LIOH_PER_CO2 = 1.09;   // kg LiOH used per kg CO₂ scrubbed
-export const AVIONICS_W = 150;
+export const AVIONICS_W = 80;      // Apollo PLSS power requirement (NASA ALSJ Flight PLSS)
 const EVAP_J_PER_KG = 2.45e6;       // heat carried away per kg of evaporated water
-const SUIT_GAS_L = 50;              // free gas volume of the suit loop [verify]
+const SUIT_GAS_L = 50;              // free gas volume of the suit loop; a NASA CO₂-system spec uses 56.6 L
 // Ideal gas at body temperature: kPa added per gram of CO₂ left in the suit loop.
 const KPA_PER_G_CO2 = (8.314 * 310) / 44.01 / SUIT_GAS_L;
 const SCRUBBED_PCO2_KPA = 0.1;
 
 // Heat balance (§3.3). Insulation, radiation and convection are lumped into one conductance.
-// Values marked [verify] are design values chosen so "work hot, rest cold" happens at Jezero temperatures.
-const SUIT_UA_W_PER_K = 3.3;          // heat leak from body to Mars per K difference (~300 W at −55 °C) [verify]
-const SUIT_SUN_ABSORPTANCE = 0.2;     // white outer layer [verify]
-const SUIT_SUN_AREA_M2 = 0.7;         // area facing the sun [verify]
-const EVAP_MAX_W = 550;               // membrane evaporator capacity [verify]
+// Design values, not measurements: NASA gives no single heat-leak figure for a Mars suit (it needs full
+// thermal modeling, and Mars air makes vacuum insulation leak more). Chosen so walking (~380 W) runs hot
+// and resting (~180 W) runs cold at Jezero's average −55 °C.
+const SUIT_UA_W_PER_K = 2.5;          // heat leak from body to Mars per K difference (~230 W at −55 °C)
+const SUIT_SUN_ABSORPTANCE = 0.2;     // white outer layer (design value)
+const SUIT_SUN_AREA_M2 = 0.7;         // area facing the sun (design value)
+const EVAP_MAX_W = 550;               // membrane evaporator capacity (proposal §4, design value)
 const BODY_HEAT_CAP_J_PER_K = 75 * 3470; // 75 kg × tissue specific heat
 const CORE_SETPOINT_C = 37;
 
-/** Starting suit for a fresh excursion. Design values to tune in playtesting [verify]. */
+/**
+ * Starting suit for a fresh excursion, from real suit figures (±20%: sources span suit generations):
+ * O₂ ≈ ISS EMU primary tank (~0.54 kg); LiOH sized to outlast the O₂, as real backpacks are (Apollo carried 1.4 kg);
+ * water = Apollo's 8.5 lb; battery = 8 h at 80 W (Apollo carried 279–360 Wh, the EMU ~27 Ah).
+ * The Sol 1 scrubber scenario starts with a partly used canister instead.
+ */
 export const FULL_SUIT: SuitState = {
-  o2Kg: 0.6, liohKg: 0.5, waterKg: 3.6, batteryWh: 1200,
+  o2Kg: 0.6, liohKg: 0.8, waterKg: 3.9, batteryWh: 640,
   inspiredPCO2KPa: SCRUBBED_PCO2_KPA, coreTempC: 37, elapsedMin: 0,
 };
 
@@ -105,7 +112,7 @@ export function simulate(start: SuitState, env: Environment, activity: Activity,
 
   if (s.waterKg <= 0) warnings.push({ code: 'WATER_OUT', level: 'warning', message: 'Cooling water exhausted: overheating risk' });
 
-  // Core temperature tiers [verify against clinical thresholds]
+  // Core temperature tiers: below 35 °C is clinical hypothermia; above 39 °C heat illness sets in
   const t = s.coreTempC;
   if (t > 39) warnings.push({ code: 'CORE_TEMP', level: 'critical', message: `Core ${t.toFixed(1)} °C: heat exhaustion` });
   else if (t > 38) warnings.push({ code: 'CORE_TEMP', level: 'warning', message: `Core ${t.toFixed(1)} °C: overheating, slow down` });
