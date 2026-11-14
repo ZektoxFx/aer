@@ -5,6 +5,19 @@
   --warning: #ffb000;
   --critical: #ff4d4d;
   --dim: #5f7a66;
+
+  /* Intro only (title, crash, POV). Sampled from the AER-1 lander image; the HUD keeps the palette above. */
+  --space: #050403;
+  --mars-sky: #c9976a;
+  --mars-sand: #b8622f;
+  --mars-rust: #7c3417;
+  --mars-shadow: #2b140a;
+  --mars-dust: #ecd2ad;
+  --alarm: #e5452f;
+  --metal: #dcd8d1;
+  --metal-dark: #5d5a55;
+  --sat-panel: #1c3557;
+  --earth-glow: #7fb2ff;
   color-scheme: dark;
 }
 

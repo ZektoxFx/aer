@@ -4,7 +4,7 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 
 **Hard rules (Space Apps 2026):** 30 seconds or less (over 30 s makes the project ineligible for Global judging), English subtitles, no images of anyone under 18, and it must show how NASA data made the project possible. Data is archived: never say "live".
 
-**Placeholders to fill before export:** `[TEAM NAME]`, and the app link on the last card (the Vercel production link, see `SUBMISSION.md`).
+**Placeholders to fill before export:** the app link on the last card (the Vercel production link, see `SUBMISSION.md`).
 
 ---
 
@@ -12,7 +12,7 @@ Owner: UI and Submission. Built from what is in `main` today. Text captions only
 
 | # | Time | Clip | Caption on screen |
 | --- | --- | --- | --- |
-| 1 | 0:00–0:03 | Still: `public/data/jezero_base_2m.jpg`, slow zoom in | **[TEAM NAME]** · NASA Space Apps 2026 · Interplanetary Survival Guide: Martian Map |
+| 1 | 0:00–0:03 | Still: `public/data/jezero_base_2m.jpg`, slow zoom in | **PerformativeLarper** · NASA Space Apps 2026 · Interplanetary Survival Guide: Martian Map |
 | 2 | 0:03–0:07 | Same still, keep zooming | **AER: plan a Marswalk you can survive.**<br>Small credit: *HiRISE, Jezero Crater (NASA/JPL/UArizona, USGS)* |
 | 3 | 0:07–0:13 | Recording A: HUD running Sol 1 | Real Perseverance weather (MEDA, sol 312) sets what every step costs. |
 | 4 | 0:13–0:20 | Recording B: Sol 1 scrubber alarm → diagnose | On Mars, the danger is your own breath. Your CO₂ scrubber is running out. |
@@ -67,7 +67,7 @@ Record each clip a little long (10–20 s); you will trim in iMovie.
 
 - [ ] 30.0 s or less
 - [ ] Every caption in English and readable
-- [ ] `[TEAM NAME]` and `[APP LINK]` replaced
+- [ ] `[APP LINK]` replaced
 - [ ] Row 5 says the game storm is stronger than the real one
 - [ ] No people, no NASA logos or insignia on the title cards
 - [ ] The word "live" appears nowhere

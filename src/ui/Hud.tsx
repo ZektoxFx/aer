@@ -14,6 +14,7 @@ import {
   type ActionId, type CauseId, type Sol1State,
 } from './sol1';
 import { Sol1Panel } from './Sol1Panel';
+import { hudKeyAction } from './settings';
 import './hud.css';
 
 // Test controls until Map drives the activity from a planned route.
@@ -132,6 +133,30 @@ export function Hud({ data }: { data: GameData }) {
     for (let i = 0; i < 4000 && game.current.clockMin < target; i++) r = step(1, false);
     setFrame(r);
   };
+
+  // Keyboard controls (listed in Settings). The ref always holds this render's handlers.
+  const onKey = (e: KeyboardEvent) => {
+    const t = e.target;
+    if (e.metaKey || e.ctrlKey || e.altKey || (t instanceof Element && t.closest('input, select, textarea'))) return;
+    // Space on a focused button presses that button, as browsers do; don't also pause.
+    if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
+    const action = hudKeyAction(e.key);
+    if (!action) return;
+    if (action === 'pause') { e.preventDefault(); setPaused((p) => !p); return; }
+    const busy = missionRef.current !== null;
+    if (action.startsWith('mode:') && !busy) setMode(action.slice(5));
+    else if (action === 'sol1') startSol1();
+    else if (action === 'storm' && !busy && !(game.current.storm && stormPhase(game.current.storm, game.current.clockMin) !== 'over')) triggerStorm();
+    else if (action === 'skip') skipHour();
+    else if (action === 'restart') restart();
+  };
+  const keyRef = useRef(onKey);
+  useEffect(() => { keyRef.current = onKey; });
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => keyRef.current(e);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
 
   const s = frame.state;
   const fc = frame.forecast; // from the sim, so it counts the suit charging in the cabin
