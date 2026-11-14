@@ -23,7 +23,7 @@ export function makeGlove(side: 1 | -1, c: GloveColours, sleeveM = 0.6): Glove {
   const mesh = (g: THREE.BufferGeometry, m: THREE.Material) => { geos.push(g); const o = new THREE.Mesh(g, m); o.castShadow = true; return o; };
 
   // Sleeve, wrist bearing ring and cuff.
-  const sleeve = mesh(new THREE.CylinderGeometry(0.062, 0.075, sleeveM, 14).rotateX(Math.PI / 2), suit);
+  const sleeve = mesh(new THREE.CylinderGeometry(0.054, 0.066, sleeveM, 14).rotateX(Math.PI / 2), suit);
   sleeve.position.z = 0.06 + sleeveM / 2; group.add(sleeve);
   const bearing = mesh(new THREE.TorusGeometry(0.058, 0.011, 8, 24), ring); bearing.position.z = 0.055; group.add(bearing);
   const cuff = mesh(new THREE.CylinderGeometry(0.05, 0.056, 0.07, 14).rotateX(Math.PI / 2), dark); cuff.position.z = 0.02; group.add(cuff);

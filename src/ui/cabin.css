@@ -1,0 +1,12 @@
+/* Map/Aiman: the intro cabin scene (CabinCruise.tsx). Colours only from the :root palette. */
+.cabin-cruise { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none; background: var(--space); overflow: hidden; }
+.cabin-cruise.on { opacity: 1; }
+.cabin-cruise canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cab-cap {
+  position: absolute; top: 7%; left: 0; right: 0; margin: 0; z-index: 1; text-align: center;
+  font: 600 15px ui-monospace, Consolas, monospace; letter-spacing: 0.18em; color: var(--fg); text-shadow: 0 1px 6px var(--space);
+}
+.cab-cap[data-alert='1'] { color: var(--alarm); }
+.cab-note { position: absolute; left: 16px; right: 140px; bottom: 14px; margin: 0; z-index: 1; font: 10px ui-monospace, Consolas, monospace; color: var(--dim); text-shadow: 0 1px 3px var(--space); }
+.cab-fade { position: absolute; inset: 0; z-index: 2; background: var(--space); opacity: 1; pointer-events: none; }
+@media (max-width: 600px) { .cab-cap { font-size: 11px; top: 12%; } .cab-note { right: 16px; bottom: 34px; } }

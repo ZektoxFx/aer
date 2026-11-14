@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BlackHole } from './BlackHole';
+import { CabinCruise } from './CabinCruise';
+import { CABIN_MS } from './cabin';
 import { CrashSequence } from './CrashSequence';
 import { CRASH_MS } from './edl';
 import { EarthGlobe } from './EarthGlobe';
@@ -16,12 +18,13 @@ export const TEAM_NAME = 'PerformativeLarper';
 
 /**
  * The intro, one continuous sequence:
- * title (Earth) → cruise (leaving Earth) → fault (engine alarm, tumbling) → crash (Mars rushes up, impact)
+ * title (Earth) → cruise (leaving Earth) → cabin (inside AER-1, the cruise to Mars) → fault (engine alarm, tumbling) → crash (Mars rushes up, impact)
  * → locate (the suit's nav finds you: orbit → Jezero → the cabin) → pov (the astronaut comes to at the wreck) → blur (dissolves into the game).
  */
-type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'locate' | 'pov' | 'blur';
+type Phase = 'title' | 'cruise' | 'cabin' | 'fault' | 'crash' | 'locate' | 'pov' | 'blur';
 const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
-  cruise: { to: 'fault', ms: 2600 },
+  cruise: { to: 'cabin', ms: 2600 },
+  cabin: { to: 'fault', ms: CABIN_MS }, // inside the cabin: the 203-day cruise as a time-lapse, then the alarm
   fault: { to: 'crash', ms: 2200 },
   crash: { to: 'locate', ms: CRASH_MS }, // LOCAL DRAFT: the physics crash (CrashSequence) instead of 2 s
   locate: { to: 'pov', ms: ORBIT_ZOOM_MS }, // Map: the suit finds you, from orbit down to the cabin (OrbitZoom)
@@ -121,6 +124,9 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <div className="alarm-wash" aria-hidden="true" />
         <div className="impact" aria-hidden="true" />
       </div>
+
+      {/* Inside the cabin during the cruise (CabinCruise), built at START so it is ready after the launch. */}
+      <CabinCruise prepare={phase !== 'title'} active={phase === 'cabin'} />
 
       {/* LOCAL DRAFT: entry, parachute, retro failure and impact, played from the physics in edl.ts. */}
       <CrashSequence active={phase === 'crash'} />
