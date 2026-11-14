@@ -22,6 +22,8 @@ import type { MapContent } from './realData';
 import { planRoute } from './route';
 import type { RouteResult } from './route';
 import { createExplored, markSeen, newlyVisible, sightRadius } from './visibility';
+import { groundStep, returnStatus } from './world';
+import type { MapWorldState } from './world';
 import './map.css';
 import './hudMap.css';
 
@@ -53,6 +55,8 @@ export interface HudMapProps {
   envAt?: EnvAt;
   /** Change to start again at the cabin (new game). */
   resetKey?: number;
+  /** LOCAL DRAFT: the map's state (items, zones, safe zone, route) for the 3D world, sent whenever it changes. */
+  onWorld?: (s: MapWorldState) => void;
 }
 
 /** Suit levels shown in the big-map strip, so the player still sees them with the gauges covered. */
@@ -66,7 +70,7 @@ function foundLine(f: MapItem): string {
   return `Spotted ${f.label}${f.fiction ? ' (game fiction)' : ''}`;
 }
 
-export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, onRoute, onFound, envAt, resetKey }: HudMapProps) {
+export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, onRoute, onFound, envAt, resetKey, onWorld }: HudMapProps) {
   // undefined = still loading, null = missing (then the synthetic test layout is used).
   const [pois, setPois] = useState<PoiFile | null | undefined>(undefined);
   const [terrainLayers, setTerrainLayers] = useState<TerrainLayers | null | undefined>(undefined);
@@ -186,6 +190,15 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
   }, [waypoints, router, planModel, pack.elevation, layout, pos, planAt.suit, envAt]);
   useEffect(() => { onRoute?.(route); }, [route, onRoute]);
 
+  // LOCAL DRAFT: hand the 3D world the same items, zones, safe zone and route as this map.
+  useEffect(() => {
+    onWorld?.({ items: layout.items, found, zones: layout.zones, range, reserve: RESERVE, route, base: layout.base, sightM, elevation: pack.elevation });
+  }, [onWorld, layout, found, range, route, sightM, pack.elevation]);
+
+  // Where the astronaut stands, by the map's rules: soft ground slows you down; outside the green line is one-way.
+  const ground = groundStep(layout.zones, pos, 0).zone;
+  const ret = returnStatus(range, pack.elevation, pos, RESERVE);
+
   const addWaypoint = (p: Pt) => { setPlanAt(live.current); setWaypoints((w) => [...w, p]); };
 
   return (
@@ -216,6 +229,13 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
         />
       </div>
       <div className="hud-map-bar">
+        {(ret === 'one-way' || ret === 'out' || ground) && (
+          <span className={ret === 'safe' || ret === 'unknown' ? 'warning' : 'critical'}>
+            {ret === 'out' ? '▲ OUT OF REACH OF THE CABIN' : ret === 'one-way' ? '▲ OUTSIDE THE GREEN LINE: HEAD BACK' : ''}
+            {ground && (ret === 'one-way' || ret === 'out') ? ' · ' : ''}
+            {ground ? `${ground.label.toUpperCase()}: ${Math.round(ground.speedFactor * 100)}% SPEED, MORE O₂` : ''}
+          </span>
+        )}
         {route ? (
           <span>
             ROUTE {(route.distM / 1000).toFixed(2)} km · {fmtMin(route.minutes)} · <b className={route.status === 'nominal' ? undefined : route.status}>{route.status.toUpperCase()}</b>
@@ -224,7 +244,10 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
                 : route.pnrIndex !== null ? <b className="critical"> · TURN BACK BY {fmtMin(route.turnBackByMin)}</b> : null}
           </span>
         ) : (
-          <span className="dim">CLICK THE MAP TO PLACE A ROUTE · STAY INSIDE THE GREEN LINE TO GET HOME</span>
+          <span className="dim">
+            <span className="hud-map-hint-long">CLICK THE MAP TO PLACE A ROUTE · STAY INSIDE THE GREEN LINE TO GET HOME</span>
+            <span className="hud-map-hint-short">CLICK = ADD A STOP · GREEN LINE = SAFE TO RETURN</span>
+          </span>
         )}
         <span className="hud-map-btns">
           <button onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={!waypoints.length}>UNDO</button>
