@@ -71,7 +71,8 @@ def main(repo):
         "notes": [
             "Archived data, not live. Label charts with: Perseverance MEDA, sol N.",
             "Hourly arrays are indexed by Local True Solar Time hour 0-23; null = no data that hour.",
-            "pressurePa / airTempC = [min, mean, max] of the hourly means. windMS = [mean, 99th percentile].",
+            "pressurePa = [lowest, mean, highest] of all 1 Hz readings. airTempC = [min, mean, max] of the hourly means. "
+            "windMS = [mean, 99th percentile] of all readings.",
             "Wind sensor was damaged in the sol 313 storm: no wind after that.",
             "groundTemp/skyTemp are brightness temperatures from TIRS (ground emissivity 0.98 assumed).",
             "MEDA logs 12 h per sol on a normal cadence (odd/even hours alternate), so some sols miss hours.",

@@ -33,7 +33,10 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 - **Sampling:** the elevation and photo mosaics were read straight from the USGS S3 bucket with HTTP range requests (`tools/data/remote_tiff.py`), then box-averaged onto the ground grid. The 1.8 GB and 7.4 GB source files were never downloaded whole.
 - **Hardware positions:** read off the annotated HiRISE release image, then matched to the map using two craters as fixed points. Checked against the rover's own position, the error is about 20 m. Use ±40 m as the accuracy. The base photo predates landing (2013–2017 images), so the hardware itself is not visible in it.
 - **Sample sites:** the rover's last localisation on or before each sample's sealing sol, so within tens of metres of the real spot.
-- **Weather:** hourly means by Local True Solar Time. Air temperature is the mean of the five ATS sensors. Ground and sky temperatures are TIRS brightness temperatures, with ground emissivity 0.98 assumed. The 118 sols are sols 300–330 (the storm) plus one sol every 20 from sol 15 to 1755.
+- **Weather:** the hourly arrays are hourly means by Local True Solar Time. The daily summaries differ by quantity:
+  - `pressurePa` is the lowest, mean and highest of all 1-second readings. On sol 313 the lowest reading is 583.5 Pa; the lowest hourly mean is 584.7 Pa. `pressureKPa` in `jezero_pack.json` is that all-readings mean.
+  - `airTempC` is the min, mean and max of the hourly means. Air temperature is the mean of the five ATS sensors.
+  - `windMS` is the mean and 99th percentile of all readings. Ground and sky temperatures are TIRS brightness temperatures, with ground emissivity 0.98 assumed. The 118 sols are sols 300–330 (the storm) plus one sol every 20 from sol 15 to 1755.
 - **Dust:** the 630 nm channel, as the daily median. When a sol has no measurement, `tauFromSol` names the sol used instead.
 - **Sunlight:** the NASA polynomial f(z, τ, albedo) matches the report's own Table I with 0.4% average error (4% worst case). The albedo is set to 0.17 for Jezero `[verify]`.
 - **Terrain class:** design thresholds, to tune in playtesting:
