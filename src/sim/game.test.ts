@@ -3,9 +3,7 @@ import sunRaw from '../../public/data/sunlight.json?raw';
 import type { SunlightTable } from '../data/files';
 import { solarWm2 } from '../data/sunlight';
 import type { SolWeather } from '../data/types';
-import {
-  CRASH_CANISTER_LIOH_KG, SPEED_X, forecast, localHour, nasaSolar, newGame, outdoorEnv, sunElevationDeg, tick, weatherAt,
-} from './game';
+import { SPEED_X, forecast, localHour, nasaSolar, newGame, outdoorEnv, sunElevationDeg, tick, weatherAt } from './game';
 import { BASE_LOADS } from './power';
 import { FULL_SUIT } from './simulate';
 import { MIN_PER_SOL, makeStorm } from './storm';
@@ -122,17 +120,6 @@ describe('cabin charging', () => {
     expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh - 80, 6);
     expect(r.state.power.batteryWh).toBe(g0.power.batteryWh);
     expect(Number.isFinite(r.forecast.batteryMin)).toBe(true);
-  });
-});
-
-describe('scenario start', () => {
-  it('Scrubber Saturation starts with the partly used canister from the crash', () => {
-    const g = newGame({ ...sol13, scenario: 'Sol 1: Scrubber Saturation' });
-    expect(g.suit.liohKg).toBe(CRASH_CANISTER_LIOH_KG);
-    expect(g.suit.o2Kg).toBe(FULL_SUIT.o2Kg);
-  });
-  it('other scenarios start with a full suit', () => {
-    expect(newGame({ ...sol13, scenario: 'Sol 2: Cooling and Water' }).suit.liohKg).toBe(FULL_SUIT.liohKg);
   });
 });
 

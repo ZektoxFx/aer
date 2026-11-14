@@ -11,24 +11,15 @@ export const SPEED_X: Record<ClockSpeed, number> = { paused: 0, traverse: 60, st
 
 const REST: Activity = { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 
-/** LiOH left in the canister the crash leaves behind (Sol 1, §6.2): ~4 h at 300 W, so a round trip turns back by ~2 h. */
-export const CRASH_CANISTER_LIOH_KG = 0.4;
-
 /**
- * Suit at the start of a scenario. The Scrubber Saturation scenario starts with the partly used canister;
- * every other scenario starts full. Keyed on the pack's scenario name, since that is what Data bakes per sol.
+ * A new run: in the cabin at 08:00 local time on sol 0, with a full suit. Pass `sky` to use NASA sunlight data.
+ * Scenario-specific starts (e.g. Sol 1's crash-damaged canister) are set by the UI's scenario code (src/ui/sol1.ts).
  */
-export function startingSuit(weather: SolWeather): SuitState {
-  const scrubberScenario = /scrubber/i.test(weather.scenario ?? '');
-  return { ...FULL_SUIT, liohKg: scrubberScenario ? CRASH_CANISTER_LIOH_KG : FULL_SUIT.liohKg };
-}
-
-/** A new run: in the cabin at 08:00 local time on sol 0. Pass `sky` to use NASA sunlight data. */
 export function newGame(weather: SolWeather, sky?: GameState['sky']): GameState {
   const clockMin = (8 / 24) * MIN_PER_SOL;
   return {
     clockMin, weather, activity: REST, shelter: 'cabin', power: CABIN_POWER, loads: [], storm: null, sky,
-    suit: { ...startingSuit(weather), elapsedMin: clockMin },
+    suit: { ...FULL_SUIT, elapsedMin: clockMin },
   };
 }
 
