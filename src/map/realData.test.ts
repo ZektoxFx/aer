@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest';
 import packRaw from '../../public/data/jezero_pack.json?raw';
 import layersRaw from '../../public/data/layers_20m.json?raw';
 import poisRaw from '../../public/data/pois.json?raw';
-import type { PoiFile, TerrainLayers } from '../data/files';
+import contentRaw from '../../public/data/content.json?raw';
+import type { ContentFile, PoiFile, TerrainLayers } from '../data/files';
 import type { DataPack } from '../data/types';
 import { FULL_SUIT } from '../sim/simulate';
 import type { Environment } from '../sim/types';
 import { zoneAt } from './layout';
 import { cellOf, costField, findPath, makeGrid, rangeField } from './pathfind';
 import { buildJezeroLayout, hazardsFromLayers, openSpot, packXY, rockFor } from './realData';
-import { planRoute } from './route';
+import { planRoute, turnBackBy } from './route';
 
 const pack = JSON.parse(packRaw) as DataPack;
 const pois = JSON.parse(poisRaw) as PoiFile;
 const layers = JSON.parse(layersRaw) as TerrainLayers;
+const content = JSON.parse(contentRaw) as ContentFile;
 const env: Environment = { pressureKPa: 0.63, tempC: -40, windMS: 5, tau: 0.5 };
 const model = { speedMS: 0.8, loadKg: 10, env };
 
@@ -125,5 +127,29 @@ describe('real Jezero data (Data role files)', () => {
     expect(sci?.note).toContain('Rock:');
     // Values the Data role has not checked stay marked.
     if (/\[verify/i.test(`${delta?.description} ${delta?.mineralogy}`)) expect(sci?.rock).toContain('[verify]');
+  });
+
+  it('uses content.json: the required page from Data’s recipes, names and history cards', () => {
+    const { items } = buildJezeroLayout({ pack, pois, layers, content }, 1);
+    const req = content.recipes.find((r) => r.knowledge === 'manual_required');
+    expect(items.filter((i) => i.required).map((i) => i.contentId)).toEqual([String(req?.manualPage)]);
+    expect(items.find((i) => i.contentId === 'o2_bottle')?.label).toBe(content.supplies.find((x) => x.id === 'o2_bottle')?.name);
+    expect(items.find((i) => i.id === 'sample_12')?.note).toContain('History card:');
+  });
+
+  it('measures the point of no return all the way back to the cabin, not just to the last stop', () => {
+    const L = buildJezeroLayout({ pack, pois, layers }, 1);
+    const g = makeGrid(pack.elevation, L.zones);
+    const router = (a: { x: number; y: number }, b: { x: number; y: number }) => findPath(g, model, a, b);
+    const stop = L.items.find((i) => i.contentId === 'avionics_box')?.at ?? L.base; // a stop out in the field
+    const next = { x: stop.x - 300, y: stop.y };
+    const half = { ...FULL_SUIT, o2Kg: FULL_SUIT.o2Kg * 0.35, liohKg: FULL_SUIT.liohKg * 0.35 };
+    const r = planRoute(pack.elevation, L.zones, stop, L.base, [next], half, { ...model, router });
+    const toStopOnly = turnBackBy(half, r.simLegs, [], () => env);
+    // Walking home from the stop costs extra, so turning back must happen no later than with the stop as "home".
+    if (toStopOnly === null) expect(r.turnBackByMin).toBeNull();
+    else expect(r.turnBackByMin === null || r.turnBackByMin <= toStopOnly).toBe(true);
+    const home = planRoute(pack.elevation, L.zones, stop, L.base, [L.base], half, { ...model, router }).legs[0].minutes;
+    expect(home).toBeGreaterThan(5);
   });
 });

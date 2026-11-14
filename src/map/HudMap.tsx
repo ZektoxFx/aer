@@ -3,16 +3,13 @@
 // movement passes the player's position in (`astronaut`) and gets the planned route out (`onRoute`), which already
 // carries Sim's leg list (`route.simLegs`) and point of no return (`route.turnBackByMin`).
 //
-// For the UI role, if you want it in the HUD (the "[ map / surface photo view ]" spot in Hud.tsx). Map does not
-// edit Hud.tsx; every prop below is a value the HUD already has, and all but the first five are optional:
-//
-//   <HudMap pack={pack} suit={s.suit} env={frame.env} storm={stormActive} sol={s.weather.sol}
-//     night={false} astronaut={/* player position in map metres, once movement exists */ undefined}
-//     onRoute={(route) => { /* movement owner: route?.simLegs */ }} onFound={(items) => {}} resetKey={0} />
+// For the UI role: how to put it in the HUD, and ideas (e.g. a close-up view of the base when it is clicked),
+// are in src/map/NOTES_FOR_UI.md. Map does not edit src/ui/.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PoiFile, TerrainLayers } from '../data/files';
 import type { DataPack } from '../data/types';
 import { FULL_SUIT } from '../sim/simulate';
+import type { EnvAt } from '../sim/route';
 import type { Environment, SuitState } from '../sim/types';
 import type { Pt } from './geo';
 import { buildLayout } from './layout';
@@ -52,6 +49,8 @@ export interface HudMapProps {
   onRoute?: (route: RouteResult | null) => void;
   /** Hidden items that just came into sight. */
   onFound?: (items: MapItem[]) => void;
+  /** Optional: conditions over game time (Sim's EnvAt), so the turn-back time counts night falling or a storm. */
+  envAt?: EnvAt;
   /** Change to start again at the cabin (new game). */
   resetKey?: number;
 }
@@ -67,11 +66,11 @@ function foundLine(f: MapItem): string {
   return `Spotted ${f.label}${f.fiction ? ' (game fiction)' : ''}`;
 }
 
-export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, onRoute, onFound, resetKey }: HudMapProps) {
+export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, onRoute, onFound, envAt, resetKey }: HudMapProps) {
   // undefined = still loading, null = missing (then the synthetic test layout is used).
   const [pois, setPois] = useState<PoiFile | null | undefined>(undefined);
-  const [terrainLayers, setTerrainLayers] = useState<TerrainLayers | null>(null);
-  const [content, setContent] = useState<MapContent | null>(null);
+  const [terrainLayers, setTerrainLayers] = useState<TerrainLayers | null | undefined>(undefined);
+  const [content, setContent] = useState<MapContent | null | undefined>(undefined);
   const [mapCaption, setMapCaption] = useState('Base map: MRO HiRISE (USGS Mars 2020 TRN mosaic)');
 
   useEffect(() => {
@@ -83,9 +82,10 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
   }, []);
 
   const real = !!pois && pack.elevation.cols >= 32;
-  const loading = pois === undefined;
+  // Wait for all three files, so the layout (and the game) is built once, not reset as each file lands.
+  const loading = pois === undefined || terrainLayers === undefined || content === undefined;
   const layout = useMemo(
-    () => (real && pois ? buildJezeroLayout({ pack, pois, layers: terrainLayers, content }, 1)
+    () => (real && pois && !loading ? buildJezeroLayout({ pack, pois, layers: terrainLayers ?? null, content }, 1)
       : loading ? { ...buildLayout(pack.area, 1), items: [], zones: [], crashPath: [] } : buildLayout(pack.area, 1)),
     [real, loading, pack, pois, terrainLayers, content],
   );
@@ -171,11 +171,19 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
 
   // The route is planned from where the player is now.
   const planModel = useMemo(() => ({ ...WALK, env: planAt.env }), [planAt.env]);
+  // Paths are cached per (from, to), so adding a waypoint only searches the new leg.
+  const router = useMemo(() => {
+    const cache = new Map<string, Pt[] | null>();
+    return (a: Pt, b: Pt) => {
+      const k = `${a.x.toFixed(1)},${a.y.toFixed(1)}>${b.x.toFixed(1)},${b.y.toFixed(1)}`;
+      if (!cache.has(k)) cache.set(k, findPath(grid, planModel, a, b));
+      return cache.get(k) ?? null;
+    };
+  }, [grid, planModel]);
   const route = useMemo(() => {
     if (!waypoints.length) return null;
-    const router = (a: Pt, b: Pt) => findPath(grid, planModel, a, b);
-    return planRoute(pack.elevation, layout.zones, pos, layout.base, waypoints, planAt.suit, { ...planModel, router });
-  }, [waypoints, grid, planModel, pack.elevation, layout, pos, planAt.suit]);
+    return planRoute(pack.elevation, layout.zones, pos, layout.base, waypoints, planAt.suit, { ...planModel, router, envAt });
+  }, [waypoints, router, planModel, pack.elevation, layout, pos, planAt.suit, envAt]);
   useEffect(() => { onRoute?.(route); }, [route, onRoute]);
 
   const addWaypoint = (p: Pt) => { setPlanAt(live.current); setWaypoints((w) => [...w, p]); };

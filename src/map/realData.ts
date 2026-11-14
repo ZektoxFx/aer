@@ -1,20 +1,16 @@
 // The map built from the Data role's real Jezero files: jezero_pack.json (elevation, lander, debris trail,
 // manual pages), pois.json (NASA hardware, samples, rover positions, traverse), layers_20m.json (terrain class)
-// and, once merged, content.json (supply and rocket-piece ids). Positions come from Data wherever Data gives them;
+// and content.json (supply and rocket-piece ids, recipes, history cards, science target). Positions come from Data wherever Data gives them;
 // only the off-trail pieces and pages are placed by the Map role (design values, tune in playtesting).
-import type { PoiFile, TerrainLayers } from '../data/files';
+import type { ContentFile, PoiFile, TerrainLayers } from '../data/files';
 import type { DataPack } from '../data/types';
 import type { Pt } from './geo';
 import { dist } from './geo';
 import type { HazardKind, HazardZone, ItemKind, Layout, MapItem } from './layout';
 import { HAZARD_EFFECT, seeded } from './layout';
 
-/** The parts of content.json the map reads (Data's full type arrives with PR #11). */
-export interface MapContent {
-  supplies?: { id: string; name: string }[];
-  rocketPieces?: { id: string; name: string; yields?: Record<string, number> }[];
-  scienceTarget?: { poiId: string; name?: string };
-}
+/** The parts of the Data role's content.json the map reads (all optional, so the map still works without it). */
+export type MapContent = Partial<Pick<ContentFile, 'supplies' | 'rocketPieces' | 'recipes' | 'historyCards' | 'scienceTarget'>>;
 
 /** Pack easting/northing (metres from the landing site) to map metres from the north-west corner. */
 export function packXY(area: DataPack['area'], eastingM: number, northingM: number): Pt {
@@ -109,7 +105,8 @@ export function rockFor(pack: DataPack, target: string): string {
   const f = (pack.rockFormations ?? []).find((r) => r.associatedTarget.toLowerCase().split(/[,&()]| and /).some((s) => s.trim() === t || s.trim().startsWith(`${t} `)));
   if (!f) return '';
   const unchecked = /\[verify/i.test(`${f.description} ${f.mineralogy}`);
-  return `Rock: ${f.name} (${f.type}). ${f.mineralogy}${unchecked ? ' [verify]' : ''}`;
+  const source = /Source[^:]*:\s*([^'(]+)/.exec(f.description)?.[1].trim().replace(/[,.;]+$/, '');
+  return `Rock: ${f.name} (${f.type}). ${f.mineralogy}${source ? ` (Source: ${source}.)` : ''}${unchecked ? ' [verify]' : ''}`;
 }
 
 export interface JezeroFiles {
@@ -146,18 +143,22 @@ export function buildJezeroLayout({ pack, pois, layers, content }: JezeroFiles, 
   }
   for (const o of OFF_TRAIL) items.push(fictionItem(o.id, openSpot(layers, clampPt({ x: base.x + o.dx, y: base.y + o.dy }))));
   let other = 0;
+  // The page the player must find: Data marks its recipe 'manual_required' (fallback: the comms recipe).
+  const requiredPages = new Set((content?.recipes ?? []).filter((r) => r.knowledge === 'manual_required' && r.manualPage).map((r) => r.manualPage));
+  const isRequired = (pageNumber: number, unlocks?: string) => (requiredPages.size ? requiredPages.has(pageNumber) : /comms/i.test(unlocks ?? ''));
   (pack.fieldManualPages ?? []).forEach((pg) => {
     const spot = PAGE_SPOTS[recipeKey(pg.unlocksRecipe ?? '')] ?? OTHER_PAGE_SPOTS[other++ % OTHER_PAGE_SPOTS.length];
     const unlocks = pg.unlocksRecipe || undefined;
     items.push({
       id: `page-${pg.pageNumber}`, contentId: String(pg.pageNumber), kind: 'manual', label: `Manual page ${pg.pageNumber}: ${pg.title}`,
       at: openSpot(layers, clampPt({ x: base.x + spot.dx, y: base.y + spot.dy })), hidden: true, fiction: true,
-      ...(unlocks ? { unlocks } : {}), ...(/comms/i.test(unlocks ?? '') ? { required: true } : {}),
+      ...(unlocks ? { unlocks } : {}), ...(isRequired(pg.pageNumber, unlocks) ? { required: true } : {}),
     });
   });
 
   // Real NASA sites: always on the map, because the cabin has the archive maps.
   const clues = new Map((pack.hardwareSites ?? []).map((h) => [h.id, h.clue]));
+  const history = new Map((content?.historyCards ?? []).map((h) => [h.poiId, h.title]));
   const scienceId = content?.scienceTarget?.poiId ?? 'sample_12';
   const spotCount = new Map<string, number>();
   for (const p of pois.pois) {
@@ -168,7 +169,8 @@ export function buildJezeroLayout({ pack, pois, layers, content }: JezeroFiles, 
     const at = k ? around({ x: p.xM, y: p.yM }, k, 6, 14) : { x: p.xM, y: p.yM };
     const kind: ItemKind = p.id === scienceId ? 'science' : p.kind === 'science_sample' ? 'sample' : 'clue';
     const rock = p.target ? rockFor(pack, p.target) : '';
-    const note = [clues.get(p.id) || p.note, rock].filter(Boolean).join(' ');
+    const card = history.get(p.id);
+    const note = [clues.get(p.id) || p.note, rock, card ? `History card: ${card}.` : ''].filter(Boolean).join(' ');
     items.push({ id: p.id, poiId: p.id, kind, label: p.name, at, hidden: false, ...(note ? { note } : {}), ...(rock ? { rock } : {}) });
   }
 
