@@ -97,7 +97,7 @@ Draft:
 
 ## Space Agency Partner Data and Other References
 
-- **Space Agency Partner data:** none used yet. **TODO (optional):** the challenge encourages partner data. A quick, honest option would be to mention ESA's Mars Express and Trace Gas Orbiter as relays in the radio story. **CHECK:** cite an ESA or NASA source that they relay Perseverance's data before adding this. The NASA Mars 2020 pages we checked only name MRO and MAVEN, and the field manual page names those two. Only add it if it goes into the project itself.
+- **Space Agency Partner data:** none used yet. **TODO (optional):** the challenge encourages partner data. A quick, honest option would be to mention ESA's Mars Express and Trace Gas Orbiter as relays in the radio story. **Checked (November 14):** NASA's Mars Relay Network Handbook (JPL D-71874, Release 4, April 2026) lists ESA's Trace Gas Orbiter and Mars Express as relays and describes TGO relay passes with Perseverance. MAVEN was lost in 2025. The field manual page and `public/data/relay.json` now name MRO, Odyssey and TGO, so the game itself uses this. Whether that counts as "partner data" is the team's call.
 - Lorenz et al. 2021, *Lander and rover histories of dust accumulation on and removal from solar arrays on Mars*, Planetary and Space Science ([HAL](https://hal.sorbonne-universite.fr/hal-03369920)). Used for panel dust rates.
 - Sánchez-Lavega et al. 2023, Jezero MEDA pressure ([arXiv 2401.12931](https://arxiv.org/abs/2401.12931)).
 - Open-source software: React, Vite, Vitest, TypeScript, NumPy, SciPy, Pillow, tifffile, imagecodecs.

@@ -158,10 +158,10 @@
    "source": "NASA: rated 300 W for 6-12 g/h, checked in proposal §9"
   },
   "perseveranceRadio": {
-   "uhf": "about 400 MHz, up to 2 Mbit/s to MRO and MAVEN, relayed to the Deep Space Network",
+   "uhf": "about 400 MHz, up to 2 Mbit/s to relay orbiters (MRO, Odyssey, ESA's TGO and Mars Express), relayed to the Deep Space Network. MAVEN was lost in 2025.",
    "xBandHighGain": "direct to Earth, mostly for receiving commands",
    "lowGain": "emergency backup",
-   "source": "NASA/JPL Mars 2020 landing press kit, Telecommunications"
+   "source": "NASA/JPL Mars 2020 landing press kit, Telecommunications; current orbiters from the Mars Relay Network Handbook, JPL D-71874 Release 4 (April 2026). Pass times: relay.json"
   }
  },
  "designValues": {

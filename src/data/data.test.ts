@@ -2,19 +2,25 @@ import { describe, expect, it } from 'vitest';
 import creditsRaw from '../../public/data/credits.json?raw';
 import contentRaw from '../../public/data/content.json?raw';
 import dustRaw from '../../public/data/dust.json?raw';
+import devilsRaw from '../../public/data/dustdevils.json?raw';
 import packRaw from '../../public/data/jezero_pack.json?raw';
 import layersRaw from '../../public/data/layers_20m.json?raw';
 import poisRaw from '../../public/data/pois.json?raw';
 import referenceRaw from '../../public/data/reference.json?raw';
+import relayRaw from '../../public/data/relay.json?raw';
 import sunRaw from '../../public/data/sunlight.json?raw';
+import patchRaw from '../../public/data/terrain_patch_2m.json?raw';
 import weatherRaw from '../../public/data/weather.json?raw';
-import type { ContentFile, CreditsFile, DustFile, PoiFile, SunlightTable, TerrainLayers, WeatherFile } from './files';
+import type {
+  ContentFile, CreditsFile, DustDevilFile, DustFile, PoiFile, RelayFile, SunlightTable, TerrainLayers, TerrainPatchMeta, WeatherFile,
+} from './files';
 import { distanceFactor, solarWm2, sunElevationDeg } from './sunlight';
+import { decodeTerrainPatch, patchHeightAt } from './terrainPatch';
 import type { DataPack } from './types';
 
 const raw: Record<string, string> = {
-  'content.json': contentRaw, 'credits.json': creditsRaw, 'dust.json': dustRaw, 'jezero_pack.json': packRaw, 'layers_20m.json': layersRaw,
-  'pois.json': poisRaw, 'reference.json': referenceRaw, 'sunlight.json': sunRaw, 'weather.json': weatherRaw,
+  'content.json': contentRaw, 'credits.json': creditsRaw, 'dust.json': dustRaw, 'dustdevils.json': devilsRaw, 'jezero_pack.json': packRaw, 'layers_20m.json': layersRaw,
+  'pois.json': poisRaw, 'reference.json': referenceRaw, 'relay.json': relayRaw, 'sunlight.json': sunRaw, 'terrain_patch_2m.json': patchRaw, 'weather.json': weatherRaw,
 };
 const load = <T>(name: string): T => JSON.parse(raw[name]) as T;
 
@@ -162,5 +168,56 @@ describe('cited values', () => {
     expect(sun.albedo).toBe(a.value);
     expect(a.value).toBeGreaterThanOrEqual(a.noonRange[0]);
     expect(a.value).toBeLessThanOrEqual(a.noonRange[1]);
+  });
+});
+
+describe('terrain tile, relay passes and dust devils', () => {
+  const meta = load<TerrainPatchMeta>('terrain_patch_2m.json');
+
+  it('the 2 m tile agrees with the 10 m grid and is centred on the AER-1 cabin', async () => {
+    // Read the binary from disk (Node, test only). The string specifier keeps node types out of the app build.
+    const fs = (await import(/* @vite-ignore */ 'node:' + 'fs')) as { readFileSync(p: URL): Uint8Array };
+    const u8 = fs.readFileSync(new URL('../../public/data/terrain_patch_2m.bin', import.meta.url));
+    const patch = decodeTerrainPatch(meta, u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer);
+    const e = pack.elevation;
+    const cab = pack.crashedLander!.cabinLocation;
+    expect(meta.centre.eastM).toBe(cab.eastingM);
+    // Compare 5 x 5 blocks with 10 m cells over the whole tile.
+    let worst = 0;
+    for (let r = 0; r < meta.rows / 5; r++) {
+      for (let c = 0; c < meta.cols / 5; c++) {
+        let sum = 0;
+        for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) sum += patch.heightsM[(r * 5 + i) * meta.cols + c * 5 + j];
+        const ref = e.heightsM[(meta.y0M / 10 + r) * e.cols + meta.x0M / 10 + c];
+        worst = Math.max(worst, Math.abs(sum / 25 - ref));
+      }
+    }
+    expect(worst).toBeLessThan(0.1);
+    // The landing site (3700, 2400) is inside the tile and matches the rover's recorded height.
+    expect(patchHeightAt(patch, 3700, 2400)).toBeCloseTo(-2569.9, 0);
+    expect(patchHeightAt(patch, 0, 0)).toBeNull();
+  });
+
+  it('relay windows use the handbook node times and leave MAVEN out', () => {
+    const relay = load<RelayFile>('relay.json');
+    const nodes = new Map(relay.orbiters.map((o) => [o.id, o.nodesLMST]));
+    expect(nodes.get('MRO')).toEqual(['15:09', '03:09']);
+    expect(nodes.get('ODY')).toEqual(['06:11', '18:11']);
+    expect(relay.orbiters.some((o) => o.id === 'MAVEN')).toBe(false);
+    for (const w of relay.gameWindowsLTST.windows) {
+      const [h, m] = w.centre.split(':').map(Number);
+      expect((w.fromHour + w.toHour) / 2).toBeCloseTo(h + m / 60, 1);
+    }
+  });
+
+  it('dust devils: 309 real encounters, 4.9 per sol, peak at noon matching the published 1.5 per hour', () => {
+    const dd = load<DustDevilFile>('dustdevils.json');
+    expect(dd.hourlyLTST).toHaveLength(24);
+    expect(dd.hourlyLTST.reduce((a, h) => a + h.vortices, 0)).toBe(309);
+    expect(dd.hourlyLTST.reduce((a, h) => a + h.expectedPerSol, 0)).toBeCloseTo(dd.perSol, 1);
+    const peak = dd.hourlyLTST.reduce((a, h) => (h.expectedPerSol > a.expectedPerSol ? h : a));
+    expect(peak.hour).toBe(12);
+    expect(Math.abs(peak.expectedPerSol - dd.peakPerHourNoon)).toBeLessThan(0.2);
+    expect(dd.hourlyLTST.filter((h) => h.hour < 8 || h.hour >= 20).every((h) => h.vortices === 0)).toBe(true);
   });
 });
