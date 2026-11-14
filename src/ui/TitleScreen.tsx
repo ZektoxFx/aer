@@ -3,9 +3,12 @@ import { ORBIT_ZOOM_MS, OrbitZoom } from '../map';
 import { CabinCruise } from './CabinCruise';
 import { CABIN_S } from './cabin';
 import { CrashSequence } from './CrashSequence';
+import { LaunchScene } from './LaunchScene';
+import { LAUNCH_MS } from './launch';
 import { CRASH_MS, FLY_S } from './edl';
 import { createIntroAudio, RADIO, readingMs, type IntroAudio, type IntroCue, type RadioLine } from './introAudio';
 import { MarsGlobe } from './MarsGlobe';
+import { METEOR_MS, MeteorStrike } from './MeteorStrike';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -20,7 +23,8 @@ export { TEAM_NAME };
 
 /**
  * The intro, one continuous sequence:
- * title (the solar system) → cruise (leaving Earth) → cabin (inside AER-1: the 203-day cruise as a time-lapse)
+ * title (the solar system) → launch (lift-off from a coastal pad at dawn, up through the clouds to space)
+ * → cruise (leaving Earth) → cabin (inside AER-1: the 203-day cruise as a time-lapse)
  * → meteor (a meteor strikes the engine) → fault (master alarm, Control radios to divert to Mars)
  * → crash (entry, parachute, retro-rockets and impact, played from the physics in edl.ts)
  * → locate (the suit's navigation finds you: orbit → Jezero → the crash site)
@@ -28,7 +32,7 @@ export { TEAM_NAME };
  * → door (the cabin hatch opens onto the live 3D world; a stored radio message says to find Perseverance)
  * → blur (dissolves into the game).
  */
-type Phase = 'title' | 'cruise' | 'cabin' | 'meteor' | 'fault' | 'crash' | 'locate' | 'wake' | 'door' | 'blur';
+type Phase = 'title' | 'launch' | 'cruise' | 'cabin' | 'meteor' | 'fault' | 'crash' | 'locate' | 'wake' | 'door' | 'blur';
 interface Step {
   to: Phase;
   /** Longest the phase lasts (a radio call still talking is cut off). */
@@ -39,9 +43,10 @@ interface Step {
   minMs?: number;
 }
 const NEXT: Partial<Record<Phase, Step>> = {
+  launch: { to: 'cruise', ms: LAUNCH_MS },
   cruise: { to: 'cabin', ms: 2600 },
   cabin: { to: 'meteor', ms: CABIN_S.lapse * 1000 }, // the time-lapse only: the meteor strike is the emergency
-  meteor: { to: 'fault', ms: 1700 },
+  meteor: { to: 'fault', ms: METEOR_MS }, // the 3D strike; the hit lands on the sound's bang at 1.1 s
   fault: { to: 'crash', ms: 11000, minMs: 5000, radio: RADIO.mayday, radioAt: 700 },
   crash: { to: 'locate', ms: CRASH_MS },
   locate: { to: 'wake', ms: ORBIT_ZOOM_MS },
@@ -53,7 +58,7 @@ const WAKE_MIN_MS = 1400;
 const WAKE_MAX_MS = 9000;
 const EYES_OPEN_MS = 1500;
 /** Phases the intro sound has cues for (the crash cue is timed separately). */
-const CUES: readonly IntroCue[] = ['cruise', 'meteor', 'fault', 'door'];
+const CUES: readonly IntroCue[] = ['meteor', 'fault', 'door']; // the engine rumble ('cruise') starts at the launch
 /** The sound's crash cue is a 1.25 s roar then the bang; start it so the bang lands on the simulated impact. */
 const CRASH_CUE_MS = Math.max(0, FLY_S * 1000 - 1250);
 
@@ -127,6 +132,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
     if (!step) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     if ((CUES as readonly string[]).includes(phase)) audio.current?.cue(phase as IntroCue);
+    if (phase === 'launch') audio.current?.cue('cruise');
     if (phase === 'crash') timers.push(setTimeout(() => audio.current?.cue('crash'), CRASH_CUE_MS));
     const started = performance.now();
     let over = false;
@@ -161,7 +167,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
     const osReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (settings.skipIntro || settings.reducedMotion || osReduced) { onReveal(); onDone(); return; }
     if (settings.sound) audio.current = createIntroAudio(); // made on the click, so the browser allows sound
-    setPhase('cruise');
+    setPhase('launch');
   };
   const skip = () => {
     if (phase !== 'title' && phase !== 'blur') {
@@ -210,6 +216,12 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <div className="alarm-wash" aria-hidden="true" />
         <div className="impact" aria-hidden="true" />
       </div>
+
+      {/* The meteor strike, in 3D; it keeps running through the fault (the mayday call). */}
+      <MeteorStrike active={phase === 'meteor' || phase === 'fault'} alarm={phase === 'fault'} />
+
+      {/* The launch from Earth, in 3D. */}
+      <LaunchScene active={phase === 'launch'} />
 
       {/* Inside the cabin during the cruise, built at START so it is ready after the launch. */}
       <CabinCruise prepare={phase !== 'title'} active={phase === 'cabin'} />
