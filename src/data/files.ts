@@ -64,9 +64,9 @@ export interface WeatherSol {
   ls: number;                 // solar longitude, degrees (season)
   tau: number;                // Mastcam-Z dust optical depth, 630 nm
   tauFromSol: number;         // the sol the tau was measured on (nearest available)
-  pressurePa: [number, number, number] | null;   // min, mean, max of hourly means
-  airTempC: [number, number, number] | null;
-  windMS: [number, number] | null;               // mean, 99th percentile
+  pressurePa: [number, number, number] | null;   // lowest, mean, highest of all 1 Hz readings
+  airTempC: [number, number, number] | null;     // min, mean, max of the hourly means
+  windMS: [number, number] | null;               // mean, 99th percentile of all readings
   /** Arrays of 24 values by Local True Solar Time hour; null where MEDA had no data. */
   hourly: Partial<Record<'pressurePa' | 'airTempC' | 'windMS' | 'windDirDeg' | 'groundTempC' | 'skyTempC' | 'downLW_Wm2', (number | null)[]>>;
   medaFiles: string[] | null;
