@@ -162,7 +162,7 @@ $$P_{\text{solar}} = S \cdot A \cdot \eta \cdot f(\tau, \text{sun angle}) \cdot 
 | **Dust storm** | Dust blocks sunlight: Opportunity's last reading in 2018 was $\tau$ = 10.8, against a usual 0.5, and it never recovered. | Solar power collapses, visibility drops, and tracks are erased. Triggers the shelter countdown (§6.3). |
 | **Cold nights** | At Jezero, air runs from about $-83^\circ\text{C}$ to $-23^\circ\text{C}$, with an average near $-55^\circ\text{C}$. | Night travel costs more battery. Being caught outside without shelter is dangerous. |
 | **Constant dryness** | No rain and no surface water. Dust is slightly electrostatic, so it clings to surfaces. | Water exists only in tanks, scrap containers, or baked regolith. Dust steadily soils panels, visors, and seals. |
-| **Soft sand** | Loose sand can trap vehicles, and low thermal inertia generally indicates loose material `[verify]`. | The THEMIS layer reveals likely soft ground, which slows walking and raises metabolic rate. |
+| **Soft sand** | Loose sand can trap vehicles, and low thermal inertia indicates loose material (below ~350; Jezero's sand dune measured 180). | The THEMIS layer reveals likely soft ground, which slows walking and raises metabolic rate. |
 | **Dust devils** | MEDA recorded nearly 5 vortices per sol at Jezero, peaking around 12:00–13:00 local time. | A midday risk that dusts solar panels, or sometimes clears them `[verify]`. |
 
 **Wind does not knock you down.** Mars's air is about 1% as dense as Earth's, so a 100 km/h Martian wind pushes like an 11–13 km/h breeze on Earth. NASA has said a Martian storm would feel like a breeze and is unlikely to strand an astronaut through force. Storms in this game are dangerous because of darkness, lost power, lost navigation, and dust, not force.
@@ -269,7 +269,7 @@ All data is fetched before the demo and baked into a static data pack. Nothing d
 | **Planetary Spectrum Generator** | `psg.gsfc.nasa.gov/api.php` | Atmospheric | Precomputed solar flux against $\tau$ and sun angle. The public limit is 100 calls per day. |
 | **Perseverance surface images** | NASA / PDS | Optical | Point-of-view images at waypoints |
 | **Orbital mineral data (e.g. CRISM)** | PDS | Spectral | Science target context `[verify]` |
-| **Life Support BVAD Rev 2 (2022)** | NASA/TP-2015-218570 Rev 2 | Reference | Metabolic baselines. This document uses 0.84 kg O₂, 1.0 kg CO₂, and 2.5 L water per day `[verify against Rev 2]`. |
+| **Life Support BVAD Rev 2 (2022)** | NASA/TP-2015-218570 Rev 2 | Reference | Metabolic baselines. This document uses 0.84 kg O₂, 1.0 kg CO₂, and 2.5 L water per day (checked against Rev 2: Tables 3-23, 3-31 and 4-20). |
 
 Two stretch sources are worth adding if time allows: space weather data (such as DONKI), since the challenge notes radiation as a consideration, and NASA's published Perseverance microphone recordings for real Mars audio.
 
@@ -458,12 +458,14 @@ Check these before relying on them in the build:
 - [x] MOXIE power draw: rated 300 W for 6–12 g/h (NASA)
 - [x] Suit consumables checked against Apollo and EMU figures (November 14): 80 W avionics, 0.6 kg O₂, 3.9 kg water, 640 Wh battery, LiOH sized to outlast the O₂
 - [x] Panel dust: 0.2%/sol typical, 2%/sol highest observed (Lorenz et al. 2021)
-- [ ] Water content of Jezero regolith (2 wt% assumption) and the absence of accessible shallow ice
-- [ ] Chlorine release when overheating perchlorate-bearing regolith
+- [x] Regolith water: Curiosity's SAM measured 1.5–3 wt% water in heated Gale soil, released in a broad peak near 300 °C (Leshin et al. 2013, *Science* 341, 1238937). The game's 2 wt% sits in that range. No Jezero measurement yet (`jezero_pack.json` rockFormations, November 14)
+- [ ] No accessible shallow ice at Jezero
+- [x] Chlorine release from perchlorate-bearing regolith: Curiosity saw chlorinated compounds and HCl released with oxygen as soil was heated (Leshin et al. 2013; Glavin et al. 2013, *JGR Planets* 118). Phoenix soil held 0.4–0.6 wt% perchlorate (Hecht et al. 2009)
 - [ ] Suit insulation effect on radiative and convective loss at Mars pressure
 - [ ] Moisture degradation of the sorbent bed
 - [ ] Suited metabolic rate against slope, speed, and load
-- [x] O₂ and CO₂ baselines: 0.84 and 1.0 kg/person-day match NASA's ISS-era averages (BVAD Rev 2 table itself not checked)
+- [x] O₂ and CO₂ baselines: 0.84 kg O₂ and 1.01 kg CO₂ per person-day, BVAD Rev 2 (NASA/TP-2015-218570/REV2, 2022) Table 3-23
+- [x] Water: BVAD Rev 2 gives 2.00 kg/person-day drinking water plus 0.5 kg for food preparation (Table 3-31, Table 4-20), so 2.5 L/day potable
 - [ ] CO₂ per O₂ at hard work: NASA uses 1.87 g/min CO₂ at 300 W; the sim gives 1.52 with the daily-average ratio
 - [x] HiRISE elevation model coverage: the USGS Mars 2020 TRN 1 m DTM covers the whole 6.4 × 4 km map with no gaps, and matches the rover's recorded landing-site height to 0.1 m (`docs/DATA_SOURCES.md`)
 - [ ] Orbital spectral coverage for the science target (CRISM not used yet; stretch)
@@ -471,10 +473,13 @@ Check these before relying on them in the build:
 - [x] Science target: Wildcat Ridge, where SHERLOC found organic molecules (NASA/JPL, Sept 2022), with Three Forks and Rochette as alternatives (`content.json`, PR #11)
 - [x] Perseverance's real traverse: NASA/JPL Mars 2020 waypoints; 3 rover hiding spots at its real sol 420, 464 and 686 positions, 2.4–2.8 km from landing (`pois.json`)
 - [x] Rover goal decided: the rover is the radio home (November 14)
-- [x] Perseverance's links to Earth: UHF (~400 MHz, up to 2 Mbit/s) to MRO and MAVEN, which relay to the Deep Space Network; X-band high-gain antenna direct to Earth, mostly for commands; low-gain backup (NASA/JPL Mars 2020 landing press kit, Telecommunications)
+- [x] Perseverance's links to Earth: UHF (~400 MHz, up to 2 Mbit/s) to MRO, Odyssey and ESA's Trace Gas Orbiter and Mars Express (MAVEN was lost in 2025; Mars Relay Network Handbook, JPL D-71874 Rev. 4), which relay to the Deep Space Network; X-band high-gain antenna direct to Earth, mostly for commands; low-gain backup (NASA/JPL Mars 2020 landing press kit, Telecommunications)
 - [x] Storm dust sols: the January 2022 Jezero regional storm, sols 312–319, Mastcam-Z τ 0.33 → 1.38 peak on sol 316 → 0.44 (`dust.json`)
 - [x] How quickly a real storm builds: Jezero's 2022 storm went from τ 0.33 to its peak in about 4 sols (sols 312–316) and cleared in about 3. The 5-minute countdown is a pacing choice, and the game's τ 8 peak is stronger than any Jezero storm on record (highest τ in the 1358-sol record: 1.99)
-- [ ] Thermal inertia as an indicator of loose sand (used with a threshold of 200 in `layers_20m.json`, still a design value)
+- [x] Thermal inertia as an indicator of loose sand: loose particulate material is below ~350 and Gale's active dunes are 200–310 (Edwards et al. 2018); Perseverance's MEDA measured 180 on a Jezero sand dune and up to 605 on bedrock (Martínez et al. 2023). The game's threshold of 200 picks the loosest material; it remains a design value (`reference.json`)
+- [x] Ground albedo for the sunlight model: 0.12, MEDA's mean along the traverse (Martínez et al. 2023; noon values 0.10–0.16). It replaced the earlier 0.17 working value (`sunlight.json`)
+- [x] Dust devil timing at Jezero: 4.9 per sol, peaking at noon (1.5 per hour), about one in four dusty; from all 309 MEDA encounters in sols 15–89 (Jackson 2022; Hueso et al. 2023) (`dustdevils.json`)
+- [x] Relay passes: MRO near 03:09 and 15:09 LMST and Odyssey near 06:11 and 18:11 LMST, 10–14 minutes each; TGO at varying times (Mars Relay Network Handbook, JPL D-71874 Rev. 4) (`relay.json`)
 - [ ] Dust devils clearing solar panels
 - [x] Earth–Mars signal delay: about 3–22 minutes one way
 - [ ] Blue sunsets (stretch feature)

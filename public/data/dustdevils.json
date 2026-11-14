@@ -1,0 +1,182 @@
+{
+ "source": "Jackson 2022, 'Vortices and Dust Devils as Observed by the MEDA Instruments on Board the Mars 2020 Perseverance Rover', Planetary Science Journal 3, 20 (arXiv 2109.04601), Table 1; rates from Hueso et al. 2023, 'Convective Vortices and Dust Devils Detected and Characterized by Mars 2020', JGR Planets 128, e2022JE007516 (abstract)",
+ "use": "When and how often a dust devil passes the astronaut. expectedPerSol for an hour is the chance-weighted number of vortices passing within MEDA's reach in that LTST hour; sum over the sol is 4.9. About one in four carries visible dust.",
+ "perSol": 4.9,
+ "perSolNote": "Vortices with pressure drop > 0.5 Pa, corrected for gaps in MEDA coverage, 415 sols (Hueso 2023).",
+ "peakPerHourNoon": 1.5,
+ "peakNote": "1.5 +/- 0.2 encounters per hour at midday (Jackson 2022), about one every 40 minutes.",
+ "dustyFraction": 0.24,
+ "dustyNote": "74 of 309 vortices showed a dust signal (Jackson 2022); Hueso 2023: at least one in five, and 75% of vortices with drop > 2 Pa.",
+ "diameterM": {
+  "min": 5,
+  "mean": 20,
+  "max": 135
+ },
+ "strongest": {
+  "dropPa": 9.0,
+  "windMS": 25,
+  "note": "Strongest vortex in 415 sols (Hueso 2023)."
+ },
+ "activityPerKm2PerSol": [
+  2.0,
+  3.0
+ ],
+ "pressureDropPa": {
+  "min": 0.14,
+  "median": 0.49,
+  "max": 5.7,
+  "over1Pa": 43,
+  "over2Pa": 8
+ },
+ "duringStorm": "Dust devils were abundant during the January 2022 regional dust storm (Ls 152-156, the storm sols in dust.json) (Hueso 2023).",
+ "hourlyLTST": [
+  {
+   "hour": 0,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 1,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 2,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 3,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 4,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 5,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 6,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 7,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 8,
+   "vortices": 1,
+   "dusty": 0,
+   "expectedPerSol": 0.016
+  },
+  {
+   "hour": 9,
+   "vortices": 2,
+   "dusty": 1,
+   "expectedPerSol": 0.032
+  },
+  {
+   "hour": 10,
+   "vortices": 14,
+   "dusty": 3,
+   "expectedPerSol": 0.222
+  },
+  {
+   "hour": 11,
+   "vortices": 51,
+   "dusty": 15,
+   "expectedPerSol": 0.809
+  },
+  {
+   "hour": 12,
+   "vortices": 90,
+   "dusty": 26,
+   "expectedPerSol": 1.427
+  },
+  {
+   "hour": 13,
+   "vortices": 54,
+   "dusty": 12,
+   "expectedPerSol": 0.856
+  },
+  {
+   "hour": 14,
+   "vortices": 45,
+   "dusty": 11,
+   "expectedPerSol": 0.714
+  },
+  {
+   "hour": 15,
+   "vortices": 30,
+   "dusty": 6,
+   "expectedPerSol": 0.476
+  },
+  {
+   "hour": 16,
+   "vortices": 14,
+   "dusty": 0,
+   "expectedPerSol": 0.222
+  },
+  {
+   "hour": 17,
+   "vortices": 3,
+   "dusty": 0,
+   "expectedPerSol": 0.048
+  },
+  {
+   "hour": 18,
+   "vortices": 3,
+   "dusty": 0,
+   "expectedPerSol": 0.048
+  },
+  {
+   "hour": 19,
+   "vortices": 2,
+   "dusty": 0,
+   "expectedPerSol": 0.032
+  },
+  {
+   "hour": 20,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 21,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 22,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  },
+  {
+   "hour": 23,
+   "vortices": 0,
+   "dusty": 0,
+   "expectedPerSol": 0.0
+  }
+ ],
+ "notes": [
+  "Hourly shape: counts of the 309 encounters in sols 15-89 by LTST hour. MEDA logged most daytime hours on most sols; the scaled noon rate (1.43/h) matches the paper's 1.5 +/- 0.2.",
+  "None were seen before 08:00 or after 20:00 LTST."
+ ]
+}

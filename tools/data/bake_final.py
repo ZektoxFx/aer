@@ -73,7 +73,8 @@ def main(repo):
             "Hourly arrays are indexed by Local True Solar Time hour 0-23; null = no data that hour.",
             "pressurePa = [lowest, mean, highest] of all 1 Hz readings. airTempC = [min, mean, max] of the hourly means. "
             "windMS = [mean, 99th percentile] of all readings.",
-            "Wind sensor was damaged in the sol 313 storm: no wind after that.",
+            "The wind sensor was damaged on sol 313, during the dust storm (Lemmon et al. 2022); Hueso et al. 2023 "
+            "report the wind sensors were partly damaged in two dust devil encounters. No valid wind after 13:42 LTST on sol 313.",
             "groundTemp/skyTemp are brightness temperatures from TIRS (ground emissivity 0.98 assumed).",
             "MEDA logs 12 h per sol on a normal cadence (odd/even hours alternate), so some sols miss hours.",
         ],
@@ -97,7 +98,8 @@ def main(repo):
         "lsBySol": {str(k): round(v, 2) for k, v in sorted(ls_by_sol.items())},
         "jezeroStorm2022": {
             "description": "Regional dust storm over Jezero, Jan 2022 (sols 313-318). Pressure dropped ~40 Pa at arrival, "
-                           "gusts reached 12.5 m/s on sol 313 and the MEDA wind sensor was damaged. Tau rose from ~0.3 to "
+                           "single wind readings reached 22.5 m/s on sol 313 (99th percentile 12.5 m/s; Lemmon et al. report winds up "
+                           "to 20 m/s) before the MEDA wind sensor was damaged. Tau rose from ~0.3 to "
                            "1.38 (sol 316) and cleared within ~4 sols. Lemmon et al. 2022, GRL 49, e2022GL100126.",
             "daily": storm_daily,
             "measurements": storm_pts,
@@ -114,7 +116,7 @@ def main(repo):
     _, rows_are_z, k125, f, _ = solar_flux.calibrate()
     taus = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0]
     elevs = [0, 2, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90]
-    albedo = 0.17
+    albedo = 0.12  # Perseverance MEDA traverse mean (Martinez et al. 2023); see reference.json
     G = solar_flux.g_ob(180)  # placeholder, replaced per row by mean distance below
     g_mean = 590.0
     glob_tab, beam_tab = [], []
@@ -147,7 +149,7 @@ def main(repo):
         "beamHorizontalWm2": beam_tab,
         "notes": ["tau below 0.1 uses the 0.1 row of f (the NASA table starts at 0.1)",
                   "sun elevations below 5 deg (zenith > 85) are extrapolated with cos(z)",
-                  "Jezero albedo 0.17 is a working value [verify]; the NASA report gives 0.1 and 0.4 tables"],
+                  "Albedo 0.12: Perseverance MEDA broadband albedo (0.3-3 um) along the traverse, 0.12 +/- 0.01 (Martinez et al. 2023, JGR Planets 128, e2022JE007537); noon values 0.10-0.16, orbital TES ~0.15. Sources in reference.json jezeroMeasured.surfaceAlbedo."],
         "distanceFactor": {
             "formula": "(1 + e*cos(Ls - 248 deg))^2 / (1 - e^2)^2, e = 0.093377",
             "byLsDeg": {str(ls): round(solar_flux.g_ob(ls) / 590.0, 4) for ls in range(0, 360, 15)},
@@ -177,7 +179,8 @@ def main(repo):
         sol_entry(312, "Sol 312: clear sky before the storm", "Sol 1: Scrubber Saturation",
                   "Real MEDA + Mastcam-Z values. Normal Jezero day in northern winter (Ls ~153)."),
         sol_entry(313, "Sol 313: storm front arrives", "Sol 3: Dust Storm (warning)",
-                  "Real. Pressure dips to 583 Pa, gusts to 12.5 m/s; the wind sensor is damaged this sol. "
+                  "Real. Pressure dips to 583 Pa, wind readings up to 22.5 m/s (99th percentile 12.5) before the wind sensor is "
+                  "damaged this sol. "
                   "No Mastcam-Z tau on sol 313: tau shown is sol 312's; sol 314 measured 0.64."),
         sol_entry(316, "Sol 316: storm peak", "Sol 3: Dust Storm (peak)",
                   "Real. Tau 1.38, the highest of this storm. No wind data after sol 313 (sensor damaged)."),
