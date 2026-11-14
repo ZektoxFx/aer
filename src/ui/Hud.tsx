@@ -19,6 +19,7 @@ import { hudKeyAction } from './settings';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
 import { World3D } from './World3D';
+import { dustDevilsActive, stormForecastAt, upcomingEvents } from './environment';
 import './game3d.css';
 import './hud.css';
 
@@ -47,6 +48,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
+  // Free-play environment timeline: the storm forecast for this run (null once it has arrived, or in Sol 1).
+  const [stormAt, setStormAt] = useState<number | null>(() => stormForecastAt(frame.state.clockMin));
+  const stormAtRef = useRef(stormAt);
+  useEffect(() => { stormAtRef.current = stormAt; }, [stormAt]);
   const [paused, setPaused] = useState(false);
   const [modeId, setModeId] = useState('cabin');
   const [flow, setFlow] = useState<ShelterFlow | null>(null);
@@ -94,6 +99,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       }
       setFlow(flowRef.current);
     }
+    // The forecast storm arrives on schedule (free play only).
+    const due = stormAtRef.current;
+    if (due !== null && !missionRef.current && state.clockMin >= due) {
+      if (!state.storm || stormPhase(state.storm, state.clockMin) === 'over') state = { ...state, storm: makeStorm(state.clockMin) };
+      stormAtRef.current = null;
+      setStormAt(null);
+    }
     const mv = moveRef.current;
     if (modeRef.current === '3d' && mv && !walkRef.current && !missionRef.current && !flowRef.current) {
       state = { ...state, activity: activityFor(mv), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
@@ -130,10 +142,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   // Game loop: advance the sim by real elapsed time every animation frame.
   useEffect(() => {
     let last = performance.now();
+    let lastDraw = 0;
     let raf = requestAnimationFrame(function loop(now) {
       const dt = Math.min(0.25, (now - last) / 1000); // cap so a hidden tab doesn't jump hours
       last = now;
-      setFrame(stepRef.current(dt, pausedRef.current));
+      const r = stepRef.current(dt, pausedRef.current);
+      // In 3D the scene draws itself every frame; the HUD text only needs ~15 updates a second.
+      if (modeRef.current !== '3d' || now - lastDraw > 66) { lastDraw = now; setFrame(r); }
       raf = requestAnimationFrame(loop);
     });
     return () => cancelAnimationFrame(raf);
@@ -181,11 +196,16 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     walkRef.current = next; setWalk(next);
   };
   const clearFlow = () => { flowRef.current = null; setFlow(null); setSummary(null); };
-  const triggerStorm = () => { clearFlow(); game.current = { ...game.current, storm: makeStorm(game.current.clockMin) }; };
+  const triggerStorm = () => {
+    clearFlow(); stormAtRef.current = null; setStormAt(null);
+    game.current = { ...game.current, storm: makeStorm(game.current.clockMin) };
+  };
   const setMissionState = (m: Sol1State | null) => { missionRef.current = m; setMission(m); };
   const restart = (i = solIndex) => {
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
+    const forecast = stormForecastAt(game.current.clockMin);
+    stormAtRef.current = forecast; setStormAt(forecast);
   };
 
   // Sol 1: Scrubber Saturation runs on the pack's Sol 1 scenario day, with the crash-damaged scrubber.
@@ -195,6 +215,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     game.current = { ...game.current, suit: { ...game.current.suit, liohKg: SOL1_START_LIOH_KG } };
     setMissionState(sol1Start(game.current.clockMin));
     setModeId('');
+    stormAtRef.current = null; setStormAt(null); // Sol 1 is about the scrubber; no storm
   };
   const missionBegin = () => {
     const m = sol1Begin(missionRef.current!, game.current.clockMin);
@@ -363,7 +384,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <World3D
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
-          onLookChange={setLookLocked}
+          onLookChange={setLookLocked} dustDevils={dustDevilsActive(s.clockMin) && !stormActive}
         />
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
@@ -376,6 +397,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
               {SPEED_LABEL[frame.speed]} · {frame.env.tempC.toFixed(0)} °C · τ {frame.env.tau.toFixed(2)}
             </span>
           </div>
+          <ul className="v-forecast" aria-label="Environment forecast">
+            {upcomingEvents(s.clockMin, stormActive ? null : stormAt, s.sky).map((e) => (
+              <li key={e.id} className={e.hazard ? 'warning' : undefined}>
+                <span>{e.label}</span><b>{e.inMin === 0 ? 'NOW' : formatMinutes(e.inMin)}</b>
+              </li>
+            ))}
+          </ul>
           <div className="v-o2">
             {vbar('o2Min', 'O₂', s.suit.o2Kg, FULL_SUIT.o2Kg)}
             {hero && (

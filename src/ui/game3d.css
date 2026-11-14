@@ -152,3 +152,9 @@
   .v-bars { width: 60vw; }
   .v-where, .v-hint { display: none; }
 }
+
+/* Environment forecast: what the sky and weather do next, with game-time countdowns. */
+.v-forecast { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 10px; }
+.v-forecast li { display: grid; grid-template-columns: 1fr auto; gap: 8px; color: color-mix(in srgb, var(--fg) 80%, transparent); }
+.v-forecast li b { font-weight: normal; font-variant-numeric: tabular-nums; }
+.v-forecast li.warning { color: var(--warning); }

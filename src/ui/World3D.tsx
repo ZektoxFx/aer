@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { DataPack } from '../data/types';
-import { heightAt, type Pt } from '../map';
+import type { Pt } from '../map';
 import { buildAstronaut, buildLander, cssColor } from './astronaut3d';
 import { moveStep, type MoveInput, type MoveResult } from './movement';
+import { buildContactShadow, buildDustDevils, buildFootprints, buildSky, buildTerrain } from './terrain3d';
 
 /** Vertical exaggeration of the real elevation, so Jezero's gentle relief reads on screen. */
 const EXAG = 1.6;
 /** Terrain mesh resolution (the elevation grid is 640 × 400; every other sample is plenty). */
 const SEG_X = 320, SEG_Y = 200;
+/** Distance between boot prints, metres. */
+const STRIDE_M = 0.75;
 
 export interface World3DProps {
   pack: DataPack;
@@ -21,6 +24,8 @@ export interface World3DProps {
   placeKey: number;
   tau: number;
   sunElevationDeg: number;
+  /** Midday dust devils in view (from the environment timeline). */
+  dustDevils?: boolean;
   /** Called every frame with the astronaut's movement. */
   onMove: (m: MoveResult) => void;
   /** Called when mouse look turns on (cursor captured) or off. */
@@ -52,60 +57,42 @@ export function World3D(props: World3DProps) {
     if (!el) return;
     const elev = pack.elevation;
     const area = pack.area;
-    const h0 = heightAt(elev, base);
-    const groundY = (p: Pt) => (heightAt(elev, p) - h0) * EXAG;
-    // Map metres (x east, y south) ↔ world (x east, z south, y up), centred on the area.
-    const toWorld = (p: Pt, y = groundY(p)) => new THREE.Vector3(p.x - area.widthM / 2, y, p.y - area.heightM / 2);
+    const W2 = area.widthM / 2, H2 = area.heightM / 2;
 
-    // ---- Renderer, scene, camera ----
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // ---- Renderer: Retina is capped, and the resolution drops further if frames get slow ----
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    let pixelRatio = Math.min(window.devicePixelRatio, 1.5);
+    renderer.setPixelRatio(pixelRatio);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.45;
     el.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
-    const sky = cssColor('--mars-sky');
-    const night = cssColor('--space');
-    scene.background = sky.clone();
-    scene.fog = new THREE.Fog(sky.clone(), 300, 3200);
-    const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 8000);
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 9000);
 
-    // ---- Light: a Mars sky dome and a low sun ----
-    const hemi = new THREE.HemisphereLight(sky, cssColor('--mars-rust'), 0.9);
+    // ---- Terrain, sky, light ----
+    const terrain = buildTerrain(pack, base, EXAG, SEG_X, SEG_Y, renderer.capabilities.getMaxAnisotropy());
+    scene.add(terrain.mesh);
+    const groundAt = (p: Pt) => terrain.surfaceY(p.x - W2, p.y - H2);
+    const sky = buildSky();
+    scene.add(sky.mesh);
+    scene.fog = new THREE.Fog(cssColor('--mars-sky'), 300, 3200);
+    const hemi = new THREE.HemisphereLight(cssColor('--mars-sky'), cssColor('--mars-rust'), 0.9);
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(cssColor('--mars-dust'), 2.4);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 200 });
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.03;
+    Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 220 });
     scene.add(sun, sun.target);
 
-    // ---- Terrain from the real elevation grid, with the HiRISE image on top ----
-    const geo = new THREE.PlaneGeometry(area.widthM, area.heightM, SEG_X, SEG_Y);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) {
-      const p = { x: pos.getX(i) + area.widthM / 2, y: pos.getZ(i) + area.heightM / 2 };
-      pos.setY(i, groundY(p));
-    }
-    geo.computeVertexNormals();
-    const tex = new THREE.TextureLoader().load(pack.imageUrl || '/data/jezero_base_2m.jpg');
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, color: cssColor('--mars-sky'), roughness: 1 }));
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // ---- The crashed lander at the cabin, and the astronaut ----
+    // ---- The crashed lander, rocks, the astronaut and their prints ----
     const lander = buildLander();
-    lander.position.copy(toWorld(base)).add(new THREE.Vector3(0, -0.6, 0));
+    lander.position.set(base.x - W2, groundAt(base) - 0.6, base.y - H2);
     scene.add(lander);
-    const astro = buildAstronaut();
-    const body = new THREE.Group();
-    body.add(astro.group);
-    scene.add(body);
 
-    // ---- Rocks for scale: scattered boulders and cobbles within ~700 m of the cabin (seeded, so stable) ----
     let seed = 7;
     const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const ROCKS = 900;
@@ -115,19 +102,33 @@ export function World3D(props: World3DProps) {
       ROCKS,
     );
     rocks.castShadow = true; rocks.receiveShadow = true;
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
-    for (let i = 0; i < ROCKS; i++) {
-      const r = 14 + Math.pow(rand(), 1.3) * 700, a = rand() * Math.PI * 2;
-      const p = { x: base.x + Math.cos(a) * r, y: base.y + Math.sin(a) * r };
-      const size = 0.06 + Math.pow(rand(), 4) * 0.9; // mostly cobbles, the odd boulder
-      q.setFromEuler(new THREE.Euler(rand() * 3, rand() * 3, rand() * 3));
-      sc.set(size * (0.8 + rand() * 0.6), size * (0.5 + rand() * 0.4), size * (0.8 + rand() * 0.6));
-      m4.compose(toWorld(p, groundY(p) + size * 0.25), q, sc);
-      rocks.setMatrixAt(i, m4);
+    {
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), v = new THREE.Vector3(), eu = new THREE.Euler();
+      for (let i = 0; i < ROCKS; i++) {
+        const r = 14 + Math.pow(rand(), 1.3) * 700, a = rand() * Math.PI * 2;
+        const p = { x: base.x + Math.cos(a) * r, y: base.y + Math.sin(a) * r };
+        const size = 0.06 + Math.pow(rand(), 4) * 0.9; // mostly cobbles, the odd boulder
+        q.setFromEuler(eu.set(rand() * 3, rand() * 3, rand() * 3));
+        sc.set(size * (0.8 + rand() * 0.6), size * (0.5 + rand() * 0.4), size * (0.8 + rand() * 0.6));
+        // Half buried, the way rocks sit in regolith.
+        m4.compose(v.set(p.x - W2, groundAt(p) + size * 0.15, p.y - H2), q, sc);
+        rocks.setMatrixAt(i, m4);
+      }
     }
     scene.add(rocks);
 
-    // ---- Blowing dust, shown when the air is dusty: a cloud of motes that follows the camera ----
+    const astro = buildAstronaut();
+    const body = new THREE.Group();
+    body.add(astro.group);
+    scene.add(body);
+    const contact = buildContactShadow();
+    scene.add(contact);
+    const prints = buildFootprints();
+    scene.add(prints.mesh);
+    const devils = buildDustDevils();
+    scene.add(devils.group);
+
+    // ---- Blowing dust motes around the astronaut when the air is dusty ----
     const DUST = 1400;
     const dustPos = new Float32Array(DUST * 3);
     for (let i = 0; i < DUST; i++) {
@@ -137,23 +138,22 @@ export function World3D(props: World3DProps) {
     dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
     const dustMat = new THREE.PointsMaterial({ color: cssColor('--mars-dust'), size: 0.08, transparent: true, opacity: 0, depthWrite: false });
     const dustCloud = new THREE.Points(dustGeo, dustMat);
+    dustCloud.frustumCulled = false;
     scene.add(dustCloud);
 
-    // ---- Player state ----
+    // ---- Player and camera state ----
     const start = { x: base.x + 8, y: base.y + 6 };
     let me: Pt = start;
-    let heading = 0;
-    let shownHeading = 0; // the body turns smoothly toward `heading`
-    let phase = 0;
-    let moveBlend = 0;
-    // Camera: targets set by the mouse/keys, smoothed values used for drawing.
+    let heading = 0, shownHeading = 0, phase = 0, moveBlend = 0;
     let yawT = 0, pitchT = 0.32, distT = 16;
     let yaw = yawT, pitch = pitchT, dist = distT;
     let camPos: THREE.Vector3 | null = null;
     const lookAt = new THREE.Vector3();
-    // Walking eases in and out; the last direction is kept while slowing down.
     let ramp = 0;
     let lastInput: MoveInput = { forward: 0, right: 0, run: false };
+    let sinceStep = 0, footSide = 1;
+    // Reused every frame instead of allocating.
+    const target = new THREE.Vector3(), back = new THREE.Vector3(), want = new THREE.Vector3(), sunOff = new THREE.Vector3();
 
     // ---- Input ----
     const keys = new Set<string>();
@@ -216,30 +216,47 @@ export function World3D(props: World3DProps) {
 
     // ---- Loop ----
     let last = performance.now();
+    let perfT = 0, perfFrames = 0;
     let raf = requestAnimationFrame(function frame(now) {
-      const dt = Math.min(0.1, (now - last) / 1000);
+      const realDt = (now - last) / 1000;
+      const dt = Math.min(0.1, realDt);
       last = now;
       const P = live.current;
 
-      if (placeRef.current !== P.placeKey) { placeRef.current = P.placeKey; me = start; camPos = null; ramp = 0; }
+      // Adaptive resolution: if frames average slower than ~45 fps, render fewer pixels.
+      perfT += realDt; perfFrames++;
+      if (perfT > 2) {
+        if (perfT / perfFrames > 1 / 45 && pixelRatio > 0.75) {
+          pixelRatio = Math.max(0.75, pixelRatio - 0.25);
+          renderer.setPixelRatio(pixelRatio);
+          resize();
+        }
+        perfT = 0; perfFrames = 0;
+      }
+
+      if (placeRef.current !== P.placeKey) {
+        placeRef.current = P.placeKey; me = start; camPos = null; ramp = 0; prints.erase(Infinity);
+      }
       if (keys.has('q')) yawT -= dt * 1.8;
       if (keys.has('e')) yawT += dt * 1.8;
-      // Smooth the camera toward where the mouse and keys point it.
       yaw += (yawT - yaw) * ease(14, dt);
       pitch += (pitchT - pitch) * ease(14, dt);
       dist += (distT - dist) * ease(8, dt);
 
+      // ---- Move ----
+      const before = me;
       let m: MoveResult;
       if (P.followPos) {
-        // The route walker moves the astronaut; face the way they go.
+        // The route walker moves the astronaut (updated a few times a second): glide toward it, face the way they go.
         const dx = P.followPos.x - me.x, dy = P.followPos.y - me.y;
-        const moving = Math.hypot(dx, dy) > 0.05;
+        const gap = Math.hypot(dx, dy);
+        const moving = gap > 0.05;
         if (moving) heading = Math.atan2(dx, -dy);
-        me = P.followPos;
+        const k = gap > 200 ? 1 : ease(10, dt);
+        me = { x: me.x + dx * k, y: me.y + dy * k };
         ramp = 0;
         m = { pos: me, moving, speedMS: moving ? 1 : 0, slopeDeg: 0, heading };
       } else {
-        // Ease into and out of walking instead of starting and stopping dead.
         const raw = keyInput(keys);
         const pressing = raw.forward !== 0 || raw.right !== 0;
         if (pressing) lastInput = raw;
@@ -251,44 +268,63 @@ export function World3D(props: World3DProps) {
       }
       P.onMove(m);
 
-      // Pose and place the astronaut; the body turns smoothly to face the way it walks.
+      // ---- Place the astronaut exactly on the drawn ground ----
+      const gx = me.x - W2, gz = me.y - H2, gy = terrain.surfaceY(gx, gz);
       moveBlend += ((m.moving ? 1 : 0) - moveBlend) * ease(8, dt);
       if (m.moving) phase += dt * (m.speedMS > 1.5 ? 13 : 8) * Math.max(0.4, ramp || 1);
       astro.pose(phase, moveBlend, now / 1000);
-      body.position.copy(toWorld(me));
+      body.position.set(gx, gy, gz);
       const turnBy = Math.atan2(Math.sin(heading - shownHeading), Math.cos(heading - shownHeading));
       shownHeading += turnBy * ease(10, dt);
       body.rotation.y = -shownHeading;
+      contact.position.set(gx, gy + 0.03, gz);
 
-      // Camera: glide to a point behind and above, kept above the ground.
-      const target = body.position.clone().add(new THREE.Vector3(0, 1.4, 0));
-      const back = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-      const want = target.clone().addScaledVector(back, dist);
+      // Boot prints along the way (several per frame when time warp covers ground fast).
+      const moved = Math.hypot(me.x - before.x, me.y - before.y);
+      if (m.moving && moved < 200) {
+        sinceStep += moved;
+        while (sinceStep >= STRIDE_M) {
+          sinceStep -= STRIDE_M;
+          const t = 1 - sinceStep / Math.max(moved, 1e-6);
+          const px = before.x + (me.x - before.x) * t, py = before.y + (me.y - before.y) * t;
+          footSide = -footSide;
+          const ox = Math.cos(heading) * 0.13 * footSide, oy = Math.sin(heading) * 0.13 * footSide;
+          prints.add(px + ox - W2, terrain.surfaceY(px + ox - W2, py + oy - H2) + 0.025, py + oy - H2, heading);
+        }
+      }
+
+      // ---- Camera: glide to a point behind and above, kept above the ground ----
+      target.set(gx, gy + 1.4, gz);
+      back.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      want.copy(target).addScaledVector(back, dist);
       if (!camPos) { camPos = want.clone(); lookAt.copy(target); }
       camPos.lerp(want, ease(10, dt));
-      const camGround = groundY({ x: camPos.x + area.widthM / 2, y: camPos.z + area.heightM / 2 }) + 1.2;
+      const camGround = terrain.surfaceY(camPos.x, camPos.z) + 1.2;
       if (camPos.y < camGround) camPos.y = camGround;
       lookAt.lerp(target, ease(16, dt));
       camera.position.copy(camPos);
       camera.lookAt(lookAt);
+      sky.mesh.position.copy(camPos);
 
-      // Sun, night and dust: the sky dims at night and closes in with dust.
+      // ---- Sun, night and dust ----
       const elevRad = (Math.max(-10, P.sunElevationDeg) * Math.PI) / 180;
       const day = THREE.MathUtils.clamp((P.sunElevationDeg + 6) / 20, 0, 1);
       const dust = THREE.MathUtils.clamp(P.tau / 8, 0, 1);
-      sun.position.copy(body.position).add(new THREE.Vector3(-60 * Math.cos(elevRad), 80 * Math.max(0.15, Math.sin(elevRad)), 40));
+      sun.position.copy(body.position).add(sunOff.set(-60 * Math.cos(elevRad), 80 * Math.max(0.15, Math.sin(elevRad)), 40));
       sun.target.position.copy(body.position);
-      sun.intensity = 2.4 * day * (1 - 0.75 * dust);
-      hemi.intensity = 0.25 + 0.65 * day;
-      const skyNow = night.clone().lerp(sky, 0.15 + 0.85 * day);
-      (scene.background as THREE.Color).copy(skyNow);
+      sun.intensity = 2.8 * day * (1 - 0.75 * dust);
+      hemi.intensity = 0.35 + 1.1 * day; // dusty Mars skies scatter a lot of light into shadows
+      const horizon = sky.update(day, dust);
       const fog = scene.fog as THREE.Fog;
-      fog.color.copy(skyNow);
+      fog.color.copy(horizon);
       fog.far = THREE.MathUtils.lerp(3200, 140, dust);
       fog.near = THREE.MathUtils.lerp(300, 10, dust);
-      // Helmet lamp at night and in thick dust.
       astro.lamp.intensity = 30 * Math.max(1 - day, dust * 0.6);
-      // Dust motes drift with the wind and wrap around the astronaut.
+
+      // A storm erases the trail, oldest prints first.
+      if (P.tau > 3 && prints.size > 0) prints.erase(Math.ceil(dt * 120));
+
+      // Dust motes in dusty air; dust devils around midday.
       dustMat.opacity = THREE.MathUtils.clamp((P.tau - 1) / 3, 0, 0.85);
       if (dustMat.opacity > 0) {
         const arr = dustGeo.attributes.position.array as Float32Array;
@@ -299,8 +335,9 @@ export function World3D(props: World3DProps) {
           if (arr[i * 3 + 1] < 0) arr[i * 3 + 1] += 20;
         }
         dustGeo.attributes.position.needsUpdate = true;
-        dustCloud.position.set(body.position.x, body.position.y, body.position.z);
+        dustCloud.position.copy(body.position);
       }
+      devils.update(dt, body.position, !!P.dustDevils && P.tau < 3, terrain.surfaceY);
 
       renderer.render(scene, camera);
       raf = requestAnimationFrame(frame);
@@ -317,10 +354,10 @@ export function World3D(props: World3DProps) {
       document.removeEventListener('pointerlockchange', lockChange);
       if (locked()) document.exitPointerLock();
       renderer.dispose();
-      geo.dispose();
-      tex.dispose();
+      terrain.dispose();
       rocks.geometry.dispose();
       dustGeo.dispose();
+      devils.dispose();
       el.removeChild(renderer.domElement);
     };
   }, [pack, base]);
