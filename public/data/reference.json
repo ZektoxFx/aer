@@ -24,7 +24,15 @@
    "max": 1.985,
    "measuredSols": 1358
   },
-  "landingSiteElevationM": -2569.91
+  "landingSiteElevationM": -2569.91,
+  "storm2022": {
+   "tauBefore": 0.328,
+   "tauPeak": 1.378,
+   "peakSol": 316,
+   "solsToPeak": 4,
+   "solsToClear": 3,
+   "source": "Mastcam-Z daily tau (dust.json), sols 312-319"
+  }
  },
  "mars": {
   "gravityMS2": {
@@ -56,20 +64,20 @@
     3,
     22
    ],
-   "verify": true,
-   "source": "proposal §3.6 (4-24 min); geometry gives ~3-22 min"
+   "verify": false,
+   "source": "Checked in proposal §9 (Nov 14): about 3-22 minutes one way"
   }
  },
  "human": {
   "o2KgPerDay": {
    "value": 0.84,
-   "verify": true,
-   "source": "NASA BVAD (NASA/TP-2015-218570 Rev 2), proposal §5"
+   "verify": false,
+   "source": "NASA ISS-era average, checked in proposal §9 (BVAD Rev 2 table itself not checked)"
   },
   "co2KgPerDay": {
    "value": 1.0,
-   "verify": true,
-   "source": "NASA BVAD Rev 2, proposal §5"
+   "verify": false,
+   "source": "NASA ISS-era average, checked in proposal §9 (BVAD Rev 2 table itself not checked)"
   },
   "waterLPerDay": {
    "value": 2.5,
@@ -129,8 +137,14 @@
     12
    ],
    "powerW": 300,
-   "verify": true,
-   "source": "proposal §4"
+   "verify": false,
+   "source": "NASA: rated 300 W for 6-12 g/h, checked in proposal §9"
+  },
+  "perseveranceRadio": {
+   "uhf": "about 400 MHz, up to 2 Mbit/s to MRO and MAVEN, relayed to the Deep Space Network",
+   "xBandHighGain": "direct to Earth, mostly for receiving commands",
+   "lowGain": "emergency backup",
+   "source": "NASA/JPL Mars 2020 landing press kit, Telecommunications"
   }
  },
  "designValues": {
