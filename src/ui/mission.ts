@@ -4,10 +4,10 @@ import { localHour } from '../sim/game';
 import { MIN_PER_SOL } from '../sim/storm';
 
 // The mission shown under the minimap (proposal §1 and §6.2): the lander's radio died in the crash, so the
-// astronaut must find Perseverance and use its radio, through an orbiter pass, to call Earth.
+// astronaut repairs the ship into a base, then finds Perseverance and uses its radio, through an orbiter pass, to call Earth.
 
 export interface MissionStep {
-  id: 'crash' | 'page' | 'rover' | 'call';
+  id: 'crash' | 'ship' | 'page' | 'rover' | 'call';
   label: string;
   done: boolean;
   /** Short live detail: a distance, a countdown. */
@@ -43,6 +43,7 @@ const km = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.r
 /** The four mission steps, ticked off from what the map has found. */
 export function missionSteps(
   world: MapWorldState | null, astronaut: Pt, pass: RelayPass | null, fmtMin: (m: number) => string, taken: readonly string[] = [],
+  ship: { done: number; of: number } = { done: 0, of: 0 },
 ): MissionStep[] {
   const page = world?.items.find((i) => i.required);
   const rover = world?.items.find((i) => i.kind === 'rover');
@@ -52,6 +53,7 @@ export function missionSteps(
   const dist = (p: Pt) => km(Math.hypot(p.x - astronaut.x, p.y - astronaut.y));
   return [
     { id: 'crash', label: 'Survive the crash landing', done: true },
+    ...(ship.of ? [{ id: 'ship' as const, label: 'Repair the ship to make it a base', done: ship.done >= ship.of, detail: `${ship.done}/${ship.of} systems · see PACK → REPAIRS` }] : []),
     { id: 'page', label: 'Find the manual page: rover comms link', done: pageFound, detail: !pageFound && pageSeen && page ? `spotted · ${dist(page.at)}` : undefined },
     { id: 'rover', label: 'Find Perseverance', done: roverFound, detail: roverFound && rover ? dist(rover.at) : 'last seen ~2 km W' },
     {

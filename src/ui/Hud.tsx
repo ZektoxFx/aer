@@ -22,8 +22,10 @@ import { World3D } from './World3D';
 import { dustDevilsInView, stormForecastAt, upcomingEvents } from './environment';
 import { missionSteps, nextRelayPass } from './mission';
 import {
-  applySupply, carriedKg, drop, EMPTY_PACK, givesLabel, HEAVY_KG, manualPage, packEntryFor, pickUp, pickupTarget, usable, type Pack,
+  applySupply, BACKPACK_MAX_KG, carriedKg, drop, droppedItems, EMPTY_PACK, entryForPickup, fits, givesLabel, HEAVY_KG, manualPage, pickUp,
+  pickupTarget, SALVAGE, usable, type Pack, type PackEntry,
 } from './inventory';
+import { canRepair, doRepair, EMPTY_SHIP, repairNeeds, REPAIRS, shipTopUp, store, storeAll, take, type Repair, type Ship } from './ship';
 import './game3d.css';
 import './hud.css';
 
@@ -57,6 +59,13 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [near, setNear] = useState<MapItem | null>(null);
   const nearRef = useRef<MapItem | null>(null);
   const [packOpen, setPackOpen] = useState(false);
+  const [packTab, setPackTab] = useState<'pack' | 'ship' | 'repairs'>('pack');
+  // The lander as a base: storage and repairs (used while standing at it).
+  const [ship, setShipState] = useState<Ship>(EMPTY_SHIP);
+  const shipRef = useRef<Ship>(EMPTY_SHIP);
+  const setShip = (x: Ship) => { shipRef.current = x; setShipState(x); };
+  const [atShip, setAtShip] = useState(true);
+  const atShipRef = useRef(true);
   const [readPage, setReadPage] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -67,10 +76,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const mapWorldRef = useRef<MapWorldState | null>(null);
   useEffect(() => { mapWorldRef.current = mapWorld; }, [mapWorld]);
   // Taken items leave the 3D world.
-  const world3d = useMemo(
-    () => (mapWorld && bag.taken.length ? { ...mapWorld, items: mapWorld.items.filter((i) => !bag.taken.includes(i.id)) } : mapWorld),
-    [mapWorld, bag.taken],
-  );
+  // Taken items leave the 3D world; dropped ones lie where they were put down.
+  const world3d = useMemo(() => {
+    if (!mapWorld || (!bag.taken.length && !bag.dropped.length)) return mapWorld;
+    return { ...mapWorld, items: [...mapWorld.items.filter((i) => !bag.taken.includes(i.id)), ...droppedItems(bag)] };
+  }, [mapWorld, bag]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
   // How to play: shown once per browser on the first 3D visit (the clock holds while it is open); MENU reopens it.
@@ -176,6 +186,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (modeRef.current === '3d' && mv && !walkRef.current && !missionRef.current && !flowRef.current) {
       state = { ...state, activity: activityFor(mv, carriedKg(bagRef.current)), shelter: !mv.moving && inCabinZone(mv.pos, base) ? 'cabin' : 'none' };
     }
+    // A repaired ship refills the suit while the astronaut is at the lander.
+    if (modeRef.current === '3d' && atShipRef.current && shipRef.current.repaired.length) {
+      state = { ...state, suit: shipTopUp(shipRef.current, state.suit, FULL_SUIT) };
+    }
     const wk = walkRef.current;
     if (wk && wk.stoppedAt === null) {
       const w = walkAt(wk.plan, state.clockMin - wk.startMin);
@@ -223,15 +237,17 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const onMove3d = useCallback((m: MoveResult) => {
     moveRef.current = m;
     if (m.moving && hintOnRef.current) { hintOnRef.current = false; setHintOn(false); }
-    const target = pickupTarget(mapWorldRef.current, m.pos, bagRef.current.taken);
+    const target = pickupTarget(mapWorldRef.current, m.pos, bagRef.current);
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
+    const here = inCabinZone(m.pos, base);
+    if (here !== atShipRef.current) { atShipRef.current = here; setAtShip(here); }
     if (walkRef.current) return; // the route walker owns the position
     const atCabin = inCabinZone(m.pos, base);
     if (atCabin ? postedRef.current !== null : !postedRef.current || distM(postedRef.current, m.pos) > 20) {
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base, setHintOn, setNear]);
+  }, [base, setHintOn, setNear, setAtShip]);
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
@@ -273,7 +289,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const restart = (i = solIndex) => {
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
-    setBag(EMPTY_PACK); nearRef.current = null; setNear(null); setReadPage(null);
+    setBag(EMPTY_PACK); setShip(EMPTY_SHIP); nearRef.current = null; setNear(null); setReadPage(null);
     const forecast = stormForecastAt(game.current.clockMin);
     stormAtRef.current = forecast; setStormAt(forecast);
   };
@@ -308,40 +324,62 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     setModeId('');
   };
   // Test-only: jump one game hour ahead in 1-second ticks (tick() must not take big jumps).
-  const skipHour = () => {
-    const target = game.current.clockMin + 60;
+  const passMinutes = (min: number) => {
+    const target = game.current.clockMin + min;
     let r = frame;
-    for (let i = 0; i < 4000 && game.current.clockMin < target; i++) r = step(1, false);
+    for (let i = 0; i < min * 70 && game.current.clockMin < target; i++) r = step(1, false);
     setFrame(r);
   };
+  const skipHour = () => passMinutes(60);
 
-  // Pickups: take what is in reach; use a supply on the suit; leave something behind; read a manual page.
+  // Pickups: take what is in reach; use a supply on the suit; put something down; read a manual page.
   const pickUpNear = () => {
     const it = nearRef.current;
     if (!it) return;
-    const next = pickUp(bagRef.current, it, data.content);
-    setBag(next);
+    const r = pickUp(bagRef.current, it, data.content);
+    if (!r.ok) { setToast(`Backpack full (${BACKPACK_MAX_KG} kg). Drop something, or store it at the ship.`); return; }
+    setBag(r.pack);
     nearRef.current = null; setNear(null);
-    const e = next.entries[next.entries.length - 1];
-    setToast(e.kind === 'page'
-      ? `Picked up ${e.name}. Press I to read it.`
+    const e = r.entry;
+    setToast(e.kind === 'page' ? `Picked up ${e.name}. Press I to read it.`
+      : e.kind === 'part' ? `Salvaged ${e.name} · ${e.massKg.toFixed(1)} kg · a NASA part for ship repairs`
       : `Picked up ${e.name} · ${e.massKg.toFixed(1)} kg${e.gives && usable(e) ? ` · ${givesLabel(e.gives)} when used` : ''}`);
   };
-  const applyFromBag = (id: string) => {
-    const e = bagRef.current.entries.find((x) => x.id === id);
-    const r = applySupply(bagRef.current, id, game.current.suit, FULL_SUIT);
+  /** Use a supply from the backpack or the ship's storage on the suit. */
+  const applyFrom = (where: 'pack' | 'ship', id: string) => {
+    const list = where === 'pack' ? bagRef.current.entries : shipRef.current.stored;
+    const e = list.find((x) => x.id === id);
+    const r = applySupply(list, id, game.current.suit, FULL_SUIT);
     if (!e || !r) return;
     const got = givesLabel(r.added);
     if (!got) { setToast(`The suit is already full. Kept the ${e.name.toLowerCase()} for later.`); return; }
     game.current = { ...game.current, suit: r.suit };
-    setBag(r.pack);
-    const rest = r.pack.entries.find((x) => x.id === id);
-    setToast(`Used ${e.name}: ${got}${rest ? ` · ${givesLabel(rest.gives).replace(/\+/g, '')} left in the pack` : ''}`);
+    if (where === 'pack') setBag({ ...bagRef.current, entries: r.entries });
+    else setShip({ ...shipRef.current, stored: r.entries });
+    const rest = r.entries.find((x) => x.id === id);
+    setToast(`Used ${e.name}: ${got}${rest ? ` · ${givesLabel(rest.gives).replace(/\+/g, '')} left` : ''}`);
   };
   const dropFromBag = (id: string) => {
     const e = bagRef.current.entries.find((x) => x.id === id);
-    setBag(drop(bagRef.current, id));
-    if (e) setToast(`Left ${e.name} behind`);
+    setBag(drop(bagRef.current, id, moveRef.current?.pos ?? astronaut ?? base));
+    if (e) setToast(`Put ${e.name} down here. Walk up to it and press F to take it again.`);
+  };
+  const storeInShip = (id?: string) => {
+    const r = id ? store(bagRef.current, shipRef.current, id) : storeAll(bagRef.current, shipRef.current);
+    setBag(r.pack); setShip(r.ship);
+    setToast(id ? 'Stored in the ship.' : 'Everything is stored in the ship. Rocket pieces were broken down into materials.');
+  };
+  const takeFromShip = (id: string) => {
+    const r = take(bagRef.current, shipRef.current, id);
+    if (!r) { setToast(`That won't fit: the backpack holds ${BACKPACK_MAX_KG} kg.`); return; }
+    setBag(r.pack); setShip(r.ship);
+  };
+  const repairShip = (rp: Repair) => {
+    const r = doRepair(rp, bagRef.current, shipRef.current);
+    if (!r) return;
+    setBag(r.pack); setShip(r.ship);
+    passMinutes(rp.minutes); // the work takes time, in the cabin
+    setToast(`${rp.name}: done after ${rp.minutes} min. ${rp.does}`);
   };
   const openPage = (n: number | undefined) => { if (n === undefined) return; setPackOpen(false); setReadPage(n); setPaused(true); };
   const closePage = () => { setReadPage(null); setPaused(false); };
@@ -493,7 +531,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       );
     };
     // The mission under the minimap: why, the steps ticked off from what the map has found, and the next relay pass.
-    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken);
+    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken, { done: ship.repaired.length, of: REPAIRS.length });
     const nextStep = steps.findIndex((x) => !x.done);
     const goalPanel = (
       <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
@@ -602,7 +640,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
             {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
           </span>
           <button className="v-menu-btn v-pack-btn" aria-expanded={packOpen} onClick={() => { setPackOpen((o) => !o); setMenuOpen(false); }}
-            title="Pack (I)">▣ PACK {bag.entries.length ? `${bag.entries.length} · ${carriedKg(bag).toFixed(1)} kg` : ''}</button>
+            title="Backpack, ship storage and repairs (I)">▣ PACK {carriedKg(bag).toFixed(1)}/{BACKPACK_MAX_KG} kg</button>
           {/* LOCAL DRAFT: camera switch. */}
           <button className="v-menu-btn v-view-btn" aria-pressed={view === 'first'} onClick={() => { viewPicked.current = true; setView((v) => (v === 'first' ? 'third' : 'first')); }}
             title="Switch camera (V)">{view === 'first' ? '◉ 1ST PERSON' : '◎ 3RD PERSON'}</button>
@@ -635,57 +673,126 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {overlay && <div className="g3-overlay">{overlay}</div>}
 
-        {near && readPage === null && (
-          <button className="v-pickup" onClick={pickUpNear}>
-            <kbd>F</kbd> {near.kind === 'manual' ? 'TAKE' : 'PICK UP'} {near.label.toUpperCase()}
-            {(() => { const kg = packEntryFor(near, data.content, () => 0).massKg; return kg ? <span> · {kg.toFixed(1)} kg</span> : null; })()}
-          </button>
-        )}
+        {near && readPage === null && (() => {
+          const e = entryForPickup(bag, near, data.content, () => 0);
+          const ok = fits(bag, e.massKg);
+          const verb = e.kind === 'page' ? 'TAKE' : e.kind === 'part' || (near.id in SALVAGE) ? 'SALVAGE' : 'PICK UP';
+          return (
+            <button className={ok ? 'v-pickup' : 'v-pickup full'} onClick={pickUpNear}>
+              <kbd>F</kbd> {verb} {e.name.toUpperCase()}
+              {e.massKg > 0 && <span> · {e.massKg.toFixed(1)} kg</span>}
+              {!ok && <span className="warning"> · BACKPACK FULL</span>}
+            </button>
+          );
+        })()}
 
-        {packOpen && (
-          <section className="v-pack" aria-label="Pack">
-            <h2>
-              <span>PACK</span>
-              <span className={carriedKg(bag) > HEAVY_KG ? 'warning' : undefined}>
-                {carriedKg(bag).toFixed(1)} kg{carriedKg(bag) > HEAVY_KG ? ' · HEAVY' : ''}
-                <button className="v-pack-close" onClick={() => setPackOpen(false)} aria-label="Close the pack">×</button>
+        {packOpen && (() => {
+          const kg = carriedKg(bag);
+          const matName = (m: string) => data.content?.materials.find((x) => x.id === m)?.name ?? m;
+          const partName = (id: string) => SALVAGE[id]?.name ?? id;
+          const row = (e: PackEntry, where: 'pack' | 'ship') => (
+            <li key={e.id}>
+              <span className="v-pack-name">
+                {e.name}
+                <em>
+                  {e.kind === 'supply' && (usable(e) ? givesLabel(e.gives) : e.repairs ? 'tools for repairs' : '')}
+                  {e.kind === 'scrap' && Object.entries(e.yields ?? {}).map(([m, v]) => `${matName(m).toLowerCase()} ${v} kg`).join(' · ')}
+                  {e.kind === 'part' && 'NASA part for ship repairs'}
+                  {e.kind === 'page' && 'read to learn how'}
+                  {e.massKg > 0 && ` · ${e.massKg.toFixed(1)} kg`}
+                </em>
               </span>
-            </h2>
-            {bag.entries.length === 0 && (
-              <p className="v-pack-empty">Empty. Walk up to supplies, rocket pieces and manual pages you have spotted and press <kbd>F</kbd>.</p>
-            )}
-            {(['supply', 'scrap', 'page'] as const).map((kind) => {
-              const list = bag.entries.filter((e) => e.kind === kind);
-              if (!list.length) return null;
-              return (
-                <div key={kind} className="v-pack-group">
-                  <h3>{kind === 'supply' ? 'SUPPLIES' : kind === 'scrap' ? 'SCRAP' : 'MANUAL PAGES'}</h3>
-                  <ul>
-                    {list.map((e) => (
-                      <li key={e.id}>
-                        <span className="v-pack-name">
-                          {e.name}
-                          <em>
-                            {e.kind === 'supply' && (usable(e) ? givesLabel(e.gives) : e.repairs ? `fixes ${e.repairs} fault` : '')}
-                            {e.kind === 'scrap' && Object.entries(e.yields ?? {}).map(([m, kg]) => `${m} ${kg} kg`).join(' · ')}
-                            {e.kind === 'page' && 'read to learn the build'}
-                            {e.massKg > 0 && ` · ${e.massKg.toFixed(1)} kg`}
-                          </em>
-                        </span>
-                        <span className="v-pack-acts">
-                          {usable(e) && <button onClick={() => applyFromBag(e.id)}>USE</button>}
-                          {e.kind === 'page' && <button onClick={() => openPage(e.page)}>READ</button>}
-                          {e.kind !== 'page' && <button onClick={() => dropFromBag(e.id)} title="Leave it here">DROP</button>}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-            <p className="v-pack-note">Carried mass raises your effort, so O₂, scrubber and water go faster. Masses and refills are design values.</p>
-          </section>
-        )}
+              <span className="v-pack-acts">
+                {usable(e) && (where === 'pack' || atShip) && <button onClick={() => applyFrom(where, e.id)}>USE</button>}
+                {e.kind === 'page' && <button onClick={() => openPage(e.page)}>READ</button>}
+                {where === 'pack' && atShip && <button onClick={() => storeInShip(e.id)} title="Keep it in the ship">STORE</button>}
+                {where === 'pack' && e.kind !== 'page' && <button onClick={() => dropFromBag(e.id)} title="Put it down here">DROP</button>}
+                {where === 'ship' && atShip && <button onClick={() => takeFromShip(e.id)} title="Into the backpack">TAKE</button>}
+              </span>
+            </li>
+          );
+          const groups = (list: PackEntry[], where: 'pack' | 'ship') => (['supply', 'part', 'scrap', 'page'] as const).map((kind) => {
+            const items = list.filter((e) => e.kind === kind);
+            if (!items.length) return null;
+            return (
+              <div key={kind} className="v-pack-group">
+                <h3>{kind === 'supply' ? 'SUPPLIES AND TOOLS' : kind === 'part' ? 'NASA PARTS' : kind === 'scrap' ? 'SCRAP' : 'MANUAL PAGES'}</h3>
+                <ul>{items.map((e) => row(e, where))}</ul>
+              </div>
+            );
+          });
+          return (
+            <section className="v-pack" aria-label="Backpack, ship and repairs">
+              <div className="v-pack-tabs" role="tablist">
+                {([['pack', 'BACKPACK'], ['ship', 'SHIP'], ['repairs', `REPAIRS ${ship.repaired.length}/${REPAIRS.length}`]] as const).map(([id, label]) => (
+                  <button key={id} role="tab" aria-selected={packTab === id} className={packTab === id ? 'on' : undefined} onClick={() => setPackTab(id)}>{label}</button>
+                ))}
+                <button className="v-pack-close" onClick={() => setPackOpen(false)} aria-label="Close">×</button>
+              </div>
+
+              {packTab === 'pack' && (
+                <>
+                  <div className={kg > HEAVY_KG ? 'v-load warning' : 'v-load'}>
+                    <span>{kg.toFixed(1)} / {BACKPACK_MAX_KG} kg{kg > HEAVY_KG ? ' · HEAVY' : ''}</span>
+                    <span className="v-load-bar"><span style={{ width: `${Math.min(100, (kg / BACKPACK_MAX_KG) * 100)}%` }} /></span>
+                  </div>
+                  {bag.entries.length === 0 && (
+                    <p className="v-pack-empty">Empty. Walk up to supplies, rocket pieces, manual pages or NASA hardware you have spotted and press <kbd>F</kbd>.</p>
+                  )}
+                  {groups(bag.entries, 'pack')}
+                  {atShip && bag.entries.length > 0 && <button className="v-pack-wide" onClick={() => storeInShip()}>STORE EVERYTHING IN THE SHIP</button>}
+                  <p className="v-pack-note">
+                    {atShip ? 'You are at the ship: store things here to free the backpack.' : 'Carried mass raises your effort. Bring things back to the ship to store them.'}
+                    {' '}DROP puts an item down where you stand.
+                  </p>
+                </>
+              )}
+
+              {packTab === 'ship' && (
+                <>
+                  {!atShip && <p className="v-pack-note warning">You are away from the ship. Walk back to the lander to store or take things.</p>}
+                  {Object.keys(ship.materials).length > 0 && (
+                    <div className="v-pack-group">
+                      <h3>MATERIALS (FROM SCRAP)</h3>
+                      <p className="v-chips">{Object.entries(ship.materials).map(([m, v]) => <span key={m}>{matName(m)} {Math.round(v * 10) / 10} kg</span>)}</p>
+                    </div>
+                  )}
+                  {groups(ship.stored, 'ship')}
+                  {ship.stored.length === 0 && Object.keys(ship.materials).length === 0 && (
+                    <p className="v-pack-empty">The ship's storage is empty. Bring supplies, scrap and parts back to the lander and STORE them. There is no weight limit here.</p>
+                  )}
+                </>
+              )}
+
+              {packTab === 'repairs' && (
+                <>
+                  <p className="v-pack-note">Repair the lander into a base you can survive from. Repairs use stored materials and NASA parts; tools and manual pages are kept. Recipes are game design values.</p>
+                  {REPAIRS.map((rp) => {
+                    const done = ship.repaired.includes(rp.id);
+                    const needs = repairNeeds(rp, bag, ship, matName, partName);
+                    const ready = canRepair(rp, bag, ship);
+                    return (
+                      <div key={rp.id} className={done ? 'v-repair done' : 'v-repair'}>
+                        <h3>{done ? '✓ ' : ''}{rp.name.toUpperCase()} <span>{rp.minutes} min</span></h3>
+                        <p className="v-repair-does">{rp.does}</p>
+                        {!done && (
+                          <ul className="v-needs">
+                            {needs.map((n) => <li key={n.label} className={n.have ? 'have' : undefined}>{n.have ? '✓' : '○'} {n.label}</li>)}
+                          </ul>
+                        )}
+                        {!done && (
+                          <button className="v-pack-wide" disabled={!ready || !atShip} onClick={() => repairShip(rp)}>
+                            {!atShip ? 'GO TO THE SHIP TO REPAIR' : ready ? `REPAIR (${rp.minutes} MIN)` : 'MISSING PARTS'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </section>
+          );
+        })()}
 
         {readPage !== null && (() => {
           const pg = manualPage(pack.fieldManualPages, readPage);
@@ -719,7 +826,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                 <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>
                 <dt>Map</dt><dd>Top right. Click it to plan a route, then press WALK ROUTE. Stay inside the green line to get home.</dd>
                 <dt>Suit</dt><dd>Bars along the bottom; the big countdown top left is what runs out first. Stand at the lander to recharge.</dd>
-                <dt>Pick up</dt><dd>Walk up to something you have spotted and press <kbd>F</kbd> · <kbd>I</kbd> opens your pack to use supplies or read manual pages</dd>
+                <dt>Pick up</dt><dd>Walk up to something you have spotted and press <kbd>F</kbd>. The backpack holds {BACKPACK_MAX_KG} kg; <kbd>I</kbd> opens it.</dd>
+                <dt>Ship</dt><dd>At the lander, store what you found and repair the ship with tools, manual pages, scrap and parts from NASA hardware. A repaired ship refills your suit.</dd>
                 <dt>Weather</dt><dd>Top-left forecast: dust devils, the storm warning, nightfall.</dd>
                 <dt>Menu</dt><dd>☰ MENU: start the Sol 1 mission, pause, or switch to the 2D view.</dd>
               </dl>

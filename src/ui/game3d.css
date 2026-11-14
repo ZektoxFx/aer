@@ -266,3 +266,34 @@
 .v-manual-build b { font-weight: normal; color: var(--warning); }
 .v-manual-source { margin: 0 0 14px; font-size: 10px; line-height: 1.45; color: color-mix(in srgb, var(--fg) 55%, transparent); overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .v-pickup, .v-pack { animation: none; } }
+
+/* ---- Backpack, ship and repair tabs ---- */
+.v-pack-tabs { display: flex; gap: 4px; align-items: center; }
+.v-pack-tabs [role='tab'] {
+  font: inherit; font-size: 10px; letter-spacing: 0.14em; cursor: pointer; color: color-mix(in srgb, var(--fg) 65%, transparent);
+  background: transparent; border: 1px solid transparent; border-radius: 999px; padding: 4px 9px;
+}
+.v-pack-tabs [role='tab'].on { color: var(--fg); border-color: var(--line); background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.v-pack-tabs .v-pack-close { margin-left: auto; }
+.v-load { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.v-load-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 15%, transparent); overflow: hidden; }
+.v-load-bar span { display: block; height: 100%; background: var(--fg); }
+.v-load.warning .v-load-bar span { background: var(--warning); }
+.v-pack-wide {
+  font: inherit; font-size: 11px; letter-spacing: 0.14em; cursor: pointer; color: var(--fg); padding: 7px 10px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent); border: 1px solid var(--line); border-radius: 10px;
+}
+.v-pack-wide:hover:not(:disabled) { border-color: var(--fg); }
+.v-pack-wide:disabled { opacity: 0.5; cursor: default; }
+.v-pack-note.warning { color: var(--warning); }
+.v-chips { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.v-chips span { font-size: 10px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; }
+.v-repair { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.v-repair h3 { margin: 0; display: flex; justify-content: space-between; color: var(--fg); }
+.v-repair h3 span { color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-repair.done h3 { color: var(--fg); }
+.v-repair-does { margin: 0; font-size: 11px; line-height: 1.4; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+.v-needs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.v-needs li { color: color-mix(in srgb, var(--fg) 60%, transparent); border: 0; padding: 0; }
+.v-needs li.have { color: var(--fg); }
+.v-pickup.full { border-color: var(--warning); }

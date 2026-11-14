@@ -60,6 +60,13 @@ describe('missionSteps', () => {
     expect(taken.map((x) => x.done)).toEqual([true, true, true, false]);
   });
 
+  it('adds the ship repair step when there are repairs to do', () => {
+    const s = missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 1, of: 3 });
+    expect(s.map((x) => x.id)).toEqual(['crash', 'ship', 'page', 'rover', 'call']);
+    expect(s[1]).toMatchObject({ done: false, detail: expect.stringContaining('1/3') });
+    expect(missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 3, of: 3 })[1].done).toBe(true);
+  });
+
   it('shows the next orbiter pass on the last step', () => {
     const s = missionSteps(null, { x: 0, y: 0 }, { orbiter: 'MRO', centre: '15:09', inMin: 90 }, fmt);
     expect(s[3].detail).toBe('MRO ≈15:09 · in 90 min');
