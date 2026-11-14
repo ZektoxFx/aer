@@ -27,6 +27,9 @@
   animation: twinkle 6s ease-in-out infinite alternate;
 }
 
+/* LOCAL DRAFT: the 3D globe canvas (same place and size as the old photo). */
+.earth-globe { position: absolute; z-index: 1; left: -75vmin; top: -75vmin; width: 150vmin; height: 150vmin; pointer-events: none; }
+
 /* Earth group, positioned at Earth's centre: the photo, a moving night side, the atmosphere and satellites. */
 .earth-wrap { position: absolute; left: 90%; top: 86%; width: 0; height: 0; }
 .earth {

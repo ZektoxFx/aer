@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { EarthGlobe } from './EarthGlobe';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
 import { Satellite } from './Satellite';
@@ -82,9 +83,8 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
       <div className="space">
         <div className="stars" aria-hidden="true" />
         <div className="earth-wrap" aria-hidden="true">
-          <img className="earth" src="/data/earth_apollo17.jpg" alt="" />
-          <div className="earth-night" />
-          <div className="earth-atmo" />
+          {/* LOCAL DRAFT: 3D globe (EarthGlobe) instead of the flat photo + CSS night/atmosphere layers. */}
+          <EarthGlobe still={still} />
           {ORBITS.map((o, i) => <Satellite key={i} orbit={o.orbit} big={o.big} still={still || phase !== 'title'} />)}
         </div>
         <div className="mars" aria-hidden="true" />
