@@ -31,8 +31,9 @@ Each role mostly edits its own folder, so merges stay painless.
 
 ## Git rules
 
-- Work on your own branch, then merge small changes to `main` often.
+- Work on your own branch, then merge small changes to `main` often through pull requests.
 - `main` must always build and pass `npm test`. It is the public demo.
+- The full step-by-step workflow is in [CLAUDE.md](CLAUDE.md). Claude Code reads it automatically, and it works as a checklist for humans too.
 
 ## Data and AI use
 

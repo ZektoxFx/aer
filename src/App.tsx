@@ -34,6 +34,7 @@ export default function App() {
             <li>Water left: {result.state.waterKg.toFixed(2)} kg</li>
             <li>Battery: {result.state.batteryWh.toFixed(0)} Wh</li>
             <li>Inspired pCO₂: {result.state.inspiredPCO2KPa.toFixed(2)} kPa</li>
+            <li>Core temp: {result.state.coreTempC.toFixed(1)} °C</li>
           </ul>
           {result.warnings.map((w) => <p key={w.code} className={w.level}>{w.message}</p>)}
         </>

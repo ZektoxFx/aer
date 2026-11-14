@@ -17,6 +17,8 @@ export interface Environment {
   tempC: number;
   windMS: number;
   tau: number;
+  /** Sunlight reaching the surface, W/m² (from PSG for τ and sun angle). Omit or 0 at night. */
+  solarWm2?: number;
 }
 
 /** What the astronaut is doing. speedMS = 0 means resting. */
@@ -26,7 +28,7 @@ export interface Activity {
   loadKg: number;     // carried scrap and gear
 }
 
-export type WarningCode = 'O2_LOW' | 'O2_OUT' | 'CO2' | 'WATER_OUT' | 'BATTERY_LOW' | 'BATTERY_OUT';
+export type WarningCode = 'O2_LOW' | 'O2_OUT' | 'CO2' | 'WATER_OUT' | 'BATTERY_LOW' | 'BATTERY_OUT' | 'CORE_TEMP';
 
 export interface SimWarning {
   code: WarningCode;

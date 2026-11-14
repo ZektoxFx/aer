@@ -11,6 +11,15 @@ const SUIT_GAS_L = 50;              // free gas volume of the suit loop [verify]
 const KPA_PER_G_CO2 = (8.314 * 310) / 44.01 / SUIT_GAS_L;
 const SCRUBBED_PCO2_KPA = 0.1;
 
+// Heat balance (§3.3). Insulation, radiation and convection are lumped into one conductance.
+// Values marked [verify] are design values chosen so "work hot, rest cold" happens at Jezero temperatures.
+const SUIT_UA_W_PER_K = 3.3;          // heat leak from body to Mars per K difference (~300 W at −55 °C) [verify]
+const SUIT_SUN_ABSORPTANCE = 0.2;     // white outer layer [verify]
+const SUIT_SUN_AREA_M2 = 0.7;         // area facing the sun [verify]
+const EVAP_MAX_W = 550;               // membrane evaporator capacity [verify]
+const BODY_HEAT_CAP_J_PER_K = 75 * 3470; // 75 kg × tissue specific heat
+const CORE_SETPOINT_C = 37;
+
 /** Starting suit for a fresh excursion. Design values to tune in playtesting [verify]. */
 export const FULL_SUIT: SuitState = {
   o2Kg: 0.6, liohKg: 0.5, waterKg: 3.6, batteryWh: 1200,
@@ -47,25 +56,30 @@ export function co2Effect(inspiredKPa: number): SimWarning | null {
   return tier ? { code: 'CO2', level: tier.level, message: tier.message } : null;
 }
 
-/**
- * Advance the suit by `minutes` of one activity. Pure: returns a new state.
- * env is unused until the heat balance (§3.3) lands; it is in the signature so callers don't change later.
- */
-export function simulate(start: SuitState, _env: Environment, activity: Activity, minutes: number): StepResult {
+/** Advance the suit by `minutes` of one activity. Pure: returns a new state. */
+export function simulate(start: SuitState, env: Environment, activity: Activity, minutes: number): StepResult {
   const w = metabolicW(activity);
   const o2KgPerMin = (O2_G_PER_WH * w) / 1000 / 60;
   const co2KgPerMin = o2KgPerMin * CO2_PER_O2;
-  // shortcut: evaporator rejects all metabolic + avionics heat (upper bound); replace with §3.3 heat balance
-  const waterKgPerMin = ((w + AVIONICS_W) * 60) / EVAP_J_PER_KG;
   const batteryWhPerMin = AVIONICS_W / 60;
+  const solarW = SUIT_SUN_ABSORPTANCE * SUIT_SUN_AREA_M2 * (env.solarWm2 ?? 0);
 
   const s = { ...start };
-  // 1-minute substeps so a canister running out mid-leg is caught at the right time
+  // 1-minute substeps so a canister or water running out mid-leg is caught at the right time
   for (let done = 0; done < minutes; ) {
     const dt = Math.min(1, minutes - done);
+    const seconds = dt * 60;
     s.o2Kg = Math.max(0, s.o2Kg - o2KgPerMin * dt);
-    s.waterKg = Math.max(0, s.waterKg - waterKgPerMin * dt);
     s.batteryWh = Math.max(0, s.batteryWh - batteryWhPerMin * dt);
+
+    // Heat: the evaporator works as a thermostat, pulling the core back to 37 °C.
+    // It can only cool, is capped by its capacity, and stops when the water runs out.
+    const surplusW = w + AVIONICS_W + solarW - SUIT_UA_W_PER_K * (s.coreTempC - env.tempC);
+    const wantedW = surplusW + ((s.coreTempC - CORE_SETPOINT_C) * BODY_HEAT_CAP_J_PER_K) / seconds;
+    const waterLimitW = (s.waterKg * EVAP_J_PER_KG) / seconds;
+    const evapW = Math.max(0, Math.min(wantedW, EVAP_MAX_W, waterLimitW));
+    s.waterKg = Math.max(0, s.waterKg - (evapW * seconds) / EVAP_J_PER_KG);
+    s.coreTempC += ((surplusW - evapW) * seconds) / BODY_HEAT_CAP_J_PER_K;
 
     const co2Kg = co2KgPerMin * dt;
     const liohNeeded = co2Kg * LIOH_PER_CO2;
@@ -90,6 +104,13 @@ export function simulate(start: SuitState, _env: Environment, activity: Activity
   if (co2) warnings.push(co2);
 
   if (s.waterKg <= 0) warnings.push({ code: 'WATER_OUT', level: 'warning', message: 'Cooling water exhausted: overheating risk' });
+
+  // Core temperature tiers [verify against clinical thresholds]
+  const t = s.coreTempC;
+  if (t > 39) warnings.push({ code: 'CORE_TEMP', level: 'critical', message: `Core ${t.toFixed(1)} °C: heat exhaustion` });
+  else if (t > 38) warnings.push({ code: 'CORE_TEMP', level: 'warning', message: `Core ${t.toFixed(1)} °C: overheating, slow down` });
+  else if (t < 35) warnings.push({ code: 'CORE_TEMP', level: 'critical', message: `Core ${t.toFixed(1)} °C: hypothermia` });
+  else if (t < 36) warnings.push({ code: 'CORE_TEMP', level: 'warning', message: `Core ${t.toFixed(1)} °C: getting cold, find shelter or move` });
 
   const batteryMinLeft = s.batteryWh / batteryWhPerMin;
   if (s.batteryWh <= 0) warnings.push({ code: 'BATTERY_OUT', level: 'critical', message: 'Suit battery dead' });
