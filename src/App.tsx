@@ -3,6 +3,7 @@ import { loadGameData, type GameData } from './ui/gameData';
 import { Hud } from './ui/Hud';
 import { Shell } from './ui/Shell';
 import { TitleScreen } from './ui/TitleScreen';
+import { browserStorage, loadSettings, saveSettings, type Settings } from './ui/settings';
 
 export default function App() {
   const [data, setData] = useState<GameData | null>(null);
@@ -11,6 +12,8 @@ export default function App() {
   // The title screen sits on top; the game mounts when the crash ends, so its clock starts then.
   const [showGame, setShowGame] = useState(false);
   const [showTitle, setShowTitle] = useState(true);
+  const [settings, setSettings] = useState<Settings>(() => loadSettings(browserStorage()));
+  const changeSettings = useCallback((s: Settings) => { setSettings(s); saveSettings(s, browserStorage()); }, []);
   const reveal = useCallback(() => setShowGame(true), []);
   const titleDone = useCallback(() => setShowTitle(false), []);
 
@@ -21,7 +24,7 @@ export default function App() {
   return (
     <>
       {showGame && (
-        <div className="game-enter">
+        <div className={`game-enter${settings.largeText ? ' large-ui' : ''}${settings.reducedMotion ? ' reduce-motion' : ''}`}>
           {error && <p className="critical">Data pack failed to load: {error}</p>}
           {!error && !data && <p>LOADING DATA PACK…</p>}
           {data && (
@@ -36,7 +39,7 @@ export default function App() {
           )}
         </div>
       )}
-      {showTitle && <TitleScreen onReveal={reveal} onDone={titleDone} />}
+      {showTitle && <TitleScreen settings={settings} onSettings={changeSettings} onReveal={reveal} onDone={titleDone} />}
     </>
   );
 }

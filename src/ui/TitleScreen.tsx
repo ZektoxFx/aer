@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Rocket } from './Rocket';
+import type { Orbit } from './orbit';
+import { Satellite } from './Satellite';
+import { CONTROLS, type Settings } from './settings';
 import './title.css';
 
 export const TEAM_NAME = 'PerformativeLarper';
@@ -17,15 +21,30 @@ const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
 };
 const BLUR_MS = 1200;
 
+// Satellites around Earth: two small ones and a long-truss station.
+// Earth sits in the lower-right corner, so the orbits are tilted to swing up into view on its left.
+const ORBITS: { orbit: Orbit; big?: boolean }[] = [
+  { orbit: { rx: 70, ry: 16, tiltDeg: 24, periodS: 24, phase: 0.45 } },
+  { orbit: { rx: 82, ry: 26, tiltDeg: 14, periodS: 40, phase: 0.05 } },
+  { orbit: { rx: 64, ry: 12, tiltDeg: 30, periodS: 32, phase: 0.7 }, big: true },
+];
+
+type Panel = 'menu' | 'settings' | 'quit';
+
 interface Props {
+  settings: Settings;
+  onSettings: (s: Settings) => void;
   /** Called when the blur starts, so the game can mount underneath and show through. */
   onReveal: () => void;
   /** Called when the intro is fully gone. */
   onDone: () => void;
 }
 
-export function TitleScreen({ onReveal, onDone }: Props) {
+export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const [phase, setPhase] = useState<Phase>('title');
+  const [panel, setPanel] = useState<Panel>('menu');
+  const [quitTried, setQuitTried] = useState(false);
+  const still = settings.reducedMotion;
 
   useEffect(() => {
     const step = NEXT[phase];
@@ -43,29 +62,33 @@ export function TitleScreen({ onReveal, onDone }: Props) {
   }, [phase, onReveal, onDone]);
 
   const start = () => {
-    // Reduced motion: skip the whole intro.
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { onReveal(); onDone(); return; }
+    const osReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (settings.skipIntro || settings.reducedMotion || osReduced) { onReveal(); onDone(); return; }
     setPhase('cruise');
   };
   const skip = () => {
     if (phase !== 'title' && phase !== 'blur') { setPhase('blur'); onReveal(); }
   };
+  const quit = () => {
+    // Browsers only let a page close tabs that a script opened, so this usually does nothing.
+    window.close();
+    setQuitTried(true);
+  };
+  const toggle = (k: keyof Settings) => onSettings({ ...settings, [k]: !settings[k] });
 
   return (
-    <div className={`intro phase-${phase}`} onClick={skip} role="dialog" aria-label="AER intro">
-      {/* Space: Earth, the rocket, Mars */}
+    <div className={`intro phase-${phase}${still ? ' still' : ''}`} onClick={skip} role="dialog" aria-label="AER">
+      {/* Space: Earth with satellites, the rocket, Mars */}
       <div className="space">
         <div className="stars" aria-hidden="true" />
-        <img className="earth" src="/data/earth_apollo17.jpg" alt="" aria-hidden="true" />
+        <div className="earth-wrap" aria-hidden="true">
+          <img className="earth" src="/data/earth_apollo17.jpg" alt="" />
+          <div className="earth-night" />
+          <div className="earth-atmo" />
+          {ORBITS.map((o, i) => <Satellite key={i} orbit={o.orbit} big={o.big} still={still || phase !== 'title'} />)}
+        </div>
         <div className="mars" aria-hidden="true" />
-        <svg className="rocket" viewBox="0 0 40 100" aria-hidden="true">
-          <path className="rocket-flame" d="M14 78 L20 100 L26 78 Z" />
-          <path className="rocket-fin" d="M10 60 L2 80 L12 76 Z M30 60 L38 80 L28 76 Z" />
-          <path className="rocket-body" d="M12 78 L12 30 Q20 4 28 30 L28 78 Z" />
-          <rect className="rocket-band" x="12" y="54" width="16" height="5" />
-          <circle className="rocket-window" cx="20" cy="38" r="4" />
-          <path className="rocket-smoke" d="M20 80 q-6 10 0 20 q6 10 0 20" />
-        </svg>
+        <Rocket className="rocket" />
         <div className="alarm-wash" aria-hidden="true" />
         <div className="impact" aria-hidden="true" />
       </div>
@@ -85,16 +108,49 @@ export function TitleScreen({ onReveal, onDone }: Props) {
         <p className="ai-mark">AER SIMULATION // AI GENERATED ASSET</p>
       </div>
 
-      {phase === 'fault' && (
-        <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT</p>
-      )}
+      {phase === 'fault' && <p className="fault-msg" role="alert">▲ MASTER ALARM · DESCENT ENGINE FAULT</p>}
 
       <div className="title-content">
         <p className="title-kicker">TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS 2026</p>
         <h1 className="title-word">AER</h1>
         <p className="title-sub">ATMOSPHERIC EQUILIBRIUM &amp; RECOVERY</p>
         <p className="title-tag">Plan a Marswalk you can survive.</p>
-        <button className="title-start" onClick={start} autoFocus>START</button>
+
+        {panel === 'menu' && (
+          <nav className="title-menu" aria-label="Main menu">
+            <button className="menu-btn primary" onClick={start} autoFocus>START</button>
+            <button className="menu-btn" onClick={() => setPanel('settings')}>SETTINGS</button>
+            <button className="menu-btn" onClick={() => { setQuitTried(false); setPanel('quit'); }}>QUIT</button>
+          </nav>
+        )}
+
+        {panel === 'settings' && (
+          <section className="menu-panel" aria-label="Settings">
+            <h2>SETTINGS</h2>
+            <label className="opt"><input type="checkbox" checked={settings.skipIntro} onChange={() => toggle('skipIntro')} /> Skip the intro on START</label>
+            <label className="opt"><input type="checkbox" checked={settings.reducedMotion} onChange={() => toggle('reducedMotion')} /> Reduce animations</label>
+            <label className="opt"><input type="checkbox" checked={settings.largeText} onChange={() => toggle('largeText')} /> Larger interface</label>
+            <h3>CONTROLS</h3>
+            <dl className="controls-list">
+              {CONTROLS.map((c) => <div key={c.keys}><dt>{c.keys}</dt><dd>{c.action}</dd></div>)}
+            </dl>
+            <p className="panel-note">Settings are saved in this browser.</p>
+            <button className="menu-btn" onClick={() => setPanel('menu')} autoFocus>BACK</button>
+          </section>
+        )}
+
+        {panel === 'quit' && (
+          <section className="menu-panel" aria-label="Quit">
+            <h2>QUIT AER?</h2>
+            {quitTried
+              ? <p>Your browser kept this tab open. You can close the tab now.</p>
+              : <p>Leave the simulation and close this tab.</p>}
+            <div className="panel-actions">
+              {!quitTried && <button className="menu-btn primary" onClick={quit}>QUIT</button>}
+              <button className="menu-btn" onClick={() => setPanel('menu')} autoFocus>BACK</button>
+            </div>
+          </section>
+        )}
       </div>
 
       <div className="title-meta">

@@ -1,5 +1,6 @@
 /* Intro: Earth title → cruise → engine fault → crash → astronaut POV → blur into the game.
-   Colors come only from the :root variables in src/index.css (the intro uses the --mars-* set). */
+   Colors come only from the :root variables in src/index.css (the intro uses the --mars-*, --metal*, --sat-panel,
+   --earth-glow, --space and --alarm set). */
 
 .intro {
   position: fixed; inset: 0; z-index: 10; overflow: hidden;
@@ -26,15 +27,36 @@
   animation: twinkle 6s ease-in-out infinite alternate;
 }
 
-/* Earth: the Apollo 17 photo, drifting slowly on the title. */
+/* Earth group, positioned at Earth's centre: the photo, a moving night side, the atmosphere and satellites. */
+.earth-wrap { position: absolute; left: 90%; top: 86%; width: 0; height: 0; }
 .earth {
-  position: absolute; left: 90%; top: 86%;
-  width: 150vmin; height: 150vmin; margin: -75vmin 0 0 -75vmin;
+  position: absolute; z-index: 1; left: -75vmin; top: -75vmin; width: 150vmin; height: 150vmin;
   object-fit: cover; pointer-events: none; user-select: none;
-  mix-blend-mode: lighten; /* the photo's black space blends into the page instead of showing a seam */
-  animation: earth-drift 24s ease-in-out infinite alternate;
-  opacity: 0.9;
+  clip-path: circle(33.1% at 50.2% 50.8%); /* keep only the Earth disc, so the photo's black frame never shows */
+  animation: earth-turn 40s ease-in-out infinite alternate;
 }
+/* The disc in the photo is about 66% of the frame: 99vmin across. */
+.earth-night, .earth-atmo {
+  position: absolute; left: -49.5vmin; top: -49.5vmin; width: 99vmin; height: 99vmin; border-radius: 50%;
+  pointer-events: none;
+}
+.earth-night {
+  z-index: 2;
+  background: radial-gradient(circle at 30% 35%, transparent 45%, var(--space) 85%);
+  background-size: 160% 160%;
+  animation: terminator 30s ease-in-out infinite alternate;
+  opacity: 0.85;
+}
+.earth-atmo {
+  z-index: 2;
+  box-shadow: 0 0 6vmin 1vmin var(--earth-glow), inset 0 0 4vmin 0 var(--earth-glow);
+  opacity: 0.25;
+  animation: atmo 7s ease-in-out infinite alternate;
+}
+.satellite { position: absolute; left: -36px; top: -12px; opacity: 0; pointer-events: none; filter: drop-shadow(0 0 2px var(--metal)); }
+.satellite.big { left: -62px; top: -16px; }
+.phase-title .satellite { opacity: 1; }
+.still .satellite { opacity: 0; }
 
 /* Mars: the HiRISE Jezero image warmed to the lander palette and shaded into night. */
 .mars {
@@ -50,15 +72,11 @@
 }
 
 .rocket {
-  position: absolute; left: 50%; top: 50%; width: 40px; height: 100px; margin: -50px 0 0 -20px;
-  opacity: 0; overflow: visible;
+  position: absolute; left: 50%; top: 50%; width: 40px; height: 140px; margin: -70px 0 0 -20px;
+  opacity: 0; overflow: visible; filter: drop-shadow(0 0 3px var(--space));
 }
-.rocket-body { fill: var(--mars-dust); stroke: var(--mars-shadow); stroke-width: 1.5; }
-.rocket-fin { fill: var(--mars-rust); }
-.rocket-band { fill: var(--mars-sand); }
-.rocket-window { fill: var(--mars-shadow); stroke: var(--mars-sky); stroke-width: 1.5; }
-.rocket-flame { fill: var(--mars-sky); transform-origin: 20px 78px; animation: flicker 0.07s steps(2) infinite; }
-.rocket-smoke { fill: none; stroke: var(--mars-dust); stroke-width: 6; stroke-linecap: round; opacity: 0; }
+.rocket-flame { transform-origin: 20px 104px; animation: flicker 0.07s steps(2) infinite; }
+.rocket-smoke { fill: var(--metal-dark); opacity: 0; }
 
 .alarm-wash { position: absolute; inset: 0; background: var(--alarm); opacity: 0; pointer-events: none; }
 .impact { position: absolute; inset: 0; background: var(--mars-dust); opacity: 0; pointer-events: none; }
@@ -69,33 +87,54 @@
   animation: blink 0.5s steps(2) infinite;
 }
 
-/* ---------- Title ---------- */
+/* ---------- Title and menu ---------- */
 .title-content {
-  position: relative; z-index: 2; text-align: center; padding: 16px;
+  position: relative; z-index: 5; text-align: center; padding: 16px;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   text-shadow: 0 2px 18px var(--space);
 }
 .title-kicker { margin: 0; color: var(--mars-sky); font-size: 12px; letter-spacing: 0.16em; }
 .title-word {
-  margin: 0; font-size: clamp(72px, 18vw, 168px); line-height: 1; letter-spacing: 0.2em; padding-left: 0.2em;
+  margin: 0; font-size: clamp(64px, 16vw, 156px); line-height: 1; letter-spacing: 0.2em; padding-left: 0.2em;
   color: var(--mars-dust);
 }
 .title-sub { margin: 0; font-size: clamp(11px, 2.6vw, 15px); letter-spacing: 0.22em; color: var(--mars-sky); }
-.title-tag { margin: 10px 0 18px; color: var(--mars-dust); opacity: 0.8; }
-.title-start {
-  font: inherit; font-size: 16px; letter-spacing: 0.3em; padding: 10px 34px 10px 40px; cursor: pointer;
-  background: var(--mars-sand); color: var(--space); border: 1px solid var(--mars-dust);
+.title-tag { margin: 8px 0 14px; color: var(--mars-dust); opacity: 0.8; }
+
+.title-menu { display: flex; flex-direction: column; gap: 10px; width: min(260px, 80vw); }
+.menu-btn {
+  font: inherit; font-size: 14px; letter-spacing: 0.26em; padding: 9px 18px; cursor: pointer;
+  background: color-mix(in srgb, var(--space) 70%, transparent); color: var(--mars-dust);
+  border: 1px solid var(--mars-sky);
 }
-.title-start:hover { background: var(--mars-dust); }
-.title-start:focus-visible { outline: 2px solid var(--mars-dust); outline-offset: 4px; }
+.menu-btn.primary { background: var(--mars-sand); color: var(--space); border-color: var(--mars-dust); font-size: 16px; }
+.menu-btn:hover { background: var(--mars-dust); color: var(--space); }
+.menu-btn:focus-visible { outline: 2px solid var(--mars-dust); outline-offset: 3px; }
+
+.menu-panel {
+  width: min(460px, 88vw); text-align: left; padding: 16px 18px;
+  background: color-mix(in srgb, var(--space) 85%, transparent); border: 1px solid var(--mars-sky);
+  text-shadow: none;
+}
+.menu-panel h2 { margin: 0 0 10px; font-size: 15px; letter-spacing: 0.2em; color: var(--mars-dust); }
+.menu-panel h3 { margin: 14px 0 6px; font-size: 12px; letter-spacing: 0.2em; color: var(--mars-sky); }
+.menu-panel p { margin: 0 0 12px; }
+.opt { display: flex; align-items: center; gap: 10px; padding: 4px 0; cursor: pointer; }
+.opt input { accent-color: var(--mars-sand); width: 16px; height: 16px; }
+.controls-list { margin: 0 0 12px; display: grid; gap: 4px; font-size: 12px; }
+.controls-list div { display: grid; grid-template-columns: 9em 1fr; gap: 10px; }
+.controls-list dt { color: var(--mars-sky); }
+.controls-list dd { margin: 0; }
+.panel-note { color: var(--mars-sky); font-size: 11px; }
+.panel-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
 .title-meta {
-  position: absolute; top: 14px; left: 16px; right: 16px; z-index: 2;
+  position: absolute; top: 14px; left: 16px; right: 16px; z-index: 5;
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px;
   color: var(--mars-sky); font-size: 11px; letter-spacing: 0.06em; opacity: 0.8;
 }
 .title-meta p { margin: 0; }
-.intro-skip { position: absolute; bottom: 16px; right: 16px; margin: 0; z-index: 5; color: var(--mars-sky); font-size: 11px; letter-spacing: 0.12em; }
+.intro-skip { position: absolute; bottom: 16px; right: 16px; margin: 0; z-index: 6; color: var(--mars-sky); font-size: 11px; letter-spacing: 0.12em; }
 
 /* ---------- POV ---------- */
 .pov { position: absolute; inset: 0; opacity: 0; pointer-events: none; z-index: 4; background: var(--space); }
@@ -106,7 +145,7 @@
   background:
     radial-gradient(ellipse 75% 70% at 50% 50%, transparent 55%, var(--space) 100%),
     linear-gradient(120deg, transparent 20%, var(--mars-dust) 21%, transparent 32%);
-  opacity: 0.85; mix-blend-mode: normal;
+  opacity: 0.85;
 }
 .eyelid { position: absolute; left: -5%; right: -5%; height: 52%; background: var(--space); }
 .eyelid.top { top: 0; border-radius: 0 0 50% 50%; }
@@ -126,20 +165,20 @@
 }
 
 /* ---------- Timeline ---------- */
-/* cruise: title fades, Earth falls away, the rocket climbs out, Mars appears far off. */
+/* cruise: title fades, Earth and its satellites fall away, the rocket climbs out, Mars appears far off. */
 .intro:not(.phase-title) .title-content,
-.intro:not(.phase-title) .title-meta { animation: fade-out 0.5s ease-in forwards; }
-.phase-cruise .earth { animation: earth-away 2.6s ease-in forwards; }
+.intro:not(.phase-title) .title-meta { animation: fade-out 0.5s ease-in forwards; pointer-events: none; }
+.phase-cruise .earth-wrap { animation: earth-away 2.6s ease-in forwards; }
 .phase-cruise .rocket { animation: rocket-cruise 2.6s ease-in-out forwards; }
 .phase-cruise .stars { animation: stars-streak 2.6s ease-in forwards; }
 .phase-cruise .mars { animation: mars-appear 2.6s ease-in forwards; }
 
 /* fault: alarm wash pulses, the rocket tumbles and smokes, Mars swells. */
-.phase-fault .earth, .phase-crash .earth, .phase-pov .earth, .phase-blur .earth { opacity: 0; animation: none; }
+.phase-fault .earth-wrap, .phase-crash .earth-wrap, .phase-pov .earth-wrap, .phase-blur .earth-wrap { opacity: 0; }
 .phase-fault .stars, .phase-crash .stars { opacity: 0.2; animation: none; }
 .phase-fault .mars { opacity: 1; animation: mars-near 2.2s ease-in forwards; }
 .phase-fault .rocket { opacity: 1; animation: rocket-tumble 2.2s linear forwards; }
-.phase-fault .rocket-smoke { animation: smoke 0.4s ease-out infinite; }
+.phase-fault .rocket-smoke { animation: smoke 0.45s ease-out infinite; }
 .phase-fault .alarm-wash { animation: alarm 0.5s ease-in-out infinite; }
 .phase-fault .space { animation: jitter 0.12s linear infinite; }
 
@@ -165,8 +204,10 @@
 /* ---------- Keyframes ---------- */
 @keyframes twinkle { to { opacity: 0.8; } }
 @keyframes fade-out { to { opacity: 0; transform: translateY(-16px); } }
-@keyframes earth-drift { from { transform: scale(1) rotate(-2deg); } to { transform: scale(1.06) rotate(2deg); } }
-@keyframes earth-away { to { transform: translate(-30vw, 35vh) scale(0.12); opacity: 0.9; } }
+@keyframes earth-turn { from { transform: rotate(-4deg) scale(1); } to { transform: rotate(4deg) scale(1.03); } }
+@keyframes terminator { from { background-position: 0% 0%; } to { background-position: 100% 60%; } }
+@keyframes atmo { from { opacity: 0.18; } to { opacity: 0.38; } }
+@keyframes earth-away { to { transform: translate(-60vw, 20vh) scale(0.12); } }
 @keyframes stars-streak { to { transform: scale(1.6); opacity: 0.25; } }
 @keyframes mars-appear {
   0% { opacity: 0; transform: translate(60vw, -30vh) scale(0.04); }
@@ -178,19 +219,19 @@
   to { transform: translate(0, 40vh) scale(4); }
 }
 @keyframes rocket-cruise {
-  0% { opacity: 1; transform: translate(-20vw, 30vh) rotate(40deg) scale(0.4); }
-  100% { opacity: 1; transform: translate(10vw, -5vh) rotate(60deg) scale(0.9); }
+  0% { opacity: 1; transform: translate(30vw, 30vh) rotate(-30deg) scale(0.35); }
+  100% { opacity: 1; transform: translate(10vw, -5vh) rotate(55deg) scale(0.9); }
 }
 @keyframes rocket-tumble {
-  0% { transform: translate(10vw, -5vh) rotate(60deg) scale(0.9); }
+  0% { transform: translate(10vw, -5vh) rotate(55deg) scale(0.9); }
   100% { transform: translate(2vw, 2vh) rotate(600deg) scale(1.1); }
 }
 @keyframes rocket-dive {
   0% { transform: translate(2vw, 2vh) rotate(600deg) scale(1.1); }
   100% { transform: translate(0, 30vh) rotate(780deg) scale(0.5); opacity: 0.6; }
 }
-@keyframes flicker { 50% { transform: scaleY(1.5); } }
-@keyframes smoke { 0% { opacity: 0.6; } 100% { opacity: 0; transform: translateY(14px) scale(1.4); } }
+@keyframes flicker { 50% { transform: scaleY(1.25) scaleX(0.9); } }
+@keyframes smoke { 0% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(16px) scale(1.5); } }
 @keyframes alarm { 0%, 100% { opacity: 0; } 50% { opacity: 0.28; } }
 @keyframes blink { 50% { opacity: 0.25; } }
 @keyframes jitter {
@@ -220,6 +261,12 @@
 @keyframes blur-out { 0% { filter: blur(0); opacity: 1; } 100% { filter: blur(16px); opacity: 0; } }
 @keyframes game-in { from { filter: blur(10px); opacity: 0; } to { filter: blur(0); opacity: 1; } }
 
+/* Reduce animations: the player's setting or the OS setting. */
+.intro.still, .intro.still *, .reduce-motion .game-enter { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .intro, .intro *, .game-enter { animation: none !important; }
+  .satellite { opacity: 0 !important; }
 }
+
+/* Larger interface setting. */
+.large-ui { zoom: 1.15; }
