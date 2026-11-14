@@ -1,0 +1,22 @@
+/* The map inside the HUD's centre panel. Layout only; colours follow the map test page and :root. */
+.visor-centre:has(.hud-map) { justify-content: flex-start; align-items: stretch; padding: 10px; }
+.visor-centre:has(.hud-map) .hero { flex-direction: row; justify-content: center; align-items: baseline; gap: 12px; }
+.visor-centre:has(.hud-map) .hero-num { font-size: clamp(26px, 3.4vw, 42px); }
+.visor-centre:has(.hud-map) > p { margin: 0; }
+
+.hud-map { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; width: 100%; text-align: left; }
+.hud-map-canvas { position: relative; flex: none; aspect-ratio: 8 / 5; min-height: 260px; border: 1px solid var(--dim); border-radius: 8px; overflow: hidden; }
+.hud-map-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; font-size: 12px; letter-spacing: 0.06em; }
+.hud-map-bar .warning { color: var(--warning); }
+.hud-map-bar .critical { color: var(--critical); }
+.hud-map-btns { display: inline-flex; gap: 6px; }
+.hud-map-btns button {
+  font: inherit; font-size: 12px; letter-spacing: 0.08em; cursor: pointer;
+  background: transparent; color: var(--fg); border: 1px solid var(--dim); padding: 3px 10px;
+}
+.hud-map-btns button:disabled { opacity: 0.4; cursor: default; }
+.hud-map-btns button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.hud-map-log { margin: 0; font-size: 12px; min-height: 1.4em; }
+.hud-map-src { margin: 0; font-size: 11px; }
+
+@media (max-width: 760px) { .hud-map-canvas { aspect-ratio: 4 / 3; } }

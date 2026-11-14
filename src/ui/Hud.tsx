@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HudMap } from '../map/HudMap';
 import { SPEED_X, forecast, newGame, tick } from '../sim/game';
 import { FULL_SUIT } from '../sim/simulate';
 import { makeStorm, shelterEnvironment, stormCountdownMin, stormPhase } from '../sim/storm';
@@ -11,7 +12,7 @@ import {
 } from './shelterFlow';
 import './hud.css';
 
-// Test controls until Map drives the activity from a planned route.
+// Test controls. A walk planned on the map also drives the activity, leg by leg.
 const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }[] = [
   { id: 'cabin', label: 'IN CABIN', activity: { speedMS: 0, slopeDeg: 0, loadKg: 0 }, shelter: 'cabin' },
   { id: 'rest', label: 'REST OUTSIDE', activity: { speedMS: 0, slopeDeg: 0, loadKg: 0 }, shelter: 'none' },
@@ -21,7 +22,7 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
 
 const SHELTER_NAME: Record<Shelter, string> = { cabin: 'CABIN', wreck: 'WRECK', builtShelter: 'BUILT SHELTER', none: 'OPEN GROUND' };
 
-/** In-suit HUD: a visor frame of readouts around an open centre (map and photos go there later). */
+/** In-suit HUD: a visor frame of readouts around the map (the centre). */
 export function Hud({ data }: { data: GameData }) {
   const { pack } = data;
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
@@ -34,6 +35,9 @@ export function Hud({ data }: { data: GameData }) {
   const game = useRef(frame.state);
   const flowRef = useRef<ShelterFlow | null>(null);
   const pausedRef = useRef(paused);
+  // Bumped to tell the map the HUD took over the activity (stop the walk) or started a new game.
+  const [mapStop, setMapStop] = useState(0);
+  const [mapReset, setMapReset] = useState(0);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   /** One step of the game: the sim tick plus the shelter flow (arrival, then the summary once the storm is over). */
@@ -74,16 +78,23 @@ export function Hud({ data }: { data: GameData }) {
     const m = MODES.find((x) => x.id === id)!;
     game.current = { ...game.current, activity: m.activity, shelter: m.shelter };
     setModeId(id);
+    setMapStop((k) => k + 1);
   };
+  // The map's walk: each route leg's activity goes into the game state; arrival rests (in the cabin if home).
+  const onMapMove = useCallback((activity: Activity, shelter: Shelter) => {
+    game.current = { ...game.current, activity, shelter };
+    setModeId(activity.speedMS > 0 ? '' : shelter === 'cabin' ? 'cabin' : 'rest');
+  }, []);
   const clearFlow = () => { flowRef.current = null; setFlow(null); setSummary(null); };
   const triggerStorm = () => { clearFlow(); game.current = { ...game.current, storm: makeStorm(game.current.clockMin) }; };
-  const restart = (i = solIndex) => { clearFlow(); game.current = startGame(i); setSolIndex(i); setMode('cabin'); };
+  const restart = (i = solIndex) => { clearFlow(); game.current = startGame(i); setSolIndex(i); setMode('cabin'); setMapReset((k) => k + 1); };
   const pick = (c: ShelterChoice) => {
     const f = chooseShelter(c, game.current.clockMin, game.current.suit);
     flowRef.current = f;
     setFlow(f);
     game.current = { ...game.current, ...flowPosture(f) };
     setModeId('');
+    setMapStop((k) => k + 1);
   };
   // Test-only: jump one game hour ahead in 1-second ticks (tick() must not take big jumps).
   const skipHour = () => {
@@ -98,6 +109,8 @@ export function Hud({ data }: { data: GameData }) {
   const hero = firstToRunOut(fc);
   const clock = clockLabel(s.clockMin);
   const critical = frame.warnings.some((w) => w.level === 'critical');
+  const hour = Number(clock.time.slice(0, 2));
+  const night = hour < 6 || hour >= 18;
 
   const phase = s.storm ? stormPhase(s.storm, s.clockMin) : 'none';
   const stormRealSec = s.storm ? Math.ceil((stormCountdownMin(s.storm, s.clockMin) / SPEED_X.storm) * 60) : 0;
@@ -187,9 +200,13 @@ export function Hud({ data }: { data: GameData }) {
             )}
             {flow?.arrived && <p>{flow.choice.id === 'search' ? 'SEARCHING IN THE STORM' : `SHELTERED: ${SHELTER_NAME[s.shelter]}`}</p>}
             {stormActive && !flow && s.shelter === 'cabin' && <p>SHELTERED: CABIN</p>}
-            <p className="centre-note">[ map / surface photo view ]</p>
           </>
         )}
+        {/* Always mounted, so a walk and the explored ground survive the storm choices and summary. */}
+        <HudMap
+          pack={pack} clockMin={s.clockMin} suit={s.suit} env={frame.env} night={night} storm={stormActive}
+          sol={s.weather.sol} onMove={onMapMove} stopKey={mapStop} resetKey={mapReset}
+        />
       </div>
 
       <div className="visor-right">

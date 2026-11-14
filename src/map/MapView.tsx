@@ -76,18 +76,34 @@ const ITEM_STYLE: Record<ItemKind, { code: string; color: string }> = {
   science: { code: 'SCIENCE', color: '#b8ffcf' },
 };
 
-const RAMP: [number, [number, number, number]][] = [
+type Ramp = [number, [number, number, number]][];
+const DEFAULT_RAMP: Ramp = [
   [0, [48, 34, 30]], [0.3, [112, 62, 38]], [0.65, [172, 104, 60]], [1, [224, 172, 114]],
 ];
-function ramp(t: number): [number, number, number] {
-  for (let i = 1; i < RAMP.length; i++) {
-    if (t <= RAMP[i][0]) {
-      const [t0, a] = RAMP[i - 1], [t1, b] = RAMP[i];
+const hexRgb = (h: string | undefined): [number, number, number] | null => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h ?? '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+/** Height ramp from the Data role's marsVisuals.terrainColors (low dark basalt sand → regolith → light delta
+ *  mudstone on high ground). Falls back to the built-in ramp when the pack has no colours. */
+function terrainRamp(colors: Record<string, string> | undefined): Ramp {
+  const sand = hexRgb(colors?.darkBasaltSand), reg = hexRgb(colors?.regolithBase), mud = hexRgb(colors?.deltaMudstone);
+  if (!sand || !reg || !mud) return DEFAULT_RAMP;
+  // Lift the darkest stop a little so hillshade still reads in the hollows.
+  const lift = (c: [number, number, number]): [number, number, number] => [c[0] * 0.8 + 20, c[1] * 0.8 + 16, c[2] * 0.8 + 14];
+  return [[0, lift(sand)], [0.45, reg], [1, mud]];
+}
+function ramp(R: Ramp, t: number): [number, number, number] {
+  for (let i = 1; i < R.length; i++) {
+    if (t <= R[i][0]) {
+      const [t0, a] = R[i - 1], [t1, b] = R[i];
       const f = (t - t0) / (t1 - t0);
       return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
     }
   }
-  return RAMP[RAMP.length - 1][1];
+  return R[R.length - 1][1];
 }
 
 /** Box-blurred copy of the heights (local relief = height minus this; brightens rims, darkens hollows). */
@@ -114,7 +130,7 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
 }
 
 /** Terrain image at k× the grid: Mars colour ramp × two-light hillshade × local relief, plus film grain. */
-function renderTerrain(el: Elevation, k = 3): HTMLCanvasElement {
+function renderTerrain(el: Elevation, k = 3, R: Ramp = DEFAULT_RAMP): HTMLCanvasElement {
   const w = el.cols * k, h = el.rows * k;
   const [cv, ctx] = canvas(w, h);
   if (!ctx) return cv;
@@ -140,9 +156,9 @@ function renderTerrain(el: Elevation, k = 3): HTMLCanvasElement {
       const hash = Math.sin(c * 12.9898 + r * 78.233) * 43758.5453;
       const grain = 1 + ((hash - Math.floor(hash)) - 0.5) * 0.07;
       const s = (0.1 + 1.0 * sKey + 0.12 * sFill) * ao * grain;
-      const [R, G, B] = ramp((z - lo) / span);
+      const [Rc, G, B] = ramp(R, (z - lo) / span);
       const i = (r * w + c) * 4;
-      img.data[i] = Math.min(255, R * s);
+      img.data[i] = Math.min(255, Rc * s);
       img.data[i + 1] = Math.min(255, G * s);
       img.data[i + 2] = Math.min(255, B * s);
       img.data[i + 3] = 255;
@@ -268,7 +284,8 @@ export function MapView(props: MapViewProps) {
   const el = pack.elevation;
   const W = pack.area.widthM, H = pack.area.heightM;
   // Large real grids are already detailed; render them at 2× instead of 3× to keep start-up quick.
-  const terrain = useMemo(() => renderTerrain(el, el.cols * el.rows > 100_000 ? 2 : 3), [el]);
+  const colors = pack.marsVisuals?.terrainColors;
+  const terrain = useMemo(() => renderTerrain(el, el.cols * el.rows > 100_000 ? 2 : 3, terrainRamp(colors)), [el, colors]);
   const contours = useMemo(() => renderContours(el, el.cols * el.rows > 100_000 ? 2 : 3), [el]);
   const masks = useMemo(() => renderMasks(props.zones), [props.zones]);
   const slope = useMemo(() => renderSlope(el), [el]);

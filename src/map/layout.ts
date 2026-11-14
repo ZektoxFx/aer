@@ -50,6 +50,8 @@ export interface MapItem {
   unlocks?: string;
   /** Needed to win (the rover comms link page). */
   required?: boolean;
+  /** Samples: the Data role's rock formation for this target (also appended to `note`). */
+  rock?: string;
 }
 
 export const HAZARD_EFFECT: Record<HazardKind, { speedFactor: number; extraSlopeDeg: number; label: string }> = {

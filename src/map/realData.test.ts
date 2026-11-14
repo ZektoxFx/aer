@@ -8,7 +8,7 @@ import { FULL_SUIT } from '../sim/simulate';
 import type { Environment } from '../sim/types';
 import { zoneAt } from './layout';
 import { cellOf, costField, findPath, makeGrid, rangeField } from './pathfind';
-import { buildJezeroLayout, hazardsFromLayers, openSpot, packXY } from './realData';
+import { buildJezeroLayout, hazardsFromLayers, openSpot, packXY, rockFor } from './realData';
 import { planRoute } from './route';
 
 const pack = JSON.parse(packRaw) as DataPack;
@@ -113,5 +113,17 @@ describe('real Jezero data (Data role files)', () => {
     const ms = performance.now() - t0;
     expect(rf.safe[cellOf(pack.elevation, L.base)]).toBeGreaterThan(0.5);
     expect(ms).toBeLessThan(3000);
+  });
+
+  it('links samples to the Data role’s rock formations by target name', () => {
+    const delta = (pack.rockFormations ?? []).find((r) => /wildcat ridge/i.test(r.associatedTarget));
+    expect(delta).toBeDefined();
+    expect(rockFor(pack, 'Wildcat Ridge')).toContain(delta?.name ?? '?');
+    expect(rockFor(pack, 'Nowhere Rock')).toBe('');
+    const sci = buildJezeroLayout({ pack, pois, layers }, 1).items.find((i) => i.id === 'sample_12');
+    expect(sci?.rock).toContain(delta?.name ?? '?');
+    expect(sci?.note).toContain('Rock:');
+    // Values the Data role has not checked stay marked.
+    if (/\[verify/i.test(`${delta?.description} ${delta?.mineralogy}`)) expect(sci?.rock).toContain('[verify]');
   });
 });

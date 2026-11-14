@@ -102,6 +102,16 @@ const PAGE_SPOTS: Record<string, { dx: number; dy: number }> = {
 const OTHER_PAGE_SPOTS = [{ dx: -150, dy: -250 }, { dx: 300, dy: 650 }, { dx: -700, dy: -150 }];
 const recipeKey = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
 
+/** Data's rock formation for a sample target (matched by name in `associatedTarget`), as one line of text.
+ *  Unchecked values stay marked [verify]. Empty when the pack has no matching formation. */
+export function rockFor(pack: DataPack, target: string): string {
+  const t = target.trim().toLowerCase();
+  const f = (pack.rockFormations ?? []).find((r) => r.associatedTarget.toLowerCase().split(/[,&()]| and /).some((s) => s.trim() === t || s.trim().startsWith(`${t} `)));
+  if (!f) return '';
+  const unchecked = /\[verify/i.test(`${f.description} ${f.mineralogy}`);
+  return `Rock: ${f.name} (${f.type}). ${f.mineralogy}${unchecked ? ' [verify]' : ''}`;
+}
+
 export interface JezeroFiles {
   pack: DataPack;
   pois: PoiFile;
@@ -157,7 +167,9 @@ export function buildJezeroLayout({ pack, pois, layers, content }: JezeroFiles, 
     spotCount.set(key, k + 1);
     const at = k ? around({ x: p.xM, y: p.yM }, k, 6, 14) : { x: p.xM, y: p.yM };
     const kind: ItemKind = p.id === scienceId ? 'science' : p.kind === 'science_sample' ? 'sample' : 'clue';
-    items.push({ id: p.id, poiId: p.id, kind, label: p.name, at, hidden: false, note: clues.get(p.id) || p.note });
+    const rock = p.target ? rockFor(pack, p.target) : '';
+    const note = [clues.get(p.id) || p.note, rock].filter(Boolean).join(' ');
+    items.push({ id: p.id, poiId: p.id, kind, label: p.name, at, hidden: false, ...(note ? { note } : {}), ...(rock ? { rock } : {}) });
   }
 
   // The rover: one of the real positions where Perseverance parked (seeded), plus its last known area.
