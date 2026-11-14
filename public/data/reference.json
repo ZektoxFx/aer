@@ -1,5 +1,5 @@
 {
- "about": "Numbers the Simulation, Map and UI roles can cite. 'verify' = still a working assumption from the proposal (§9); do not present as fact until checked.",
+ "about": "Numbers the Simulation, Map and UI roles can cite. 'verify': true = still a working assumption; do not present as fact. Entries without a verify flag are cited in their source field.",
  "jezeroMeasured": {
   "source": "Computed from public/data/weather.json and dust.json (Perseverance MEDA + Mastcam-Z, 118 sols sampled across ~2.6 Mars years)",
   "dailyMeanPressurePa": {
@@ -32,6 +32,21 @@
    "solsToPeak": 4,
    "solsToClear": 3,
    "source": "Mastcam-Z daily tau (dust.json), sols 312-319"
+  },
+  "surfaceAlbedo": {
+   "value": 0.12,
+   "noonRange": [
+    0.1,
+    0.16
+   ],
+   "orbitalTES": 0.15,
+   "source": "Perseverance MEDA broadband albedo (0.3-3 um): Martinez et al. 2023, JGR Planets 128, e2022JE007537 (traverse mean 0.12 +/- 0.01 as cited by Munguira et al. 2023, JGR Planets, e2022JE007559); noon range and TES value from Martinez et al., LPSC 2022 abstract 2024. Used as the albedo in sunlight.json."
+  },
+  "thermalInertia": {
+   "sandDune": 180,
+   "bedrock": 605,
+   "units": "J m-2 K-1 s-1/2",
+   "source": "Perseverance MEDA, Martinez et al. 2023, JGR Planets 128, e2022JE007537 (abstract)"
   }
  },
  "mars": {
@@ -72,17 +87,19 @@
   "o2KgPerDay": {
    "value": 0.84,
    "verify": false,
-   "source": "NASA ISS-era average, checked in proposal §9 (BVAD Rev 2 table itself not checked)"
+   "source": "NASA Life Support Baseline Values and Assumptions Document, NASA/TP-2015-218570/REV2 (Feb 2022, NTRS 20210024855), Table 3-23 (HIDH reference crewmember, short mission): 0.84 kg O2 consumed and 1.01 kg CO2 produced per day"
   },
   "co2KgPerDay": {
    "value": 1.0,
    "verify": false,
-   "source": "NASA ISS-era average, checked in proposal §9 (BVAD Rev 2 table itself not checked)"
+   "source": "NASA Life Support Baseline Values and Assumptions Document, NASA/TP-2015-218570/REV2 (Feb 2022, NTRS 20210024855), Table 3-23: 1.01 kg CO2 per day (rounded to 1.0)"
   },
   "waterLPerDay": {
    "value": 2.5,
-   "verify": true,
-   "source": "NASA BVAD Rev 2, proposal §5"
+   "verify": false,
+   "source": "NASA Life Support Baseline Values and Assumptions Document, NASA/TP-2015-218570/REV2 (Feb 2022, NTRS 20210024855), Table 3-31 and section 3.3.5 (p. 73), and Table 4-20: 2.00 kg/crewmember-day drinking water (from NASA HIDH 2014, assumed for all future missions) plus 0.5 kg for food preparation = 2.5 kg potable water",
+   "drinkingKg": 2.0,
+   "foodPreparationKg": 0.5
   },
   "o2GramsPerHourPerWatt": {
    "value": 0.255,
@@ -157,8 +174,9 @@
   "stormWarningRealMinutes": 5,
   "softSandThermalInertia": {
    "below": 200,
-   "verify": true,
-   "note": "Used for terrainClass 2 in layers_20m.json"
+   "verify": false,
+   "note": "Used for terrainClass 2 in layers_20m.json",
+   "source": "Design threshold backed by measurements: Jezero sand dune 180 (MEDA, Martinez et al. 2023); Gale's active Bagnold dunes 200-310, mean 240 +/- 20 from THEMIS (Edwards et al. 2018, JGR Planets, doi:10.1029/2017JE005501); loose particulate material is below ~350 (same paper). Below 200 picks the finest, loosest material; THEMIS pixels are 100 m, so cells mix sand and rock."
   }
  }
 }

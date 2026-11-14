@@ -246,12 +246,18 @@ ROCKS = [
         "mineralogy": "Basaltic sand with fine iron-oxide dust and salts, including perchlorates.",
         "elementsOxidesWtPercent": {},
         "isruYields": {"extractableWaterWtPercent": 2.0, "bakingTempRequiredC": 350, "perchlorateContentWtPercent": 0.5,
-                       "hazardWarning": "[verify] Overheating perchlorate-bearing soil can release chlorine compounds "
-                                        "that contaminate the water (proposal §4). The 0.5 wt% perchlorate is the "
-                                        "level Phoenix measured in polar soil (Hecht et al. 2009, Science), not a "
-                                        "Jezero measurement."},
-        "description": "Loose soil that covers much of the crater floor. The ISRU numbers are the proposal's working "
-                       "assumptions (2 wt% water, §4) and are marked [verify]; no bulk oxide values are given.",
+                       "hazardWarning": "Heating perchlorate-bearing soil releases oxygen, HCl and chlorinated "
+                                        "compounds that can contaminate the water. On Curiosity, chloromethanes "
+                                        "came off mostly below 300 °C, together with the oxygen release that ended "
+                                        "near 460 °C, so a 350 °C bake is already in this range (Leshin et al. 2013; "
+                                        "Glavin et al. 2013, JGR Planets 118, 1955-1973). The 0.5 wt% "
+                                        "perchlorate is the level Phoenix measured in polar soil (0.4-0.6 wt%, Hecht "
+                                        "et al. 2009, Science 325, 64-67); Curiosity's Rocknest soil was comparable."},
+        "description": "Loose soil that covers much of the crater floor. ISRU sources: Curiosity's SAM heated Gale "
+                       "soil (Rocknest, < 150 um) to ~835 °C and it released 1.5-3 wt% water in a broad peak centred "
+                       "near 300 °C (Leshin et al. 2013, Science 341, 1238937); the game uses 2 wt%, and 350 °C is a "
+                       "game value just past that peak. These are Gale and Phoenix measurements, not Jezero ones; "
+                       "Jezero's soil is similar wind-blown basaltic sand. No bulk oxide values are given.",
     },
 ]
 
