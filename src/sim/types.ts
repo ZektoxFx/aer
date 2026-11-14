@@ -1,6 +1,8 @@
 // Shared contract: Map and UI call simulate() with these types.
 // Change it only after telling the whole team.
 
+import type { SolWeather } from '../data/types';
+
 export interface SuitState {
   o2Kg: number;             // breathing O₂ left
   liohKg: number;           // unused LiOH scrubber capacity
@@ -87,6 +89,37 @@ export interface RouteAssessment {
    * null when turning back is unsafe even right now.
    */
   turnBackByMin: number | null;
+}
+
+/** How fast game time runs (§6.4): paused while planning, warp while walking or waiting, 24× in a storm warning, 1× in an emergency. */
+export type ClockSpeed = 'paused' | 'traverse' | 'storm' | 'emergency';
+
+/** Everything the game loop advances each frame. Keep suit.elapsedMin equal to clockMin. */
+export interface GameState {
+  clockMin: number;       // game minutes since landing (sol 0, 00:00 local time)
+  weather: SolWeather;    // today's MEDA weather from the data pack
+  suit: SuitState;
+  activity: Activity;     // speedMS 0 = resting
+  shelter: Shelter;       // set to 'none' while walking
+  power: PowerState;      // the cabin's power system
+  loads: Load[];          // switched-on cabin loads, in priority order
+  storm: StormEvent | null;
+}
+
+export interface TickResult {
+  state: GameState;
+  env: Environment;       // outdoor conditions this tick
+  speed: ClockSpeed;
+  warnings: SimWarning[];
+  power: PowerResult;
+}
+
+/** Game minutes until each suit consumable runs out at the current activity. Infinity = not being used. */
+export interface Forecast {
+  o2Min: number;
+  scrubberMin: number;
+  waterMin: number;
+  batteryMin: number;
 }
 
 export interface StepResult {

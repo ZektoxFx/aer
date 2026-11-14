@@ -63,7 +63,7 @@ export function shelterEnvironment(env: Environment, shelter: Shelter): Environm
 // 2%/sol, the highest rate observed (Lorenz et al. 2021).
 const SOILING_PER_SOL_PER_TAU = 0.004;
 const MAX_SOILING_PER_SOL = 0.02;
-const MIN_PER_SOL = 1477.6; // 24 h 39.6 min
+export const MIN_PER_SOL = 1477.6; // 24 h 39.6 min
 
 /** Panel soiling after `minutes` exposed to dust τ. Covered or sheltered panels collect nothing. */
 export function soilingAfter(soiling: number, tau: number, minutes: number, covered = false): number {
