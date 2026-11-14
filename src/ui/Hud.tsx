@@ -30,7 +30,11 @@ import {
   applySupply, BACKPACK_MAX_KG, carriedKg, drop, droppedItems, EMPTY_PACK, entryForPickup, fits, givesLabel, HEAVY_KG, manualPage, pickUp,
   pickupTarget, SALVAGE, usable, type Pack, type PackEntry,
 } from './inventory';
-import { canRepair, doRepair, EMPTY_SHIP, repairNeeds, REPAIRS, shipTopUp, store, storeAll, take, type Repair, type Ship } from './ship';
+import {
+  canBuild, canRepair, COMMS_LINK_ID, commsLinkEntry, commsLinkJob, doBuild, doRepair, EMPTY_SHIP, repairNeeds, REPAIRS, shipTopUp, store, storeAll, take,
+  type Repair, type Ship,
+} from './ship';
+import { callStage, hasCommsLink, installLink, LIGHT_TIME_MIN, roverInReach, watchFailure, type FailCause, type FailWatch } from './ending';
 import './game3d.css';
 import './hud.css';
 
@@ -63,6 +67,17 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const setBag = (b: Pack) => { bagRef.current = b; setBagState(b); };
   const [near, setNear] = useState<MapItem | null>(null);
   const nearRef = useRef<MapItem | null>(null);
+  // The ending: Perseverance in reach, the comms link plugged in, the call sent, and the end card.
+  const [nearRover, setNearRover] = useState(false);
+  const nearRoverRef = useRef(false);
+  const [linked, setLinkedState] = useState(false);
+  const linkedRef = useRef(false);
+  const setLinked = (v: boolean) => { linkedRef.current = v; setLinkedState(v); };
+  const [called, setCalled] = useState(false);
+  const [endCard, setEndCard] = useState<{ result: 'won' | 'lost'; atMin: number; onMarsMin: number; orbiter?: string; cause?: FailCause } | null>(null);
+  const endRef = useRef(false);
+  const failRef = useRef<FailWatch | null>(null);
+  const runStartRef = useRef<number | null>(null);
   const [packOpen, setPackOpen] = useState(false);
   const [packTab, setPackTab] = useState<'pack' | 'ship' | 'repairs'>('pack');
   // The lander as a base: storage and repairs (used while standing at it).
@@ -218,6 +233,22 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (modeRef.current === '3d' && atShipRef.current && shipRef.current.repaired.length) {
       state = { ...state, suit: shipTopUp(shipRef.current, state.suit, FULL_SUIT) };
     }
+    // Plugged into Perseverance: its nuclear power source (MMRTG, about 110 W) keeps the suit battery charged
+    // while the astronaut waits for a pass (proposal §6.2; topping up to full is a game simplification).
+    if (modeRef.current === '3d' && linkedRef.current && nearRoverRef.current) {
+      state = { ...state, suit: { ...state.suit, batteryWh: Math.max(state.suit.batteryWh, FULL_SUIT.batteryWh) } };
+    }
+    if (runStartRef.current === null) runStartRef.current = state.clockMin;
+    // The other ending: no O₂, or CO₂ past the unconsciousness line, for too long (free play; Sol 1 has its own end).
+    if (!missionRef.current && !endRef.current && !isPaused) {
+      const f = watchFailure(failRef.current, state.suit, state.clockMin);
+      failRef.current = f.watch;
+      if (f.failed) {
+        endRef.current = true;
+        setEndCard({ result: 'lost', atMin: state.clockMin, onMarsMin: state.clockMin - runStartRef.current, cause: f.failed });
+        setPaused(true);
+      }
+    }
     const wk = walkRef.current;
     if (wk && wk.stoppedAt === null) {
       const w = walkAt(wk.plan, state.clockMin - wk.startMin);
@@ -271,6 +302,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
     const here = inCabinZone(m.pos, base);
     if (here !== atShipRef.current) { atShipRef.current = here; setAtShip(here); }
+    const rover = !!roverInReach(mapWorldRef.current, m.pos);
+    if (rover !== nearRoverRef.current) { nearRoverRef.current = rover; setNearRover(rover); }
     if (walkActive()) return; // the route walker owns the position
     // After STOP on a route walk, walking with the keys takes over (#40) and the stopped walk is dropped.
     if (walkRef.current && m.moving) { walkRef.current = null; walkPosRef.current = null; homeAfterRef.current = null; setWalk(null); }
@@ -279,7 +312,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       postedRef.current = atCabin ? null : m.pos;
       setAstronaut(atCabin ? undefined : m.pos);
     }
-  }, [base, setHintOn, setNear, setAtShip, setWalk]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, setHintOn, setNear, setAtShip, setWalk, setNearRover]); // eslint-disable-line react-hooks/exhaustive-deps
   const stopWalking = (atCabin: boolean) => {
     walkRef.current = null; walkPosRef.current = null; setWalk(null); homeAfterRef.current = null;
     if (atCabin) { setAstronaut(undefined); postedRef.current = null; setHomePlan(null); setPlaceKey((k) => k + 1); }
@@ -322,6 +355,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
     setBag(EMPTY_PACK); setShip(EMPTY_SHIP); nearRef.current = null; setNear(null); setReadPage(null);
+    setLinked(false); setCalled(false); setEndCard(null); endRef.current = false; failRef.current = null;
+    runStartRef.current = game.current.clockMin; setPaused(false);
     const forecast = stormForecastAt(game.current.clockMin);
     stormAtRef.current = forecast; setStormAt(forecast);
   };
@@ -406,6 +441,39 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (!r) { setToast(`That won't fit: the backpack holds ${BACKPACK_MAX_KG} kg.`); return; }
     setBag(r.pack); setShip(r.ship);
   };
+  // The ending: build the comms link, plug it into Perseverance, wait for an orbiter, send the call.
+  const commsJob = useMemo(() => commsLinkJob(data.content), [data.content]);
+  const buildLink = () => {
+    const r = doBuild(commsJob, bagRef.current, shipRef.current, commsLinkEntry(commsJob.name));
+    if (!r) return;
+    setBag(r.pack); setShip(r.ship);
+    passMinutes(commsJob.minutes);
+    setToast(r.inPack
+      ? `Built the ${commsJob.name.toLowerCase()} after ${commsJob.minutes} min. Take it to Perseverance, about 2 km west.`
+      : `Built the ${commsJob.name.toLowerCase()}. It is in the ship's storage: TAKE it once the backpack has room.`);
+  };
+  /** The next orbiter pass (without relay data, any time counts as a pass). */
+  const passNow = (clockMin: number) => nextRelayPass(clockMin, data.relay) ?? (data.relay ? null : { orbiter: 'an orbiter', centre: '', inMin: 0 });
+  const orbiterName = (id?: string) => data.relay?.orbiters.find((o) => o.id === id)?.name ?? id ?? 'an orbiter';
+  const roverAction = () => {
+    if (called) return;
+    const pass = passNow(game.current.clockMin);
+    const stage = callStage(linkedRef.current, hasCommsLink(bagRef.current), pass);
+    if (stage === 'connect') {
+      setBag(installLink(bagRef.current)); setLinked(true);
+      passMinutes(5);
+      setToast("Comms link plugged into Perseverance's UHF radio. Now wait for an orbiter to pass overhead.");
+    } else if (stage === 'wait' && pass) {
+      passMinutes(Math.ceil(pass.inMin) + 1);
+    } else if (stage === 'send' && pass) {
+      endRef.current = true;
+      setCalled(true);
+      setEndCard({ result: 'won', atMin: game.current.clockMin, onMarsMin: game.current.clockMin - (runStartRef.current ?? game.current.clockMin), orbiter: pass.orbiter });
+      setPaused(true);
+    }
+  };
+  const closeEnd = () => { setEndCard(null); setPaused(false); };
+
   const repairShip = (rp: Repair) => {
     const r = doRepair(rp, bagRef.current, shipRef.current);
     if (!r) return;
@@ -424,7 +492,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
     if (modeRef.current === '3d') {
       const k = e.key.toLowerCase();
-      if (k === 'f') { pickUpNear(); return; }
+      if (k === 'f') { if (nearRef.current) pickUpNear(); else if (nearRoverRef.current) roverAction(); return; }
       if (k === 'i') { setPackOpen((o) => !o); setMenuOpen(false); return; }
       if (k === 'escape' && readPage !== null) { closePage(); return; }
     }
@@ -483,7 +551,38 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       onRetry={startSol1} onClose={() => setMissionState(null)}
     />
   );
-  const overlay = missionCard ? sol1Panel : summary ? (
+  const endNode = endCard && (
+    <section className={endCard.result === 'won' ? 'end-card won' : 'end-card lost'} aria-label={endCard.result === 'won' ? 'Mission complete' : 'Suit failure'}>
+      <p className="end-kicker">{endCard.result === 'won' ? 'MISSION COMPLETE' : 'MISSION OVER'} · DAY {clockLabel(endCard.atMin).sol} · {clockLabel(endCard.atMin).time} LTST</p>
+      <h2>{endCard.result === 'won' ? 'EARTH HEARD YOU' : 'SUIT FAILURE'}</h2>
+      {endCard.result === 'won' ? (
+        <p>
+          Your distress call went from Perseverance's UHF radio to {orbiterName(endCard.orbiter)} passing overhead, which relays it
+          to NASA's Deep Space Network on Earth. Radio takes {LIGHT_TIME_MIN[0]} to {LIGHT_TIME_MIN[1]} minutes to cross between Mars and
+          Earth, depending on where the planets are, so the reply comes on a later pass. Help is on its way (game fiction; the radio
+          path is how Perseverance really talks to Earth).
+        </p>
+      ) : (
+        <p>
+          {endCard.cause === 'o2'
+            ? 'Your oxygen ran out.'
+            : 'CO₂ built up in your suit faster than the scrubber could remove it: on Mars, the danger is your own breath.'}
+          {' '}Next time, watch the countdown top left, carry spare O₂ and LiOH, and turn back by the map's TURN BACK BY time.
+        </p>
+      )}
+      <dl>
+        <dt>Time on Mars</dt><dd>{formatMinutes(endCard.onMarsMin)}</dd>
+        <dt>Ship repairs</dt><dd>{ship.repaired.length}/{REPAIRS.length}</dd>
+        <dt>Items found</dt><dd>{bag.taken.length + bag.salvaged.length}</dd>
+        <dt>O₂ left</dt><dd>{Math.round((s.suit.o2Kg / FULL_SUIT.o2Kg) * 100)}%</dd>
+      </dl>
+      <div className="end-actions">
+        <button className="choice-btn" onClick={() => restart()} autoFocus>{endCard.result === 'won' ? 'PLAY AGAIN' : 'TRY AGAIN'}</button>
+        {endCard.result === 'won' && <button className="choice-btn" onClick={closeEnd}>KEEP EXPLORING</button>}
+      </div>
+    </section>
+  );
+  const overlay = endNode ? endNode : missionCard ? sol1Panel : summary ? (
     <section className="storm-summary" aria-label="Storm outcome">
       <h2>STORM OVER</h2>
       <p>{summary.label} · {summary.hours.toFixed(1)} h</p>
@@ -556,7 +655,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   };
 
   if (mode === '3d') {
-    const holding = paused || (mission !== null && (isHolding(mission) || isOver(mission)));
+    const holding = paused || endCard !== null || (mission !== null && (isHolding(mission) || isOver(mission)));
     const timeScale = holding ? 0 : SPEED_X[frame.speed];
     // A slim bar along the visor edge: see-through track, soft glow, minutes left.
     const vbar = (key: Consumable, label: string, value: number, full: number) => {
@@ -571,7 +670,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       );
     };
     // The mission under the minimap: why, the steps ticked off from what the map has found, and the next relay pass.
-    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken, { done: ship.repaired.length, of: REPAIRS.length });
+    const steps = missionSteps(mapWorld, astronaut ?? base, nextRelayPass(s.clockMin, data.relay), formatMinutes, bag.taken, { done: ship.repaired.length, of: REPAIRS.length },
+      { linkBuilt: ship.built.includes(COMMS_LINK_ID) || linked, called });
     const nextStep = steps.findIndex((x) => !x.done);
     const goalPanel = (
       <section className={goalOpen ? 'v-mission' : 'v-mission closed'} aria-label="Mission">
@@ -714,6 +814,33 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {overlay && <div className="g3-overlay">{overlay}</div>}
 
+        {nearRover && !near && readPage === null && !endCard && (() => {
+          const pass = passNow(s.clockMin);
+          const stage = callStage(linked, hasCommsLink(bag), pass);
+          return (
+            <section className="v-rover" aria-label="Perseverance">
+              <h3>PERSEVERANCE · NASA MARS 2020 ROVER</h3>
+              {called ? (
+                <p>Distress call sent. Earth will answer on a later pass.</p>
+              ) : stage === 'need-link' ? (
+                <p>Its radio can still reach Earth through the orbiters, but you need the <b>rover comms link</b> to use it: find manual page 4 and build it at the ship.</p>
+              ) : stage === 'connect' ? (
+                <button className="v-pickup-btn" onClick={roverAction}><kbd>F</kbd> PLUG THE COMMS LINK INTO THE RADIO</button>
+              ) : stage === 'wait' ? (
+                <>
+                  <p>Linked to the UHF radio. {pass ? <>Next orbiter pass: <b>{pass.orbiter} ≈{pass.centre}</b>, in {formatMinutes(pass.inMin)}.</> : 'No pass times known.'} The rover's nuclear power keeps your battery charged.</p>
+                  {pass && <button className="v-pickup-btn" onClick={roverAction}><kbd>F</kbd> WAIT FOR THE PASS</button>}
+                </>
+              ) : (
+                <>
+                  <p className="warning">{orbiterName(pass?.orbiter)} is overhead now.</p>
+                  <button className="v-pickup-btn" onClick={roverAction}><kbd>F</kbd> SEND THE DISTRESS CALL</button>
+                </>
+              )}
+            </section>
+          );
+        })()}
+
         {near && readPage === null && (() => {
           const e = entryForPickup(bag, near, data.content, () => 0);
           const ok = fits(bag, e.massKg);
@@ -809,7 +936,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                 <>
                   <p className="v-pack-note">Repair the lander into a base you can survive from. Repairs use stored materials and NASA parts; tools and manual pages are kept. Recipes are game design values.</p>
                   {REPAIRS.map((rp) => {
-                    const done = ship.repaired.includes(rp.id);
+                    const done = (ship.repaired as string[]).includes(rp.id);
                     const needs = repairNeeds(rp, bag, ship, matName, partName);
                     const ready = canRepair(rp, bag, ship);
                     return (
@@ -829,6 +956,27 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                       </div>
                     );
                   })}
+                  {(() => {
+                    const done = ship.built.includes(COMMS_LINK_ID) || linked;
+                    const needs = repairNeeds(commsJob, bag, ship, matName, partName);
+                    const ready = canBuild(commsJob, bag, ship);
+                    return (
+                      <div className={done ? 'v-repair v-build done' : 'v-repair v-build'}>
+                        <h3>{done ? '✓ ' : ''}BUILD: {commsJob.name.toUpperCase()} <span>{commsJob.minutes} min</span></h3>
+                        <p className="v-repair-does">{commsJob.does} Take it to Perseverance and call Earth during an orbiter pass.</p>
+                        {!done && (
+                          <ul className="v-needs">
+                            {needs.map((n) => <li key={n.label} className={n.have ? 'have' : undefined}>{n.have ? '✓' : '○'} {n.label}</li>)}
+                          </ul>
+                        )}
+                        {!done && (
+                          <button className="v-pack-wide" disabled={!ready || !atShip} onClick={buildLink}>
+                            {!atShip ? 'GO TO THE SHIP TO BUILD' : ready ? `BUILD (${commsJob.minutes} MIN)` : 'MISSING PARTS'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </section>
@@ -861,7 +1009,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <div className="g3-overlay">
             <section className="howto" aria-label="How to play">
               <h2>HOW TO PLAY</h2>
-              <p className="howto-goal">You crash-landed in Jezero Crater. Stay alive: keep an eye on your oxygen and suit, explore, and get under cover when a dust storm comes.</p>
+              <p className="howto-goal">You crash-landed in Jezero Crater. Stay alive, repair your ship, build the rover comms link, then find Perseverance (about 2 km west) and call Earth while an orbiter passes overhead. Watch your oxygen, and get under cover when a dust storm comes.</p>
               <dl>
                 <dt>Walk</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hold <kbd>Shift</kbd> to run</dd>
                 <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>

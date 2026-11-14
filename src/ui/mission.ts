@@ -7,7 +7,7 @@ import { MIN_PER_SOL } from '../sim/storm';
 // astronaut repairs the ship into a base, then finds Perseverance and uses its radio, through an orbiter pass, to call Earth.
 
 export interface MissionStep {
-  id: 'crash' | 'ship' | 'page' | 'rover' | 'call';
+  id: 'crash' | 'ship' | 'page' | 'link' | 'rover' | 'call';
   label: string;
   done: boolean;
   /** Short live detail: a distance, a countdown. */
@@ -44,6 +44,8 @@ const km = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.r
 export function missionSteps(
   world: MapWorldState | null, astronaut: Pt, pass: RelayPass | null, fmtMin: (m: number) => string, taken: readonly string[] = [],
   ship: { done: number; of: number } = { done: 0, of: 0 },
+  /** The ending: `linkBuilt` adds the workbench step; `called` ticks the last one. */
+  progress: { linkBuilt?: boolean; called?: boolean } = {},
 ): MissionStep[] {
   const page = world?.items.find((i) => i.required);
   const rover = world?.items.find((i) => i.kind === 'rover');
@@ -55,10 +57,11 @@ export function missionSteps(
     { id: 'crash', label: 'Survive the crash landing', done: true },
     ...(ship.of ? [{ id: 'ship' as const, label: 'Repair the ship to make it a base', done: ship.done >= ship.of, detail: `${ship.done}/${ship.of} systems · see PACK → REPAIRS` }] : []),
     { id: 'page', label: 'Find the manual page: rover comms link', done: pageFound, detail: !pageFound && pageSeen && page ? `spotted · ${dist(page.at)}` : undefined },
+    ...(progress.linkBuilt !== undefined ? [{ id: 'link' as const, label: 'Build the rover comms link at the ship', done: progress.linkBuilt, detail: progress.linkBuilt ? undefined : 'PACK → REPAIRS, needs ship power' }] : []),
     { id: 'rover', label: 'Find Perseverance', done: roverFound, detail: roverFound && rover ? dist(rover.at) : 'last seen ~2 km W' },
     {
-      id: 'call', label: 'Call Earth during an orbiter pass', done: false,
-      detail: pass ? (pass.inMin === 0 ? `${pass.orbiter} overhead now` : `${pass.orbiter} ≈${pass.centre} · in ${fmtMin(pass.inMin)}`) : undefined,
+      id: 'call', label: 'Call Earth during an orbiter pass', done: !!progress.called,
+      detail: progress.called ? 'Earth heard you' : pass ? (pass.inMin === 0 ? `${pass.orbiter} overhead now` : `${pass.orbiter} ≈${pass.centre} · in ${fmtMin(pass.inMin)}`) : undefined,
     },
   ];
 }

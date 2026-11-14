@@ -301,3 +301,34 @@
 /* One map, moved between the 2D and 3D layouts: the wrappers take no space of their own. */
 .hud-map-slot, .hud-map-host { display: contents; }
 .v-loading { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 12px; letter-spacing: 0.2em; color: var(--fg); }
+
+/* ---- The ending: Perseverance panel and the end card ---- */
+.v-rover {
+  position: absolute; left: 50%; bottom: calc(var(--edge) + 104px); transform: translateX(-50%); z-index: 3;
+  width: min(440px, calc(100% - 32px)); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center;
+  background: color-mix(in srgb, var(--bg) 78%, transparent); border: 1px solid var(--fg); border-radius: 14px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: g3-pop 0.18s ease-out;
+}
+.v-rover h3 { margin: 0; font-size: 11px; letter-spacing: 0.18em; font-weight: normal; }
+.v-rover p { margin: 0; font-size: 12px; line-height: 1.45; }
+.v-rover b { font-weight: normal; color: var(--warning); }
+.v-pickup-btn {
+  font: inherit; font-size: 12px; letter-spacing: 0.12em; color: var(--fg); cursor: pointer;
+  background: color-mix(in srgb, var(--fg) 10%, transparent); border: 1px solid var(--fg); border-radius: 999px; padding: 6px 14px;
+}
+.v-pickup-btn kbd { display: inline-block; min-width: 1.6em; margin-right: 6px; border: 1px solid var(--fg); border-radius: 4px; font: inherit; font-size: 11px; }
+.v-build { margin-top: 6px; }
+.end-card {
+  max-width: min(520px, 92vw); padding: 20px 22px; display: flex; flex-direction: column; gap: 10px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); border: 1px solid var(--fg); border-radius: 16px; text-align: left;
+}
+.end-card.lost { border-color: var(--critical); }
+.end-kicker { margin: 0; font-size: 10px; letter-spacing: 0.2em; color: color-mix(in srgb, var(--fg) 65%, transparent); }
+.end-card h2 { margin: 0; font-size: 22px; letter-spacing: 0.2em; font-weight: normal; }
+.end-card.won h2 { color: var(--fg); }
+.end-card.lost h2 { color: var(--critical); }
+.end-card p { margin: 0; font-size: 13px; line-height: 1.55; }
+.end-card dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 3px 16px; font-size: 12px; }
+.end-card dt { color: color-mix(in srgb, var(--fg) 65%, transparent); }
+.end-card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.end-actions { display: flex; gap: 10px; flex-wrap: wrap; }
