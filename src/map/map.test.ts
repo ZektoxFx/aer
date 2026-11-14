@@ -132,7 +132,7 @@ describe('route', () => {
   });
 
   it('marks the point of no return when supplies run short', () => {
-    const low = { ...FULL_SUIT, waterKg: 0.5 }; // about 50 min of cooling water
+    const low = { ...FULL_SUIT, o2Kg: 0.06 }; // about 55 min of O₂ at walking pace
     const wps = [{ x: 900, y: 500 }, { x: 900, y: 900 }, { x: 100, y: 900 }, { x: 900, y: 100 }];
     const r = planRoute(flat, [], base, base, wps, low, opt);
     expect(r.pnrIndex).not.toBeNull();
