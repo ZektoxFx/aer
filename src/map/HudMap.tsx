@@ -224,7 +224,10 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
                 : route.pnrIndex !== null ? <b className="critical"> · TURN BACK BY {fmtMin(route.turnBackByMin)}</b> : null}
           </span>
         ) : (
-          <span className="dim">CLICK THE MAP TO PLACE A ROUTE · STAY INSIDE THE GREEN LINE TO GET HOME</span>
+          <span className="dim">
+            <span className="hud-map-hint-long">CLICK THE MAP TO PLACE A ROUTE · STAY INSIDE THE GREEN LINE TO GET HOME</span>
+            <span className="hud-map-hint-short">CLICK = ADD A STOP · GREEN LINE = SAFE TO RETURN</span>
+          </span>
         )}
         <span className="hud-map-btns">
           <button onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={!waypoints.length}>UNDO</button>

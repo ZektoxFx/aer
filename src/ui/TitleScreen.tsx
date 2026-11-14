@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EarthGlobe } from './EarthGlobe';
 import { MarsGlobe } from './MarsGlobe';
 import { SolarSystem } from './SolarSystem';
@@ -13,16 +13,14 @@ export const TEAM_NAME = 'PerformativeLarper';
 /**
  * The intro, one continuous sequence:
  * title (Earth) → cruise (leaving Earth) → fault (engine alarm, tumbling) → crash (Mars rushes up, impact)
- * → pov (the astronaut comes to at the wreck) → reveal (LOCAL DRAFT: the camera pulls back to third person)
- * → blur (dissolves into the game).
+ * → pov (the astronaut comes to at the wreck) → blur (dissolves into the game).
  */
-type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'reveal' | 'blur';
+type Phase = 'title' | 'cruise' | 'fault' | 'crash' | 'pov' | 'blur';
 const NEXT: Partial<Record<Phase, { to: Phase; ms: number }>> = {
   cruise: { to: 'fault', ms: 2600 },
   fault: { to: 'crash', ms: 2200 },
   crash: { to: 'pov', ms: 2000 },
-  pov: { to: 'reveal', ms: 5600 },
-  reveal: { to: 'blur', ms: 3300 }, // LOCAL DRAFT: plays the 3 s pull-back video
+  pov: { to: 'blur', ms: 5600 },
 };
 const BLUR_MS = 1200;
 
@@ -33,17 +31,6 @@ const ORBITS: { orbit: Orbit; big?: boolean }[] = [
   { orbit: { rx: 82, ry: 26, tiltDeg: 14, periodS: 40, phase: 0.05 } },
   { orbit: { rx: 64, ry: 12, tiltDeg: 30, periodS: 32, phase: 0.7 }, big: true },
 ];
-
-/**
- * LOCAL DRAFT: the scene after the landing. 'lowpoly' = Blender render of the REAL terrain round the AER-1 cabin
- * (Data pack elevation + HiRISE tint) with the low-poly cabin, descent core and astronaut
- * (04_3d_assets/aer_landed/build_landed.py). Switch back to 'photo' for the original AI image.
- */
-const LANDED_SCENES = {
-  lowpoly: { src: '/intro/landed_pov.jpg', alt: 'Through the visor: the crashed AER-1 cabin and wreckage at Jezero, low-poly render' },
-  photo: { src: '/data/crashed_lander_aer1.jpg', alt: 'The crashed AER-1 lander on the Martian surface' },
-};
-const LANDED_SCENE = LANDED_SCENES.lowpoly;
 
 /** LOCAL DRAFT: title backdrop. 'solar' = Sun in the middle with Earth and Mars as the main pair; 'earth' = the big Earth globe. */
 const TITLE_BACKDROP: 'solar' | 'earth' = 'solar';
@@ -67,13 +54,6 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   const [panel, setPanel] = useState<Panel>('menu');
   const [quitTried, setQuitTried] = useState(false);
   const still = settings.reducedMotion;
-  const pullback = useRef<HTMLVideoElement>(null);
-
-  // LOCAL DRAFT: the camera pull-back (Blender render, first frame = the eyes-open view) plays in the reveal phase.
-  useEffect(() => {
-    const v = pullback.current;
-    if (phase === 'reveal' && v) { v.currentTime = 0; v.play().catch(() => {}); }
-  }, [phase]);
 
   useEffect(() => {
     const step = NEXT[phase];
@@ -135,13 +115,8 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
       </div>
 
       {/* POV: the astronaut wakes at the wreck */}
-      <div className="pov" aria-hidden={phase !== 'pov' && phase !== 'reveal'}>
-        <img className="pov-scene" src={LANDED_SCENE.src} alt={LANDED_SCENE.alt} />
-        {LANDED_SCENE === LANDED_SCENES.lowpoly && (
-          <video ref={pullback} className="pov-reveal" src="/intro/landed_pullback.mp4" muted playsInline preload="auto" aria-hidden="true" />
-        )}
-        {/* LOCAL DRAFT: dust drifting across the scene (CSS only; the photo and timing are unchanged). */}
-        <div className="pov-dust" />
+      <div className="pov" aria-hidden={phase !== 'pov'}>
+        <img className="pov-scene" src="/data/crashed_lander_aer1.jpg" alt="The crashed AER-1 lander on the Martian surface" />
         <div className="pov-visor" />
         <div className="eyelid top" />
         <div className="eyelid bottom" />
