@@ -273,7 +273,7 @@ export function World3D(props: World3DProps) {
 
     // ---- Loop ----
     let last = performance.now();
-    let perfT = 0, perfFrames = 0;
+    let perfT = 0, perfFrames = 0, slowStreak = 0;
     let raf = requestAnimationFrame(function frame(now) {
       const realDt = (now - last) / 1000;
       const dt = Math.min(0.1, realDt);
@@ -283,11 +283,19 @@ export function World3D(props: World3DProps) {
       // Adaptive resolution: if frames average slower than ~45 fps, render fewer pixels.
       perfT += realDt; perfFrames++;
       if (perfT > 2) {
-        if (perfT / perfFrames > 1 / 45 && pixelRatio > 0.75) {
+        const slow = perfT / perfFrames > 1 / 45;
+        if (slow && pixelRatio > 0.75) {
           pixelRatio = Math.max(0.75, pixelRatio - 0.25);
           renderer.setPixelRatio(pixelRatio);
           resize();
-        }
+        } else if (slow && renderer.shadowMap.enabled && ++slowStreak >= 2) {
+          // Still slow at the lowest resolution (a weak laptop GPU): drop the shadow pass, the next biggest cost.
+          renderer.shadowMap.enabled = false;
+          scene.traverse((o) => {
+            const mt = (o as THREE.Mesh).material;
+            for (const x of Array.isArray(mt) ? mt : mt ? [mt] : []) x.needsUpdate = true;
+          });
+        } else if (!slow) slowStreak = 0;
         perfT = 0; perfFrames = 0;
       }
 

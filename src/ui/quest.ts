@@ -158,7 +158,7 @@ export function currentQuest(q: QuestInput): Quest {
       }
       if (stage === 'connect') return plain('Walk up to Perseverance and press F to fit the radio repair kit', rv);
       if (stage === 'wait') {
-        return plain(q.pass ? `Stay by Perseverance: ${q.pass.orbiter} passes overhead in ${q.fmtMin(q.pass.inMin)}` : 'Stay by Perseverance and wait for an orbiter pass', rv);
+        return plain(q.pass ? `${q.pass.orbiter} passes overhead in ${q.fmtMin(q.pass.inMin)}: press F at Perseverance to wait for it` : 'Stay by Perseverance and wait for an orbiter pass', rv);
       }
       return plain(`${q.pass?.orbiter ?? 'An orbiter'} is overhead: press F at Perseverance to call Earth`, rv);
     }

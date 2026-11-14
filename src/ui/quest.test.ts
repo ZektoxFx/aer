@@ -84,7 +84,7 @@ describe('quest guide', () => {
     expect(currentQuest(input({ steps: steps('rover') })).target?.at).toEqual(rover.at);
     const pack: Pack = { ...EMPTY_PACK, entries: [entry({ id: 'comms_link', kind: 'part' })] };
     expect(currentQuest(input({ steps: steps('call'), pack })).task).toMatch(/press F to fit/);
-    expect(currentQuest(input({ steps: steps('call'), linked: true, pass: { orbiter: 'MRO', centre: '15:00', inMin: 40 } })).task).toMatch(/MRO passes overhead in 40 min/);
+    expect(currentQuest(input({ steps: steps('call'), linked: true, pass: { orbiter: 'MRO', centre: '15:00', inMin: 40 } })).task).toMatch(/MRO passes overhead in 40 min: press F/);
     expect(currentQuest(input({ steps: steps('call'), linked: true, pass: { orbiter: 'MRO', centre: '15:00', inMin: 0 } })).task).toMatch(/call Earth/);
   });
 
