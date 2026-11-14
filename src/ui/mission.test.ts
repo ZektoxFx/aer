@@ -51,11 +51,20 @@ describe('missionSteps', () => {
     expect(s.find((x) => x.id === 'rover')!.detail).toContain('W');
   });
 
-  it('ticks off the page and the rover once the map has found them, with the distance', () => {
-    const s = missionSteps(world(['page-comms', 'rover']), { x: 0, y: 0 }, null, fmt);
-    expect(s.map((x) => x.done)).toEqual([true, true, true, false]);
-    expect(s.find((x) => x.id === 'rover')!.detail).toBe('2.0 km');
-    expect(s.find((x) => x.id === 'page')!.detail).toBe('300 m');
+  it('ticks off the rover once seen and the page once picked up, with distances', () => {
+    const seen = missionSteps(world(['page-comms', 'rover']), { x: 0, y: 0 }, null, fmt);
+    expect(seen.map((x) => x.done)).toEqual([true, false, true, false]);
+    expect(seen.find((x) => x.id === 'rover')!.detail).toBe('2.0 km');
+    expect(seen.find((x) => x.id === 'page')!.detail).toBe('spotted · 300 m');
+    const taken = missionSteps(world(['page-comms', 'rover']), { x: 0, y: 0 }, null, fmt, ['page-comms']);
+    expect(taken.map((x) => x.done)).toEqual([true, true, true, false]);
+  });
+
+  it('adds the ship repair step when there are repairs to do', () => {
+    const s = missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 1, of: 3 });
+    expect(s.map((x) => x.id)).toEqual(['crash', 'ship', 'page', 'rover', 'call']);
+    expect(s[1]).toMatchObject({ done: false, detail: expect.stringContaining('1/3') });
+    expect(missionSteps(null, { x: 0, y: 0 }, null, fmt, [], { done: 3, of: 3 })[1].done).toBe(true);
   });
 
   it('shows the next orbiter pass on the last step', () => {

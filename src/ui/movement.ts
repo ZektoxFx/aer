@@ -61,10 +61,10 @@ export function moveStep(
   return { pos: next, moving: true, speedMS, slopeDeg, heading: newHeading };
 }
 
-/** The suit sim's activity for this movement. */
-export function activityFor(m: Pick<MoveResult, 'moving' | 'speedMS' | 'slopeDeg'>): Activity {
+/** The suit sim's activity for this movement; `carriedKg` is what is in the pack on top of the tools. */
+export function activityFor(m: Pick<MoveResult, 'moving' | 'speedMS' | 'slopeDeg'>, carriedKg = 0): Activity {
   return m.moving
-    ? { speedMS: m.speedMS, slopeDeg: m.slopeDeg, loadKg: EXPLORE_LOAD_KG }
+    ? { speedMS: m.speedMS, slopeDeg: m.slopeDeg, loadKg: EXPLORE_LOAD_KG + carriedKg }
     : { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 }
 
