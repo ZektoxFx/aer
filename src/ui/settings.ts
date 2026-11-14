@@ -45,6 +45,7 @@ export const CONTROLS: { keys: string; action: string }[] = [
   { keys: 'Shift', action: '3D: run' },
   { keys: 'Mouse', action: '3D: click the view, then move to look (Esc frees the cursor)' },
   { keys: 'Q · E · scroll', action: '3D: turn the camera · zoom' },
+  { keys: 'V', action: '3D: first / third person' }, // LOCAL DRAFT (Map/Aiman)
   { keys: 'Space', action: 'Pause / resume' },
   { keys: '1 · 2 · 3 · 4', action: '2D HUD: in cabin · rest · walk · run' },
   { keys: 'S · T · H · R', action: '2D HUD: Sol 1 · storm · skip hour · restart' },

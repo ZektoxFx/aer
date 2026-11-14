@@ -45,6 +45,18 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [suitOpen, setSuitOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [lookLocked, setLookLocked] = useState(false);
+  // LOCAL DRAFT (Map/Aiman): first- or third-person camera in the 3D view; V switches.
+  const [view, setView] = useState<'first' | 'third'>('third');
+  useEffect(() => {
+    if (mode !== '3d') return;
+    const onV = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'v' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof Element && e.target.closest('input, select, textarea')) return;
+      setView((v) => (v === 'first' ? 'third' : 'first'));
+    };
+    window.addEventListener('keydown', onV);
+    return () => window.removeEventListener('keydown', onV);
+  }, [mode]);
   const startGame = (i: number) => newGame(pack.sols[i], skyFor(data, pack.sols[i]));
   const [solIndex, setSolIndex] = useState(0);
   const [frame, setFrame] = useState<TickResult>(() => tick(startGame(0), 0, true));
@@ -384,7 +396,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <World3D
           pack={pack} base={base} timeScale={timeScale} followPos={walk ? astronaut : undefined} placeKey={placeKey}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
-          onLookChange={setLookLocked} dustDevils={dustDevilsActive(s.clockMin) && !stormActive}
+          onLookChange={setLookLocked} view={view} dustDevils={dustDevilsActive(s.clockMin) && !stormActive}
         />
         <div className={critical ? 'visor-frame critical' : 'visor-frame'} aria-hidden="true" />
 
@@ -462,12 +474,15 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           <span className="v-where">
             {s.shelter === 'cabin' ? 'IN CABIN · CHARGING' : 'OUTSIDE'} · pCO₂ {s.suit.inspiredPCO2KPa.toFixed(2)} · CORE {s.suit.coreTempC.toFixed(1)} °C
           </span>
+          {/* LOCAL DRAFT: camera switch. */}
+          <button className="v-menu-btn v-view-btn" aria-pressed={view === 'first'} onClick={() => setView((v) => (v === 'first' ? 'third' : 'first'))}
+            title="Switch camera (V)">{view === 'first' ? '◉ 1ST PERSON' : '◎ 3RD PERSON'}</button>
           <button className="v-menu-btn" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>☰ MENU</button>
         </footer>
         <p className="v-hint">
           {lookLocked
-            ? 'MOUSE LOOK ON · WASD move · SHIFT run · scroll to zoom · ESC frees the cursor'
-            : 'CLICK THE VIEW TO LOOK AROUND WITH THE MOUSE · WASD move · SHIFT run · SPACE pause'}
+            ? `MOUSE LOOK ON · WASD move · SHIFT run · ${view === 'first' ? '' : 'scroll to zoom · '}V view · ESC frees the cursor`
+            : 'CLICK THE VIEW TO LOOK AROUND WITH THE MOUSE · WASD move · SHIFT run · V first/third person · SPACE pause'}
         </p>
         <p className="v-credit">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</p>
 

@@ -30,11 +30,15 @@ export interface World3DProps {
   onMove: (m: MoveResult) => void;
   /** Called when mouse look turns on (cursor captured) or off. */
   onLookChange?: (locked: boolean) => void;
+  /** LOCAL DRAFT (Map/Aiman): 'first' = through the helmet visor, 'third' = behind the astronaut (default). */
+  view?: 'first' | 'third';
 }
 
 /** Mouse-look sensitivity, radians per pixel. */
 const LOOK_SENS = 0.0022;
 const PITCH_MIN = 0.06, PITCH_MAX = 1.25;
+/** LOCAL DRAFT: first-person eye height (m above the ground) and field of view in each mode. */
+const EYE_M = 1.62, FOV_THIRD = 55, FOV_FIRST = 68;
 /** Fraction of the way to close per frame for a smoothing rate (per second), whatever the frame rate. */
 const ease = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
 
@@ -148,6 +152,7 @@ export function World3D(props: World3DProps) {
     let yawT = 0, pitchT = 0.32, distT = 16;
     let yaw = yawT, pitch = pitchT, dist = distT;
     let camPos: THREE.Vector3 | null = null;
+    let firstBlend = 0; // LOCAL DRAFT: 0 = third person, 1 = first person (eased, so switching glides)
     const lookAt = new THREE.Vector3();
     let ramp = 0;
     let lastInput: MoveInput = { forward: 0, right: 0, run: false };
@@ -193,7 +198,7 @@ export function World3D(props: World3DProps) {
     };
     const pup = () => { dragging = false; };
     const lockChange = () => { dragging = false; live.current.onLookChange?.(locked()); };
-    const wheel = (e: WheelEvent) => { e.preventDefault(); distT = Math.min(80, Math.max(4, distT * (1 + Math.sign(e.deltaY) * 0.12))); };
+    const wheel = (e: WheelEvent) => { e.preventDefault(); if (live.current.view === 'first') return; distT = Math.min(80, Math.max(4, distT * (1 + Math.sign(e.deltaY) * 0.12))); };
     document.addEventListener('pointerlockchange', lockChange);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -302,9 +307,25 @@ export function World3D(props: World3DProps) {
       const camGround = terrain.surfaceY(camPos.x, camPos.z) + 1.2;
       if (camPos.y < camGround) camPos.y = camGround;
       lookAt.lerp(target, ease(16, dt));
-      camera.position.copy(camPos);
-      camera.lookAt(lookAt);
-      sky.mesh.position.copy(camPos);
+      // LOCAL DRAFT: first person. Eye in the helmet, looking where the mouse points (pitch's resting value looks
+      // level; moving the mouse up/down tilts the head). The body is hidden so it doesn't block the view.
+      firstBlend += ((P.view === 'first' ? 1 : 0) - firstBlend) * ease(6, dt);
+      if (firstBlend < 0.001) firstBlend = 0;
+      if (firstBlend > 0.999) firstBlend = 1;
+      if (firstBlend > 0) {
+        const tilt = 0.32 - pitch;
+        const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(tilt), Math.sin(tilt), -Math.cos(yaw) * Math.cos(tilt));
+        const eye = new THREE.Vector3(gx, gy + EYE_M, gz).addScaledVector(dir, 0.3);
+        camera.position.copy(camPos).lerp(eye, firstBlend);
+        camera.lookAt(lookAt.clone().lerp(eye.clone().addScaledVector(dir, 10), firstBlend));
+      } else {
+        camera.position.copy(camPos);
+        camera.lookAt(lookAt);
+      }
+      astro.group.visible = firstBlend < 0.85;
+      const fov = FOV_THIRD + (FOV_FIRST - FOV_THIRD) * firstBlend, near = firstBlend > 0.5 ? 0.1 : 0.5;
+      if (camera.fov !== fov || camera.near !== near) { camera.fov = fov; camera.near = near; camera.updateProjectionMatrix(); }
+      sky.mesh.position.copy(camera.position);
 
       // ---- Sun, night and dust ----
       const elevRad = (Math.max(-10, P.sunElevationDeg) * Math.PI) / 180;
