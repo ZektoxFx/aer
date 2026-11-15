@@ -519,12 +519,6 @@
 }
 
 
-/* ---- LOCAL DRAFT: black hole in the distance (BlackHole.tsx). It fades in during the cruise and looms during the fault. ---- */
-.blackhole { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0; transform-origin: 24% 30%; }
-.phase-cruise .blackhole { animation: bh-in 3.4s ease-in forwards; }
-.phase-fault .blackhole { opacity: 1; animation: bh-pull 2.2s ease-in forwards; }
-@keyframes bh-in { 0%, 25% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
-@keyframes bh-pull { from { transform: scale(1); } to { transform: scale(1.6); } }
 .fault-sub { font-size: 0.7em; letter-spacing: 0.24em; color: var(--mars-dust); }
 
 /* ---- LOCAL DRAFT: the physics crash (CrashSequence.tsx) covers the screen during the crash phase. ---- */
