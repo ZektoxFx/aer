@@ -422,3 +422,12 @@
 .v-quest-way { margin: 0; font-size: 10px; color: var(--warning); font-variant-numeric: tabular-nums; }
 .v-quest-needs { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 2px; font-size: 10px; color: var(--fg); }
 .v-quest-needs li.done { color: color-mix(in srgb, var(--fg) 50%, transparent); }
+
+/* ---- End card route replay (Map: RouteReplay): the camera rises off the astronaut over the HiRISE map ---- */
+.end-card:has(.route-replay) { max-width: min(760px, 94vw); max-height: 94vh; overflow-y: auto; animation: end-rise 0.9s ease-out; }
+@keyframes end-rise { 0% { opacity: 0; transform: scale(1.06); filter: blur(6px); } 100% { opacity: 1; transform: none; filter: none; } }
+.route-replay { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-replay canvas { display: block; width: 100%; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--fg) 35%, transparent); background: var(--space); }
+.route-replay figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.route-save { font-size: 11px; }
