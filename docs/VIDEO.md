@@ -30,9 +30,12 @@ Keep each caption on screen for its whole clip; the shortest is 4 seconds. Keep 
 **Setup**
 1. Open the app in Chrome (the Vercel link) in a fresh private window, so the intro and the how-to card show as for a new player.
 2. Make the browser window about 1280 × 720 (16:9) and hide bookmarks and other tabs.
-3. Press **⌘⇧5** → **Record Selected Portion** → drag the box over the page area only (not the address bar) → **Record**. Stop with the ■ in the menu bar. Each recording lands on the Desktop.
+3. Start the screen recorder:
+   - **Mac:** press **⌘⇧5** → **Record Selected Portion** → drag the box over the page area only (not the address bar) → **Record**. Stop with the ■ in the menu bar. Each recording lands on the Desktop.
+   - **Windows 11:** press **Win + Shift + R** (Snipping Tool) → drag the box over the page area only (not the address bar) → **Start**. Stop with the ■ in the small bar at the top of the screen. The recording opens in Snipping Tool: press **Ctrl + S** to save it as an MP4 if it was not saved to **Videos → Screen Recordings** already.
+   - **Windows, if Win + Shift + R does nothing:** press **F11** to make Chrome full screen, then **Win + Alt + R** (Game Bar) to start and to stop. It records the whole window, and the file lands in **Videos → Captures**.
 
-Record each clip a little long; you will trim in iMovie.
+Record each clip a little long; you will trim in iMovie (Mac) or Clipchamp (Windows).
 
 **Recording A: title and crash (rows 1–2)**
 1. Start recording on the title screen. Wait 2 s, click **START**.
@@ -54,7 +57,7 @@ Record each clip a little long; you will trim in iMovie.
 
 ---
 
-## How to edit in iMovie
+## How to edit in iMovie (Mac)
 
 1. **File → New Movie**. Import the four recordings and `public/data/jezero_base_2m.jpg`.
 2. Drag in order: Recording A (split into 4 s + 5 s for rows 1–2), Recording B, Recording C, Recording D, then `public/data/jezero_base_2m.jpg` (or a black background from **Backgrounds**) for row 6.
@@ -63,6 +66,20 @@ Record each clip a little long; you will trim in iMovie.
 5. Check the total duration under the timeline: **30.0 s or less**.
 6. **File → Share → File**, 1080p, then upload as a **public** (or unlisted) YouTube video, or to Google Drive with "Anyone with the link".
 7. Open the link in a private window to check it plays without logging in. Paste it into `SUBMISSION.md` under *Link to Project Demo*.
+
+---
+
+## How to edit in Clipchamp (Windows)
+
+Clipchamp comes with Windows 11 (search for it in the Start menu). The free plan exports 1080p without a watermark.
+
+1. **Create a new video**. Choose **Import media** and add the four recordings and `public/data/jezero_base_2m.jpg`.
+2. Drag them to the timeline in order: Recording A, Recording B, Recording C, Recording D, then the image for row 6. Check that the aspect ratio (beside the preview) is **16:9**.
+3. Split Recording A into rows 1 and 2: move the playhead to 4 s and press **S**. Trim every clip to its row's length by dragging its edges.
+4. For the image, select it, open **Effects** on the right and choose **Slow zoom**. Lower **Exposure** under **Adjust colors** to dim it.
+5. Add captions from the **Text** tab on the left: drag a plain title above each clip, stretch it to the clip's length and move it to the top of the frame. Type the caption text exactly as in the script.
+6. Check the total duration under the preview: **30.0 s or less**.
+7. **Export → 1080p**, then upload and check the link as in steps 6 and 7 of the iMovie list.
 
 ---
 

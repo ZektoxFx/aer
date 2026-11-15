@@ -316,7 +316,8 @@ CREDITS = {
     "fiction": "The AER-1 lander, its crew, its supplies and tank, the rover's beacon and the radio bridge are game "
                "fiction. Perseverance, Ingenuity, the landing hardware, the sample sites and all data layers are real.",
     "aiDisclosure": [
-        "The AER-1 lander image was generated with AI and carries a visible watermark.",
+        "The app shows no AI-generated images. An earlier AI-generated picture of the AER-1 lander, with a "
+        "visible watermark, is no longer shown; the file stays in the repository.",
         "Parts of the code, the data pipeline and the game text were written with help from AI assistants "
         "(Claude and Antigravity). All data values come from the sources above, not from AI.",
     ],
