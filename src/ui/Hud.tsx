@@ -140,7 +140,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   useEffect(() => { pickWorldRef.current = pickWorld; }, [pickWorld]);
   const world3d = useMemo(() => {
     if (!mapWorld) return mapWorld;
-    const items = [...mapWorld.items.filter((i) => i.kind !== 'rover'), ...debris].filter((i) => !bag.taken.includes(i.id));
+    // Taken items leave the 3D world. Salvage sites stay (the hardware is still there), except the Three Forks cache:
+    // once its tubes are in the backpack there is nothing left to show (the 3D view animates them into the hands).
+    const gone = (i: MapItem) => bag.taken.includes(i.id) || (i.id === CACHE_SITE && bag.salvaged.includes(i.id));
+    const items = [...mapWorld.items.filter((i) => i.kind !== 'rover'), ...debris].filter((i) => !gone(i));
     return { ...mapWorld, items: [...items, ...droppedItems(bag)] };
   }, [mapWorld, bag, debris]);
   const roverItem = mapWorld?.items.find((i) => i.kind === 'rover') ?? null;
