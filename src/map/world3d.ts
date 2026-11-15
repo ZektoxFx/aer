@@ -93,8 +93,10 @@ export function buildMapWorld(o: Opts): MapWorld3D {
   const rockMat = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
 
   // Pebbles and cobbles: dense near the cabin, thinning out.
-  const PEBBLES = 9000;
-  const pebbles = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), rockMat, PEBBLES);
+  // Performance: pebbles are a few cm across and most are far off, so an 8-triangle octahedron reads the same as a
+  // 20-triangle icosahedron (9000 of them were 180k triangles a frame).
+  const PEBBLES = 7000;
+  const pebbles = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1, 0), rockMat, PEBBLES);
   pebbles.receiveShadow = true;
   for (let i = 0; i < PEBBLES; i++) {
     const r = 4 + Math.pow(rand(), 1.7) * 520, a = rand() * Math.PI * 2;
@@ -255,9 +257,11 @@ export function buildMapWorld(o: Opts): MapWorld3D {
   function buildZones(s: MapWorldState) {
     clear(zoneGroup);
     const MAX_RIP = 5000, MAX_ROCK = 2200, STEP = 7, RADIUS = 1100;
-    const ripples = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 4), new THREE.MeshStandardMaterial({ color: sand.clone().lerp(dust, 0.35), roughness: 1, flatShading: true }), MAX_RIP);
+    // Performance: low-poly shapes for the thousands of zone ripples and rocks (they were ~600k triangles a frame,
+    // the rocks twice over for shadows); flat-shaded and squashed, they look the same.
+    const ripples = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 3), new THREE.MeshStandardMaterial({ color: sand.clone().lerp(dust, 0.35), roughness: 1, flatShading: true }), MAX_RIP);
     ripples.receiveShadow = true;
-    const zrocks = new THREE.InstancedMesh(shapes[1].clone(), rockMat, MAX_ROCK);
+    const zrocks = new THREE.InstancedMesh(rockGeometry(29, 0), rockMat, MAX_ROCK);
     zrocks.castShadow = true; zrocks.receiveShadow = true;
     let nr = 0, nk = 0;
     for (let y = base.y - RADIUS; y <= base.y + RADIUS && (nr < MAX_RIP || nk < MAX_ROCK); y += STEP) {
