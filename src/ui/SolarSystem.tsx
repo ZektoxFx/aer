@@ -20,6 +20,8 @@ interface Planet { name: string; orbit: number; size: number; period: number; ph
 // orbit: × half the screen width; size: × the smaller screen side; period: seconds per lap.
 /** Simulated days per real second (Earth laps in 110 s). */
 const DAYS_PER_S = 365.256 / 110;
+/** Seconds the planets hold at today's positions first, so the readout can be read (it slides in at 1.4 s). */
+const HOLD_TODAY_S = 4.5;
 /** Screen angle of longitude 0. The view's orientation is free: this puts mid-Nov 2026's Earth front left, where the
  * design had it. Only Earth and Mars use real positions; the others keep their picture phases so they never pile up. */
 const VIEW_OFFSET = 2.35 + (53.8 * Math.PI) / 180;
@@ -64,7 +66,7 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
     const dust = C('--mars-dust'), sky = C('--mars-sky'), rust = C('--mars-rust'), space = C('--space');
     const pal = PLANETS.map((p) => p.colors.map(C));
     let w = 0, h = 0, m = 0, raf = 0, alive = true, simT = 0, last = performance.now(), lastText = 0;
-    const startMs = Date.now(), startD = daysSinceJ2000(startMs);
+    const startMs = Date.now(), startD = daysSinceJ2000(startMs), mountedAt = performance.now();
     // Mouse parallax: the view leans a little toward the pointer (smoothed).
     const lean = { x: 0, y: 0, tx: 0, ty: 0 };
     const onPointer = (e: PointerEvent) => { lean.tx = (e.clientX / innerWidth) * 2 - 1; lean.ty = (e.clientY / innerHeight) * 2 - 1; };
@@ -133,7 +135,7 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
       if (!alive || !w) return;
       const { frozen: fz, still: st } = live.current;
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      if (!fz && !st) simT += dt;
+      if (!fz && !st && now - mountedAt > HOLD_TODAY_S * 1000) simT += dt;
       if (!st) { const k = 1 - Math.exp(-dt * 3); lean.x += (lean.tx - lean.x) * k; lean.y += (lean.ty - lean.y) * k; }
       const g = ctx!, sx = w / 2 - lean.x * w * 0.018, sy = h * CY - lean.y * h * 0.012, sr = m * 0.075, half = w / 2;
       const tilt = TILT + lean.y * 0.05;
@@ -293,7 +295,7 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
           <dt>RADIO DELAY</dt><dd>-</dd>
           <dt>JEZERO</dt><dd>18.4°N 77.5°E · ~6 hPa air</dd>
         </dl>
-        <p className="solar-readout-note">Earth and Mars placed for today's date (mean circular orbits, approx.), then run at ~3 days a second. Sizes and distances not to scale.</p>
+        <p className="solar-readout-note">Earth and Mars placed for today's date (mean circular orbits, approx.), then run on at ~3 days a second. Sizes and distances not to scale.</p>
       </aside>
     </>
   );
