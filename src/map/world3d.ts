@@ -6,6 +6,12 @@
 // - The safe-return line is a glowing wall at the same place as the map's green line (amber, dashed = one-way).
 // - Set dressing: thousands of pebbles, boulder clusters, layered delta rock, and the crash site round the lander
 //   (skid scorch, debris, heat shield, the parachute, smoke). Low-poly, flat-shaded, in UI's style.
+// - Supplies look like the gear they are (O2 bottle, LiOH canister, water pouch, battery pack, repair case), each with
+//   a ground ring that brightens when it is within reach. Taking one lifts it into the astronaut's hands; dropping one
+//   lets it fall under Mars gravity (3.71 m/s2), bounce and kick up dust.
+// - Three Forks: Perseverance's 10 sample tubes lie on the ground at the depot, glinting (pois.json).
+// - Dust storm: a billowing wall of dust rolls in from the horizon as the storm builds and closes round the
+//   astronaut. It reads the storm from UI's scene fog, so the 3D view needs no new input.
 // Positions are map metres; the world is centred, so world x = map x − W/2 and world z = map y − H/2.
 import * as THREE from 'three';
 import { contourSegments } from './contours';
@@ -14,6 +20,11 @@ import type { ItemKind, MapItem } from './layout';
 import { zoneAt } from './layout';
 import type { MapWorldState } from './world';
 import { itemsInView } from './world';
+import { STORM_TAU_FROM } from '../ui/cover';
+
+/** Mars surface gravity, m/s2 (same as the EDL physics). */
+const MARS_G = 3.71;
+const SUPPLY: ReadonlySet<ItemKind> = new Set<ItemKind>(['o2', 'lioh', 'water', 'battery', 'repair', 'scrap', 'manual']);
 
 /** Same route colours as the 2D map (MapView), so the ground line reads the same as the minimap. */
 const STATUS = { nominal: '#4dff88', warning: '#ffb000', critical: '#ff4d4d' } as const;
@@ -290,21 +301,85 @@ export function buildMapWorld(o: Opts): MapWorld3D {
 
   // Items: a small model each, built once per item list.
   let itemsRef: MapItem[] | null = null;
-  const itemObjs = new Map<string, { obj: THREE.Group; beam?: THREE.Mesh; it: MapItem }>();
+  const itemObjs = new Map<string, { obj: THREE.Group; beam?: THREE.Mesh; ring?: THREE.Mesh; glints?: THREE.Sprite[]; it: MapItem }>();
+  // Pick-up and drop animations play in their own group (the item list is rebuilt when the pack changes).
+  const fxGroup = new THREE.Group(); group.add(fxGroup);
+  interface Fx { obj: THREE.Object3D; kind: 'take' | 'drop'; t: number; from: THREE.Vector3; h: number; v: number; landed: boolean }
+  const fx: Fx[] = [];
+  const puffs: { s: THREE.Sprite; t: number }[] = [];
+  let lastMe: Pt = base;
   const STRIPE: Partial<Record<ItemKind, THREE.Color>> = { o2: glowBlue, lioh: css('--sat-panel'), water: glowBlue, battery: warn, repair: alarm };
-  function itemModel(it: MapItem): { obj: THREE.Group; beam?: THREE.Mesh } {
+  function itemModel(it: MapItem): { obj: THREE.Group; beam?: THREE.Mesh; ring?: THREE.Mesh; glints?: THREE.Sprite[] } {
     const g = new THREE.Group();
     const std = (c: THREE.Color, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, flatShading: true, ...extra });
     let beamColor: THREE.Color | null = null;
     switch (it.kind) {
-      case 'o2': case 'lioh': case 'water': case 'battery': case 'repair': {
-        const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.6), std(metal));
-        crate.position.y = 0.27;
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.12, 0.62), std(STRIPE[it.kind] ?? warn, { emissive: STRIPE[it.kind] ?? warn, emissiveIntensity: 0.35 }));
-        band.position.y = 0.3;
-        g.add(crate, band);
-        g.rotation.z = 0.15;
-        beamColor = STRIPE[it.kind] ?? warn;
+      case 'o2': {
+        // A breathing-oxygen bottle: domed cylinder, neck, valve and hand wheel, blue band. Lying where it fell.
+        const b = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.62, 16), std(metal, { metalness: 0.5, roughness: 0.35 }));
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), body.material);
+        dome.position.y = 0.31;
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.12, 16), std(glowBlue, { emissive: glowBlue, emissiveIntensity: 0.45 }));
+        band.position.y = 0.1;
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.1, 10), std(metalDark, { metalness: 0.7 }));
+        neck.position.y = 0.5;
+        const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 6, 16), std(alarm));
+        wheel.rotation.x = Math.PI / 2; wheel.position.y = 0.56;
+        b.add(body, dome, band, neck, wheel);
+        b.rotation.set(0, 0.4, Math.PI / 2 - 0.08); b.position.y = 0.16;
+        g.add(b);
+        beamColor = glowBlue;
+        break;
+      }
+      case 'lioh': {
+        // A LiOH scrubber canister: squat, ribbed, with a label band and end caps.
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.38, 18), std(metalDark, { metalness: 0.4 }));
+        body.position.y = 0.19;
+        for (const y of [0.06, 0.32]) { const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.212, 0.212, 0.03, 18), std(metal)); rib.position.y = y; g.add(rib); }
+        const label = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.12, 18), std(STRIPE.lioh ?? warn, { emissive: STRIPE.lioh ?? warn, emissiveIntensity: 0.3 }));
+        label.position.y = 0.19;
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 12), std(dust));
+        cap.position.y = 0.4;
+        g.add(body, label, cap);
+        g.rotation.z = 0.12;
+        beamColor = STRIPE.lioh ?? warn;
+        break;
+      }
+      case 'water': {
+        // A soft water bag with a drinking valve, half full and slumped.
+        const bag = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10), std(glowBlue.clone().lerp(metal, 0.5), { transparent: true, opacity: 0.85, roughness: 0.25, metalness: 0.1 }));
+        bag.scale.set(1.2, 0.32, 0.8); bag.position.y = 0.09;
+        const valve = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8), std(metalDark));
+        valve.rotation.z = Math.PI / 2; valve.position.set(0.4, 0.1, 0);
+        g.add(bag, valve);
+        beamColor = glowBlue;
+        break;
+      }
+      case 'battery': {
+        // A battery pack: dark case, warning stripe, two terminals and a charge light.
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.28, 0.36), std(metalDark, { metalness: 0.3 }));
+        box.position.y = 0.14;
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.53, 0.06, 0.37), std(warn, { emissive: warn, emissiveIntensity: 0.3 }));
+        stripe.position.y = 0.2;
+        for (const [x, c] of [[-0.14, alarm], [0.14, metalDark]] as const) { const tm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.06, 8), std(c)); tm.position.set(x, 0.31, 0); g.add(tm); }
+        const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.01), new THREE.MeshBasicMaterial({ color: STATUS.nominal }));
+        led.position.set(0.18, 0.12, 0.185);
+        g.add(box, stripe, led);
+        g.rotation.y = 0.5;
+        beamColor = warn;
+        break;
+      }
+      case 'repair': {
+        // A repair case: hard shell, latches and a handle.
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.42), std(alarm, { roughness: 0.5 }));
+        box.position.y = 0.1;
+        const handle = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.015, 6, 12, Math.PI), std(metalDark));
+        handle.position.set(0, 0.2, 0);
+        for (const x of [-0.2, 0.2]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), std(metal)); l.position.set(x, 0.14, 0.215); g.add(l); }
+        g.add(box, handle);
+        g.rotation.y = -0.6;
+        beamColor = alarm;
         break;
       }
       case 'scrap': {
@@ -363,6 +438,28 @@ export function buildMapWorld(o: Opts): MapWorld3D {
       default: break;
     }
     g.traverse((ch) => { if ((ch as THREE.Mesh).isMesh) { ch.castShadow = true; ch.receiveShadow = true; } });
+    // Supplies: a ring on the ground that brightens when the item is within reach.
+    let ring: THREE.Mesh | undefined;
+    if (SUPPLY.has(it.kind) && beamColor) {
+      ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: beamColor, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+      ring.position.y = 0.03;
+      g.add(ring);
+    }
+    // Three Forks: Perseverance's ten sample tubes lie on the ground round the depot marker, glinting in the sun.
+    let glints: THREE.Sprite[] | undefined;
+    if (it.poiId === 'three_forks_depot') {
+      glints = [];
+      const tubeMat = std(metal, { metalness: 0.9, roughness: 0.15 });
+      for (let i = 0; i < 10; i++) {
+        const p = { x: it.at.x + (i - 4.5) * 2.2, y: it.at.y + (i % 2 ? 1.6 : -1.6) + Math.sin(i * 1.3) * 0.5 };
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.2, 10), tubeMat);
+        tube.rotation.set(0, i * 0.7, Math.PI / 2);
+        tube.position.set(p.x - it.at.x, ground(p) - ground(it.at) + 0.03, p.y - it.at.y);
+        const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: dust, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+        gl.position.copy(tube.position).add(new THREE.Vector3(0, 0.05, 0)); gl.scale.setScalar(0.5);
+        g.add(tube, gl); glints.push(gl);
+      }
+    }
     let beam: THREE.Mesh | undefined;
     if (beamColor) {
       beam = new THREE.Mesh(
@@ -372,9 +469,21 @@ export function buildMapWorld(o: Opts): MapWorld3D {
       beam.position.y = 13;
       g.add(beam);
     }
-    return { obj: g, beam };
+    return { obj: g, beam, ring, glints };
   }
-  function buildItems(items: MapItem[]) {
+  const near = (p: Pt, d: number) =>Math.hypot(p.x - lastMe.x, p.y - lastMe.y) <= d;
+  function buildItems(items: MapItem[], first: boolean) {
+    // Items that just left the list next to the astronaut were picked up: keep their model for the lift.
+    const ids = new Set(items.map((i) => i.id));
+    for (const [id, o] of itemObjs) {
+      if (ids.has(id) || !o.obj.visible || !SUPPLY.has(o.it.kind) || !near(o.it.at, 12)) continue;
+      itemGroup.remove(o.obj); fxGroup.add(o.obj);
+      if (o.beam) o.beam.visible = false;
+      if (o.ring) o.ring.visible = false;
+      fx.push({ obj: o.obj, kind: 'take', t: 0, from: o.obj.position.clone(), h: 0, v: 0, landed: false });
+      itemObjs.delete(id);
+    }
+    const had = new Set(itemObjs.keys());
     clear(itemGroup); itemObjs.clear();
     for (const it of items) {
       if (it.kind === 'base') continue; // UI's lander is the base
@@ -383,6 +492,53 @@ export function buildMapWorld(o: Opts): MapWorld3D {
       m.obj.visible = false;
       itemGroup.add(m.obj);
       itemObjs.set(it.id, { ...m, it });
+      // A new item at the astronaut's feet was just put down: it falls from hand height under Mars gravity.
+      if (!first && !had.has(it.id) && SUPPLY.has(it.kind) && near(it.at, 6)) {
+        fx.push({ obj: m.obj, kind: 'drop', t: 0, from: m.obj.position.clone(), h: 1.15, v: 0, landed: false });
+        m.obj.position.y += 1.15;
+      }
+    }
+  }
+  function puff(at: THREE.Vector3) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: sand.clone().lerp(dust, 0.4), transparent: true, opacity: 0.55, depthWrite: false }));
+    sp.position.copy(at).add(new THREE.Vector3(0, 0.15, 0)); sp.scale.setScalar(0.3);
+    fxGroup.add(sp); puffs.push({ s: sp, t: 0 });
+  }
+  function disposeObj(o: THREE.Object3D) {
+    o.traverse((ch) => {
+      const m = ch as THREE.Mesh;
+      m.geometry?.dispose();
+      const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+      mats.forEach((x) => x.dispose());
+    });
+  }
+  function updateFx(dt: number, me: Pt) {
+    const hand = new THREE.Vector3(wx(me), ground(me) + 1.1, wz(me));
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i];
+      f.t += dt;
+      if (f.kind === 'take') {
+        // Lifted in a short arc into the astronaut's hands, shrinking into the pack.
+        const u = Math.min(1, f.t / 0.55), e = u * u * (3 - 2 * u);
+        f.obj.position.lerpVectors(f.from, hand, e); f.obj.position.y += Math.sin(u * Math.PI) * 0.6;
+        f.obj.scale.setScalar(1 - 0.9 * e); f.obj.rotation.y += dt * 6;
+        if (u >= 1) { fxGroup.remove(f.obj); disposeObj(f.obj); fx.splice(i, 1); }
+      } else {
+        // Dropped: falls under Mars gravity (slow to Earth eyes), bounces a little, dust puffs on each hit.
+        f.v -= MARS_G * dt; f.h += f.v * dt;
+        if (f.h <= 0) {
+          f.h = 0;
+          if (Math.abs(f.v) > 0.6) { puff(f.from); f.v = -f.v * 0.32; } else { f.v = 0; f.landed = true; }
+        }
+        f.obj.position.y = f.from.y + f.h;
+        if (f.landed) fx.splice(i, 1);
+      }
+    }
+    for (let i = puffs.length - 1; i >= 0; i--) {
+      const p = puffs[i]; p.t += dt;
+      p.s.scale.setScalar(0.3 + p.t * 2.2); (p.s.material as THREE.SpriteMaterial).opacity = Math.max(0, 0.55 * (1 - p.t / 1.6));
+      p.s.position.y += dt * 0.15;
+      if (p.t > 1.6) { fxGroup.remove(p.s); p.s.material.dispose(); puffs.splice(i, 1); }
     }
   }
 
@@ -474,8 +630,54 @@ export function buildMapWorld(o: Opts): MapWorld3D {
     wall(contourSegments(s.range.reach, el.cols, el.rows, 0) as [number, number, number, number][], STATUS.warning, 1.1, 0.4, el.cellM);
   }
 
+  // Dust storm wall: a ring of billowing dust that closes in as the storm builds (radius 1.5 km to 30 m).
+  const stormMat = new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, uK: { value: 0 }, cA: { value: dust.clone().lerp(sand, 0.5) }, cB: { value: rust.clone().lerp(shadow, 0.4) }, uDir: { value: 3.6 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform float uT; uniform float uK; uniform vec3 cA; uniform vec3 cB; uniform float uDir; varying vec2 vUv;
+      float h(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int k = 0; k < 5; k++) { s += a * n(p); p *= 2.03; a *= 0.5; } return s; }
+      void main(){
+        float ang = vUv.x * 6.2831853;
+        float face = smoothstep(-0.25 - uK * 1.4, 0.35, cos(ang - uDir));       // an arc from one side that wraps round
+        float b = fbm(vec2(vUv.x * 46.0 + uT * 0.05, vUv.y * 3.0 - uT * 0.12));
+        float top = 1.0 - smoothstep(0.35, 0.95, vUv.y + (b - 0.5) * 0.55);       // ragged, rolling top
+        float a = uK * face * top * (0.35 + 0.95 * b);
+        vec3 c = mix(cB * 0.75, cA * 1.1, smoothstep(0.1, 0.9, vUv.y * 0.6 + b * 0.7));  // lit, billowing tops over dark roots
+        gl_FragColor = vec4(c, clamp(a, 0.0, 0.92)); }`,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  });
+  const stormWall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 128, 1, true), stormMat);
+  stormWall.visible = false; stormWall.frustumCulled = false;
+  group.add(stormWall);
+  let stormK = 0;
+  /** The storm, read from UI's scene fog (World3D sets fog.far from 3200 m at tau 0 to 140 m at tau 8). */
+  function tauFromScene(): number {
+    let p: THREE.Object3D | null = group.parent;
+    while (p && !(p as THREE.Scene).isScene) p = p.parent;
+    const fg = (p as THREE.Scene | null)?.fog;
+    return fg && 'far' in fg ? THREE.MathUtils.clamp((3200 - fg.far) / 3060, 0, 1) * 8 : 0;
+  }
+  function updateStorm(me: Pt, t: number, dt: number) {
+    const tau = tauFromScene();
+    const want = THREE.MathUtils.clamp((tau - 0.9) / (STORM_TAU_FROM + 1 - 0.9), 0, 1);
+    stormK += (want - stormK) * Math.min(1, dt * 0.8);
+    stormWall.visible = stormK > 0.01;
+    if (!stormWall.visible) return;
+    const r = THREE.MathUtils.lerp(1500, 30, Math.pow(stormK, 0.7)), hgt = THREE.MathUtils.lerp(420, 140, stormK);
+    stormWall.scale.set(r, hgt, r);
+    stormWall.position.set(wx(me), ground(me) + hgt / 2 - 25, wz(me));
+    stormMat.uniforms.uK.value = Math.min(1, stormK * 2.2);
+    stormMat.uniforms.uT.value = t;
+  }
+
   function update(s: MapWorldState | null, me: Pt, nowMs: number, dt: number) {
     const t = nowMs / 1000;
+    updateFx(dt, me);
+    updateStorm(me, t, dt);
+    lastMe = me;
     // Smoke from the wreck.
     for (let i = 0; i < SMOKE; i++) {
       smokeAge[i] += dt;
@@ -489,14 +691,20 @@ export function buildMapWorld(o: Opts): MapWorld3D {
 
     if (!s) return;
     if (s.zones !== zonesRef) { zonesRef = s.zones; buildZones(s); }
-    if (s.items !== itemsRef) { itemsRef = s.items; buildItems(s.items); }
+    if (s.items !== itemsRef) { const first = itemsRef === null; itemsRef = s.items; buildItems(s.items, first); }
     if (s.route !== routeRef) { routeRef = s.route; buildRoute(s); }
     if (s.range !== rangeRef) { rangeRef = s.range; buildWall(s); }
 
     // Items show the way the map shows them; beams fade out as you get close.
     const vis = new Set(itemsInView(s, me).map((i) => i.id));
-    for (const { obj, beam, it } of itemObjs.values()) {
+    for (const { obj, beam, ring, glints, it } of itemObjs.values()) {
       obj.visible = vis.has(it.id);
+      if (ring && obj.visible) {
+        const d = Math.hypot(it.at.x - me.x, it.at.y - me.y), reach = d < 4;
+        (ring.material as THREE.MeshBasicMaterial).opacity = (reach ? 0.85 : 0.3) * (0.7 + 0.3 * Math.sin(t * (reach ? 6 : 2.4)));
+        ring.scale.setScalar(reach ? 1 + 0.12 * Math.sin(t * 6) : 1);
+      }
+      if (glints && obj.visible) glints.forEach((g, i) => { (g.material as THREE.SpriteMaterial).opacity = 0.25 + 0.5 * Math.max(0, Math.sin(t * 1.7 + i * 2.1)); });
       if (beam && obj.visible) {
         const d = Math.hypot(it.at.x - me.x, it.at.y - me.y);
         (beam.material as THREE.MeshBasicMaterial).opacity = Math.min(0.3, Math.max(0, (d - 10) / 60)) * (0.75 + 0.25 * Math.sin(t * 2.4 + obj.id));
@@ -507,7 +715,7 @@ export function buildMapWorld(o: Opts): MapWorld3D {
   }
 
   function dispose() {
-    clear(group);
+    clear(group); fx.length = 0; puffs.length = 0;
     glow.dispose(); stripes.dispose();
   }
 
