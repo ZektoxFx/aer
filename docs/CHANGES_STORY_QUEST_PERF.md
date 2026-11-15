@@ -108,6 +108,18 @@ All three merge cleanly with each other (checked with `git merge-tree`).
 
 The Three Forks tubes also leave the 3D world once taken (`gone()` in Hud.tsx); other salvage sites stay.
 
+### Added on 15 Nov (morning): Earth's reply, then-and-now photos
+
+- `src/ui/EarthReply.tsx` + `src/ui/heliocentric.ts` (pure, tested): on the won end card the call crosses to
+  Earth at light speed, the DSN hears it, and the reply crosses back, with a running T+ clock. The delay is
+  today's real Earth-Mars distance (mean circular orbits, JPL approximate elements), shown sped up so it ends
+  before Chik's credits roll. `heliocentric.ts` is an identical copy of the file on `map/intro-cinematic`
+  (the title screen uses it too), so the two branches merge cleanly. Reply wording and rescue = game fiction.
+- `src/ui/sitePhotos.ts` (pure, tested): within 25 m of a photographed NASA site, a card on the left shows the
+  site's archived Perseverance photo (sol, date, camera, credit from `public/data/photos/photos.json`, matched
+  to sites by the file names in `pois.json`), labelled archived, not live, with "NOW: you are standing at ...".
+  Closable per site. No data files were changed.
+
 ## 3. How it was tested
 
 - `npm test`: 264 passed. `npm run build`: OK. `npm run lint`: no new warnings.
