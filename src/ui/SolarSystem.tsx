@@ -4,7 +4,11 @@
 // Mars are the main pair (larger, textured, labelled, glowing orbits, a dashed transfer path between them).
 // Sizes, distances and speeds are for the picture, not to scale.
 // It publishes Earth's screen position as --earth-x / --earth-y on the intro, so the rocket launch starts there.
+// Since 15 Nov: the planets start where they really are today (mean orbits, heliocentric.ts) and run on at a few
+// days per second; a readout gives the date, the Earth–Mars distance and the radio delay. The view leans gently
+// with the mouse (parallax), and the title letters resolve in (title.css).
 import { useEffect, useRef } from 'react';
+import { daysSinceJ2000, earthMars, ELEMENTS, meanLongitude } from './heliocentric';
 
 const EARTH_PHOTO = '/data/earth_apollo17.jpg';
 const EARTH_DISC = { cx: 0.502, cy: 0.508, r: 0.331 }; // where the disc sits in the photo (as in EarthGlobe)
@@ -14,6 +18,11 @@ const CY = 0.42;   // Sun's height on screen (the title sits below)
 type Kind = 'rock' | 'earth' | 'mars' | 'gas' | 'ringed' | 'ice';
 interface Planet { name: string; orbit: number; size: number; period: number; phase: number; kind: Kind; colors: string[]; main?: boolean }
 // orbit: × half the screen width; size: × the smaller screen side; period: seconds per lap.
+/** Simulated days per real second (Earth laps in 110 s). */
+const DAYS_PER_S = 365.256 / 110;
+/** Screen angle of longitude 0. The view's orientation is free: this puts mid-Nov 2026's Earth front left, where the
+ * design had it. Only Earth and Mars use real positions; the others keep their picture phases so they never pile up. */
+const VIEW_OFFSET = 2.35 + (53.8 * Math.PI) / 180;
 const PLANETS: Planet[] = [
   { name: 'Mercury', orbit: 0.15, size: 0.006, period: 24, phase: 1.2, kind: 'rock', colors: ['--metal-dark', '--metal'] },
   { name: 'Venus', orbit: 0.23, size: 0.011, period: 48, phase: 3.6, kind: 'rock', colors: ['--mars-dust', '--mars-sky'] },
@@ -36,8 +45,12 @@ function rgbOf(hex: string): [number, number, number] {
 }
 const rgba = (c: [number, number, number], a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const dateLabel = (ms: number) => { const d = new Date(ms); return `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+
 export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const readout = useRef<HTMLDListElement>(null);
   const live = useRef({ frozen, still });
   useEffect(() => { live.current = { frozen, still }; }, [frozen, still]);
 
@@ -50,7 +63,12 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
     const sunHot = C('--metal'), sunMid = C('--warning'), sunEdge = C('--mars-sand'), glow = C('--earth-glow');
     const dust = C('--mars-dust'), sky = C('--mars-sky'), rust = C('--mars-rust'), space = C('--space');
     const pal = PLANETS.map((p) => p.colors.map(C));
-    let w = 0, h = 0, m = 0, raf = 0, alive = true, simT = 0, last = performance.now();
+    let w = 0, h = 0, m = 0, raf = 0, alive = true, simT = 0, last = performance.now(), lastText = 0;
+    const startMs = Date.now(), startD = daysSinceJ2000(startMs);
+    // Mouse parallax: the view leans a little toward the pointer (smoothed).
+    const lean = { x: 0, y: 0, tx: 0, ty: 0 };
+    const onPointer = (e: PointerEvent) => { lean.tx = (e.clientX / innerWidth) * 2 - 1; lean.ty = (e.clientY / innerHeight) * 2 - 1; };
+    addEventListener('pointermove', onPointer);
     const earthImg = new Image();
     let earthReady = false;
     earthImg.onload = () => { earthReady = true; };
@@ -116,12 +134,17 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
       const { frozen: fz, still: st } = live.current;
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (!fz && !st) simT += dt;
-      const g = ctx!, sx = w / 2, sy = h * CY, sr = m * 0.075, half = w / 2;
+      if (!st) { const k = 1 - Math.exp(-dt * 3); lean.x += (lean.tx - lean.x) * k; lean.y += (lean.ty - lean.y) * k; }
+      const g = ctx!, sx = w / 2 - lean.x * w * 0.018, sy = h * CY - lean.y * h * 0.012, sr = m * 0.075, half = w / 2;
+      const tilt = TILT + lean.y * 0.05;
+      const simD = startD + simT * DAYS_PER_S;
       g.clearRect(0, 0, w, h);
 
       // Orbits: faint ellipses; the main pair's glow.
       const pos = PLANETS.map((p) => {
-        const a = p.phase + (simT / p.period) * Math.PI * 2, rx = p.orbit * half, ry = rx * TILT;
+        // Real heliocentric longitude on the simulated date (counter-clockwise seen from the north, as in the sky).
+        const a = p.main && ELEMENTS[p.name] ? VIEW_OFFSET - meanLongitude(p.name, simD) : p.phase + (simT / p.period) * Math.PI * 2;
+        const rx = p.orbit * half, ry = rx * tilt;
         const depth = Math.sin(a); // +1 = in front of the Sun (lower on screen), -1 = behind it
         return { x: sx + Math.cos(a) * rx, y: sy + depth * ry, depth, rx, ry, scale: 1 + 0.22 * depth };
       });
@@ -220,10 +243,11 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
       for (const i of [2, 3]) {
         const p = PLANETS[i], q = pos[i], r = p.size * m * q.scale, c = p.kind === 'earth' ? glow : sky;
         // Label on the side away from the Sun, so it never sits in the glare.
-        const side = q.x < sx ? -1 : 1, ly = q.y - r - 12;
+        // In front of the Sun's lower half, the label goes under the planet instead (out of the glare).
+        const side = q.x < sx ? -1 : 1, under = q.y > sy && Math.abs(q.x - sx) < sr * 1.6, ly = under ? q.y + r + 22 : q.y - r - 12;
         const lx = side > 0 ? q.x + r + 14 : q.x - r - 14 - 72;
         g.strokeStyle = rgba(c, 0.8); g.lineWidth = 1;
-        g.beginPath(); g.moveTo(q.x + side * r * 0.8, q.y - r * 0.8);
+        g.beginPath(); g.moveTo(q.x + side * r * 0.8, q.y + (under ? r : -r) * 0.8);
         if (side > 0) { g.lineTo(lx - 4, ly); g.lineTo(lx + 72, ly); } else { g.lineTo(lx + 76, ly); g.lineTo(lx, ly); }
         g.stroke();
         g.fillStyle = rgba(sunHot, 0.95); g.fillText(p.name.toUpperCase(), lx, ly - 8);
@@ -232,8 +256,19 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
         g.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
       }
 
-      // Tell the intro where Earth is (the launch starts there).
+      // The readout: the simulated date, how far apart Earth and Mars are, and the radio delay (4× a second).
+      if (readout.current && now - lastText > 250) {
+        lastText = now;
+        const em = earthMars(simD), dd = readout.current.querySelectorAll('dd');
+        const shown = dateLabel(startMs + simT * DAYS_PER_S * 86_400_000);
+        dd[0].textContent = `${shown}${shown === dateLabel(startMs) ? ' · TODAY' : ''}`;
+        dd[1].textContent = `${em.au.toFixed(2)} AU · ${Math.round(em.km / 1e6)} million km`;
+        dd[2].textContent = `${em.lightMin.toFixed(1)} min each way`;
+      }
+      // Tell the intro where Earth is (the launch starts there), and the lean for the star layer's parallax.
       if (intro) {
+        intro.style.setProperty('--lean-x', lean.x.toFixed(3));
+        intro.style.setProperty('--lean-y', lean.y.toFixed(3));
         intro.style.setProperty('--earth-x', `${e.x.toFixed(1)}px`);
         intro.style.setProperty('--earth-y', `${e.y.toFixed(1)}px`);
         intro.style.setProperty('--earth-r', `${(PLANETS[2].size * m * e.scale).toFixed(1)}px`);
@@ -244,8 +279,22 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
     const ro = new ResizeObserver(size);
     ro.observe(canvas); size();
     raf = requestAnimationFrame(draw);
-    return () => { alive = false; cancelAnimationFrame(raf); ro.disconnect(); earthImg.onload = null; };
+    return () => { alive = false; cancelAnimationFrame(raf); ro.disconnect(); earthImg.onload = null; removeEventListener('pointermove', onPointer); };
   }, []);
 
-  return <canvas ref={ref} className="solar-system" aria-hidden="true" />;
+  return (
+    <>
+      <canvas ref={ref} className="solar-system" aria-hidden="true" />
+      <aside className="solar-readout" aria-label="Earth and Mars today">
+        <p className="solar-readout-head">EARTH ↔ MARS</p>
+        <dl ref={readout}>
+          <dt>DATE</dt><dd>-</dd>
+          <dt>APART</dt><dd>-</dd>
+          <dt>RADIO DELAY</dt><dd>-</dd>
+          <dt>JEZERO</dt><dd>18.4°N 77.5°E · ~6 hPa air</dd>
+        </dl>
+        <p className="solar-readout-note">Earth and Mars placed for today's date (mean circular orbits, approx.), then run at ~3 days a second. Sizes and distances not to scale.</p>
+      </aside>
+    </>
+  );
 }
