@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 __pycache__/
+
+# Demo video work files (tools/video)
+video-out/
