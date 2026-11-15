@@ -86,6 +86,15 @@ Draft:
 - **Images and sound:** the app shows no AI-generated images. The intro's surface view is real Perseverance photos, and the AI-generated AER-1 lander image (watermarked "AI GENERATED ASSET") is no longer shown; it stays in the repository. Sound effects are synthesized in the browser, and the radio voice is the browser's built-in text-to-speech. No NASA logos or insignia are used.
 - **Fact-checking:** AI was used to look up spacesuit and Mars values. Each one is cited in the code and in this document.
 
+Per-member logs:
+
+- **Simulation:**
+  - **Tool:** Claude Code (Claude Opus 5.5, Anthropic), throughout the hackathon.
+  - **What it did:** it wrote and tested the suit simulation in `src/sim/`, with me directing and reviewing each step: oxygen, CO₂ and scrubber use; the heat balance; solar power and load shedding; dust storms; the point-of-no-return check; and the game clock. Every commit it helped with carries a `Co-Authored-By: Claude` line, and every behaviour has a Vitest test.
+  - **What I decided:** which models to build and in what order, the rover being the "radio home" (see the idea note above), which values to trust, and every merge.
+  - **Numbers:** the first version used placeholder values marked `[verify]`. I then had Claude check each one against NASA sources, and we replaced the ones that were wrong: electronics load 150 → 80 W (Apollo PLSS), battery 1200 → 640 Wh, scrubber 0.5 → 0.8 kg LiOH, cooling water 3.6 → 3.9 kg, and panel dust capped at 2% a sol (Lorenz et al. 2021). It also got one value wrong that we caught against Data's sources: the Jezero air pressure, which it first gave as 0.625–0.655 kPa; MEDA measured 587–797 Pa, and we fixed it. At the end I had it re-check every Sim number on this page against the running code (#56).
+  - **Coordination:** I used it to review my teammates' pull requests for bugs, measure the live site's performance, and draft the GitHub issues and review comments I posted. Each one went out only after I approved it.
+
 ## NASA Data
 
 - **HiRISE** (Mars Reconnaissance Orbiter): 25 cm orthomosaic and 1 m elevation model of Jezero, from the USGS Mars 2020 terrain-relative-navigation products ([DOI 10.5066/P9REJ9JN](https://doi.org/10.5066/P9REJ9JN)). Used for the base map, shaded relief, slope and route cost.
