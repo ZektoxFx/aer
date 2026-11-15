@@ -8,9 +8,11 @@ export interface Settings {
   largeText: boolean;
   /** Sound: intro effects, the radio voice and the in-game sound (captions are always shown). */
   sound: boolean;
+  /** Background music (needs sound on as well). */
+  music: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { skipIntro: false, reducedMotion: false, largeText: false, sound: true };
+export const DEFAULT_SETTINGS: Settings = { skipIntro: false, reducedMotion: false, largeText: false, sound: true, music: true };
 
 const KEY = 'aer.settings.v1';
 
@@ -51,6 +53,7 @@ export const CONTROLS: { keys: string; action: string }[] = [
   { keys: 'F · I', action: '3D: pick up what is in reach · open the pack' },
   { keys: 'Space', action: 'Pause / resume' },
   { keys: 'M', action: '3D: sound on / off' },
+  { keys: 'N', action: 'Music on / off' },
   { keys: '1 · 2 · 3 · 4', action: '3D: use an O₂ bottle · LiOH canister · water pack · battery pack. 2D HUD: in cabin · rest · walk · run' },
   { keys: 'S · T · H · R', action: '2D HUD: Sol 1 · storm · skip hour · restart' },
 ];

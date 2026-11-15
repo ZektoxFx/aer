@@ -1,0 +1,52 @@
+{
+ "about": "Built by tools/audio/bake_audio.py. title and storm are original music composed in code (tools/audio/compose.py); explore, won and lost are CC0 (OpenGameArt); mars-wind.mp3 is NASA's Perseverance SuperCam microphone recording from sol 4 (credit NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero), resampled, levelled and looped.",
+ "tracks": {
+  "title": {
+   "title": "Jezero (title theme)",
+   "author": "AER team, composed in code",
+   "page": "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py",
+   "sourceLufs": -13.6,
+   "gainDb": -6.4,
+   "lufs": -20.3
+  },
+  "explore": {
+   "title": "Space Music: Out There",
+   "author": "yd",
+   "page": "https://opengameart.org/content/space-music-out-there",
+   "sourceLufs": -26.5,
+   "gainDb": 6.5,
+   "lufs": -20.3
+  },
+  "storm": {
+   "title": "Haboob (storm)",
+   "author": "AER team, composed in code",
+   "page": "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py",
+   "sourceLufs": -12.7,
+   "gainDb": -7.3,
+   "lufs": -20.3
+  },
+  "won": {
+   "title": "Ending Scene (orchestral version)",
+   "author": "nene",
+   "page": "https://opengameart.org/content/ending-scene",
+   "sourceLufs": -18.8,
+   "gainDb": -1.2,
+   "lufs": -20.3
+  },
+  "lost": {
+   "title": "Transmission (Dark Sci-Fi Audio Pack)",
+   "author": "SRG774",
+   "page": "https://opengameart.org/node/188336",
+   "sourceLufs": -30.3,
+   "gainDb": 10.3,
+   "lufs": -20.2
+  },
+  "wind": {
+   "page": "https://science.nasa.gov/resource/perseverance-rovers-supercam-records-wind-on-mars/",
+   "loopStartS": 0.25,
+   "loopEndS": 37.209,
+   "sampleRate": 48000,
+   "sourceLufs": -31.7
+  }
+ }
+}

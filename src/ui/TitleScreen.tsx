@@ -7,6 +7,7 @@ import { LAUNCH_MS } from './launch';
 import { CRASH_MS, FLY_S } from './edl';
 import { createIntroAudio, RADIO, readingMs, type IntroAudio, type IntroCue, type RadioLine } from './introAudio';
 import { MarsGlobe } from './MarsGlobe';
+import { getMusic } from './music';
 import { METEOR_MS } from './meteor';
 import { Rocket } from './Rocket';
 import type { Orbit } from './orbit';
@@ -172,6 +173,15 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
   // Leaving the intro any other way (unmount) silences it.
   useEffect(() => () => { audio.current?.stop(0.2); audio.current = null; }, []);
 
+  // Title music (music.ts): plays on the title and under the launch and cruise, and fades out when the meteor hits,
+  // leaving the emergency to the intro's own sound. The claim lasts until the intro is gone, so the game's music
+  // starts after it. Browsers start it on the player's first click or key.
+  const musicOn = settings.sound && settings.music;
+  useEffect(() => { getMusic()?.setEnabled(musicOn); }, [musicOn]);
+  const quietFrom = phase !== 'title' && phase !== 'launch' && phase !== 'cruise' && phase !== 'cabin';
+  useEffect(() => { getMusic()?.request('title', quietFrom ? null : 'title', quietFrom ? 1.5 : 2); }, [quietFrom]);
+  useEffect(() => () => getMusic()?.release('title'), []);
+
   const start = () => {
     const osReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (settings.skipIntro || settings.reducedMotion || osReduced) { onReveal(); onDone(); return; }
@@ -311,6 +321,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
             <label className="opt"><input type="checkbox" checked={settings.reducedMotion} onChange={() => toggle('reducedMotion')} /> Reduce animations</label>
             <label className="opt"><input type="checkbox" checked={settings.largeText} onChange={() => toggle('largeText')} /> Larger interface</label>
             <label className="opt"><input type="checkbox" checked={settings.sound} onChange={() => toggle('sound')} /> Sound: intro, radio voice and game</label>
+            <label className="opt"><input type="checkbox" checked={settings.music} onChange={() => toggle('music')} /> Music</label>
             <h3>CONTROLS</h3>
             <dl className="controls-list">
               {CONTROLS.map((c) => <div key={c.keys}><dt>{c.keys}</dt><dd>{c.action}</dd></div>)}

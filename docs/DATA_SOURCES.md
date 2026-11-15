@@ -34,6 +34,8 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `earth_apollo17.jpg` | Earth on the title screen (added by UI in PR #23) | NASA photo AS17-148-22727, taken by the Apollo 17 crew on December 7, 1972; credited in `credits.json` |
 | `crashed_lander_aer1.jpg` | The fictional AER-1 lander | **AI-generated**, with a visible watermark. No longer shown in the app (the intro switched to real Perseverance photos in #38) |
 | `fake.json` | The original team placeholder, restored | Not data |
+| `../audio/mars-wind.mp3` | Real Mars wind, looped, played under the game's synthesized wind | Perseverance SuperCam microphone, sol 4 (22 February 2021), [NASA resource page](https://science.nasa.gov/resource/perseverance-rovers-supercam-records-wind-on-mars/); credit NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero. Resampled from 100 kHz to 48 kHz, levelled and looped by `tools/audio/bake_audio.py` |
+| `../audio/*.mp3` (title, explore, storm, won, lost) | Background music | Title ("Jezero") and storm ("Haboob"): original desert-epic pieces composed and synthesized in code by `tools/audio/compose.py` (voice, throat singing, taiko, frame drums, brass; no samples). The rest are CC0 tracks from OpenGameArt: [Out There](https://opengameart.org/content/space-music-out-there) (yd), Transmission from the [Dark Sci-Fi Audio Pack](https://opengameart.org/node/188336) (SRG774), [Ending Scene, orchestral](https://opengameart.org/content/ending-scene) (nene). Levelled to −20 LUFS by `tools/audio/bake_audio.py`; `audio.json` lists each source |
 
 ## How things were measured
 
@@ -66,7 +68,8 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 7. **Dust devil hours** are counts of real encounters by hour. They are not divided by how long MEDA recorded in each hour, but the scaled noon rate (1.43/h) matches the paper's normalised 1.5 ± 0.2.
 8. **Not used yet:**
    - PSG: replaced by the NASA TM-103623 sunlight model, which includes diffuse light.
-   - CRISM mineral maps, DONKI space weather and Mars audio: stretch goals.
+   - CRISM mineral maps and DONKI space weather: stretch goals.
+10. **Audio licences:** the music is CC0 (no credit required; credited anyway). NASA media is generally free to use with credit, but the SuperCam microphone was built with French partners (CNES, ISAE-Supaero), so the recording is credited to all of them as NASA's page does. The game is non-commercial.
 9. **Life support rates** in `reference.json` are checked against NASA's BVAD Rev 2 (NASA/TP-2015-218570/REV2, 2022): 0.84 kg O₂ and 1.01 kg CO₂ per day (Table 3-23), and 2.0 kg drinking water plus 0.5 kg for food preparation (Tables 3-31 and 4-20).
 
 ## Rebuilding
@@ -81,5 +84,6 @@ The scripts are in `tools/data/`. They expect a separate workspace with `raw/`, 
 6. `bake_content.py` (content, credits, manual pages, rock formations)
 7. `bake_patch.py WORK REPO` (2 m tile; needs `work/terrain/elevation_2m.npy` from step 1)
 8. `bake_extra.py VORTEX_PDF REPO` (relay and dust devils; the PDF is arXiv 2109.04601)
+9. `tools/audio/compose.py DOWNLOADS` (renders the title and storm music, about 3 minutes), then `tools/audio/bake_audio.py DOWNLOADS REPO` (music and the Mars wind loop; needs ffmpeg; the download links are the pages in `public/audio/audio.json`)
 
 Parts of the data pipeline were written with help from Claude (an AI assistant). The original pack, story content and lander image were made with Antigravity (another AI agent).
