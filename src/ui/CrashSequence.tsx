@@ -16,7 +16,7 @@ import { AFTER_S, CRASH_RUN as RUN, CRASH_SEG as SEG, crashTime, edlAt, edlTimel
 /** The map's HiRISE photo: 6.4 × 4.0 km, and where the AER-1 cabin sits in it (metres from the north-west corner). */
 const PHOTO = { w: 6400, h: 4000, cabinX: 3060, cabinY: 2170 };
 /** Seconds of the opening wide shot before the camera settles beside the capsule. */
-const OPEN_S = 1.8;
+const OPEN_S = 2.4;
 /** The descent's events for the timeline bar along the bottom (real stages first, then the story's failures). */
 const MARKS = edlTimeline(RUN);
 

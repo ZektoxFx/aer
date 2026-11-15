@@ -99,13 +99,13 @@ const RUN = CRASH_RUN;
 const E = RUN.events;
 /** Animation seconds for each stretch of the simulated run (the real descent takes ~5½ minutes). */
 export const CRASH_SEG = [
-  { from: 0, to: E.chute, s: 3.4, label: 'ATMOSPHERIC ENTRY' },
-  { from: E.chute, to: E.tear, s: 1.1, label: 'PARACHUTE DEPLOYED' },
-  { from: E.tear, to: E.retro, s: 0.9, label: '▲ PARACHUTE FAILURE' },
-  { from: E.retro, to: E.impact, s: 1.6, label: '▲ RETRO-ROCKETS: THRUST LOST' },
+  { from: 0, to: E.chute, s: 4.4, label: 'ATMOSPHERIC ENTRY' },
+  { from: E.chute, to: E.tear, s: 1.5, label: 'PARACHUTE DEPLOYED' },
+  { from: E.tear, to: E.retro, s: 1.2, label: '▲ PARACHUTE FAILURE' },
+  { from: E.retro, to: E.impact, s: 2.1, label: '▲ RETRO-ROCKETS: THRUST LOST' },
 ];
 export const FLY_S = CRASH_SEG.reduce((a, b) => a + b.s, 0);
-export const AFTER_S = 1.8;
+export const AFTER_S = 2.3;
 /** Total length, for the intro timeline. */
 export const CRASH_MS = Math.round((FLY_S + AFTER_S) * 1000);
 

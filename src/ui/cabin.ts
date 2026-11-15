@@ -7,7 +7,7 @@ export const CRUISE = { days: 203, pathKm: 472e6, earthKmAtArrival: 204e6, rpm: 
 const C_KM_S = 299_792.458;
 
 /** Seconds of the scene: the time-lapse, then the alarm. */
-export const CABIN_S = { lapse: 6.4, alarm: 2.0 };
+export const CABIN_S = { lapse: 8.0, alarm: 2.0 };
 export const CABIN_MS = Math.round((CABIN_S.lapse + CABIN_S.alarm) * 1000);
 
 export interface CruiseState {
