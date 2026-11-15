@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { HudMap } from '../map/HudMap';
 import { RouteReplay, type ReplayMark } from '../map/RouteReplay';
 import { EarthReply } from './EarthReply';
+import { cameraName, loadSitePhotos, photoSiteNear, type SitePhoto } from './sitePhotos';
 import { trailAdd } from '../map/replayPath';
 import type { MapItem, MapWorldState, Pt, RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, outdoorEnv, sunElevationDeg, tick } from '../sim/game';
@@ -88,6 +89,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const bagRef = useRef<Pack>(EMPTY_PACK);
   const setBag = (b: Pack) => { bagRef.current = b; setBagState(b); };
   const [near, setNear] = useState<MapItem | null>(null);
+  // Then and now: the archived Perseverance photo of the NASA site the astronaut is standing at (sitePhotos.ts).
+  const [sitePhoto, setSitePhoto] = useState<{ item: MapItem; photo: SitePhoto } | null>(null);
+  const [photosShut, setPhotosShut] = useState<string[]>([]);
+  const photosRef = useRef<Map<string, SitePhoto>>(new Map());
+  useEffect(() => { loadSitePhotos().then((m) => { photosRef.current = m; }).catch(() => {}); }, []);
   const nearRef = useRef<MapItem | null>(null);
   // The ending: Perseverance in reach, the comms link plugged in, the call sent, and the end card.
   const [nearRover, setNearRover] = useState(false);
@@ -405,6 +411,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const where = aboard(m.pos, base) ? 'aboard' : atStorage(m.pos, base, shipRef.current) ? 'room' : null;
     setStoreAt((old) => (old === where ? old : where));
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
+    const sp = photoSiteNear(mapWorldRef.current?.items ?? [], m.pos, photosRef.current);
+    setSitePhoto((old) => ((old?.item.id ?? null) === (sp?.item.id ?? null) ? old : sp));
     const here = inCabinZone(m.pos, base);
     atShipRef.current = here;
     const nc = nearestCover(m.pos, coversRef.current);
@@ -1155,6 +1163,23 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                 </>
               )}
             </section>
+          );
+        })()}
+
+        {sitePhoto && !photosShut.includes(sitePhoto.item.id) && readPage === null && !endCard && (() => {
+          const { item, photo } = sitePhoto;
+          const d = photo.date_taken_utc ? new Date(`${photo.date_taken_utc.slice(0, 10)}T12:00:00Z`) : null;
+          const when = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
+          return (
+            <aside className="v-thennow" aria-label={`Then and now: ${item.label}`}>
+              <p className="v-thennow-head">
+                <span>THEN</span>{Number.isFinite(photo.sol) ? ` · PERSEVERANCE SOL ${photo.sol}` : ' · NASA ARCHIVE'}{when ? ` · ${when}` : ''}
+                <button onClick={() => setPhotosShut((l) => [...l, item.id])} aria-label="Hide photo">×</button>
+              </p>
+              <img src={`/data/photos/${photo.file}`} alt={`${item.label}, archived NASA photo`} />
+              <p className="v-thennow-cap">{photo.instrument ? `${cameraName(photo.instrument)} · ` : ''}{photo.credit} · archived, not live</p>
+              <p className="v-thennow-now"><span>NOW</span> · you are standing at {item.label}</p>
+            </aside>
           );
         })()}
 

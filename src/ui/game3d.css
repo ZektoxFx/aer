@@ -455,3 +455,17 @@
 .earth-reply-log .er-reply[data-on='1'] { color: var(--fg); animation: er-flash 0.8s ease-out; }
 .earth-reply-log em { opacity: 0.6; }
 @keyframes er-flash { 0% { text-shadow: 0 0 12px var(--earth-glow); } 100% { text-shadow: none; } }
+
+/* ---- Then and now at the NASA sites (sitePhotos.ts): the archived photo beside the live 3D view ---- */
+.v-thennow { position: fixed; left: 18px; top: 30%; z-index: 6; width: min(300px, 70vw); padding: 8px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: auto;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 40%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: thennow-in 0.5s ease-out; }
+.v-thennow-head { margin: 0; display: flex; align-items: center; gap: 4px; font-size: 10px; letter-spacing: 0.12em; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+.v-thennow-head span, .v-thennow-now span { color: var(--warning); font-weight: 600; }
+.v-thennow-head button { margin-left: auto; background: none; border: 0; color: var(--fg); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.v-thennow img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; filter: sepia(0.15); }
+.v-thennow-cap { margin: 0; font-size: 9.5px; color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-thennow-now { margin: 0; font-size: 11px; color: var(--fg); }
+@keyframes thennow-in { 0% { opacity: 0; transform: translateX(-12px); } 100% { opacity: 1; transform: none; } }
+@media (max-width: 640px) { .v-thennow { top: auto; bottom: 150px; width: 200px; } }
