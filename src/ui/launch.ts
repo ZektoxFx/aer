@@ -11,10 +11,10 @@ export const EVENTS = { ignite: -3, liftoff: 0, maxQ: 72, meco: 150, sep: 155, s
 
 /** Animation seconds for each stretch, and the mission-time span each covers. */
 export const LAUNCH_SEG = [
-  { stage: 'pad', s: 2.2, from: -10, to: -3 },
-  { stage: 'ignite', s: 1.4, from: -3, to: 0 },
-  { stage: 'rise', s: 2.8, from: 0, to: 25 },
-  { stage: 'ascent', s: 4.4, from: 25, to: 200 },
+  { stage: 'pad', s: 2.8, from: -10, to: -3 },
+  { stage: 'ignite', s: 1.8, from: -3, to: 0 },
+  { stage: 'rise', s: 3.6, from: 0, to: 25 },
+  { stage: 'ascent', s: 5.6, from: 25, to: 200 },
 ] as const;
 export type LaunchStage = (typeof LAUNCH_SEG)[number]['stage'];
 export const LAUNCH_MS = Math.round(LAUNCH_SEG.reduce((a, b) => a + b.s, 0) * 1000);

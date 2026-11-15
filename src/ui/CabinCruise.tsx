@@ -286,7 +286,7 @@ export function CabinCruise({ prepare, active }: Props) {
     // A checklist card floating in zero-g.
     const { c: cardC, g: cg } = canvas(256, 360);
     cg.fillStyle = css(p.fg); cg.fillRect(0, 0, 256, 360); cg.fillStyle = css(p.space); cg.font = '700 22px ui-monospace, Consolas, monospace';
-    cg.fillText('AER-1', 16, 36); cg.font = '16px ui-monospace, Consolas, monospace'; cg.fillText('ENTRY CHECKLIST', 16, 62);
+    cg.fillText('AER-1', 16, 36); cg.font = '16px ui-monospace, Consolas, monospace'; cg.fillText('FLYBY CHECKLIST', 16, 62);
     for (let i = 0; i < 9; i++) { cg.fillRect(16, 92 + i * 28, 14, 14); cg.fillRect(40, 97 + i * 28, 120 + ((i * 37) % 70), 4); }
     const cardTex = keep(new THREE.CanvasTexture(cardC)); cardTex.colorSpace = THREE.SRGBColorSpace;
     const card = add(new THREE.BoxGeometry(0.13, 0.18, 0.003), keep(new THREE.MeshStandardMaterial({ map: cardTex, roughness: 0.9 })));
@@ -415,9 +415,9 @@ export function CabinCruise({ prepare, active }: Props) {
       if (cap.current) {
         const msg = alarm ? '▲ MASTER ALARM · DESCENT ENGINE FAULT'
           : prox ? '▲ PROXIMITY ALERT · UNTRACKED OBJECT ON INTERCEPT'
-          : st.day < 20 ? `DAY ${Math.floor(st.day)} · LEFT EARTH ORBIT · CRUISE TO MARS`
-          : st.day < 199 ? `DAY ${Math.floor(st.day)} · DEEP SPACE CRUISE`
-          : 'DAY 203 · MARS APPROACH · PREPARING FOR ENTRY';
+          : st.day < 20 ? `DAY ${Math.floor(st.day)} · LEFT EARTH ORBIT · BOUND FOR THE ASTEROID BELT`
+          : st.day < 199 ? `DAY ${Math.floor(st.day)} · DEEP SPACE CRUISE · MARS FLYBY AHEAD`
+          : 'DAY 203 · MARS FLYBY · GRAVITY ASSIST TO THE BELT';
         if (cap.current.textContent !== msg) cap.current.textContent = msg;
         cap.current.dataset.alert = alarm || prox ? '1' : '0';
       }

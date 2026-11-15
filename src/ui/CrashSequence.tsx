@@ -11,12 +11,14 @@
 // Colours come from the :root palette.
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { AFTER_S, CRASH_RUN as RUN, CRASH_SEG as SEG, crashTime, edlAt, FLY_S, MARS_G, MARS_R } from './edl';
+import { AFTER_S, CRASH_RUN as RUN, CRASH_SEG as SEG, crashTime, edlAt, edlTimeline, FLY_S, MARS_G, MARS_R, MARS_SOUND, timelinePos } from './edl';
 
 /** The map's HiRISE photo: 6.4 × 4.0 km, and where the AER-1 cabin sits in it (metres from the north-west corner). */
 const PHOTO = { w: 6400, h: 4000, cabinX: 3060, cabinY: 2170 };
 /** Seconds of the opening wide shot before the camera settles beside the capsule. */
-const OPEN_S = 1.8;
+const OPEN_S = 2.4;
+/** The descent's events for the timeline bar along the bottom (real stages first, then the story's failures). */
+const MARKS = edlTimeline(RUN);
 
 function css(name: string): THREE.Color {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -99,6 +101,7 @@ export function CrashSequence({ active }: { active: boolean }) {
   const flash = useRef<HTMLDivElement>(null);
   const dark = useRef<HTMLDivElement>(null);
   const glow = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = host.current;
@@ -181,9 +184,15 @@ export function CrashSequence({ active }: { active: boolean }) {
             float l = length(g + o - f) / s;
             r += (smoothstep(0.72, 1.0, l) * smoothstep(1.4, 1.0, l) * 0.5 - (1.0 - smoothstep(0.0, 0.92, l)) * 0.4) * (0.5 + z);
           } return r; }
+        // Old river channels: thin sinuous valleys where a noise field crosses its middle value (Jezero was a lake fed
+        // by rivers). Wind-blown dunes: ridges across the wind, bent by noise, only inside some dune fields.
+        float channel(vec2 g){ float v = fbm(g / 14000.0 + 5.0) - 0.5; return 1.0 - smoothstep(0.0, 0.018, abs(v)); }
+        float dunes(vec2 g){ float m = smoothstep(0.55, 0.7, fbm(g / 16000.0 + 41.0));
+          float w = dot(g, vec2(0.83, 0.55)) + fbm(g / 700.0) * 260.0; return m * pow(1.0 - abs(sin(w / 46.0)), 2.5); }
         float height(vec2 g, float detail){
-          float h = fbm(g / 9000.0) * 1.3 + crater(g / 7000.0, 0.28) * 0.8;
-          h += crater(g / 1100.0 + 31.0, 0.22) * 0.45 * detail + (fbm(g / 240.0) - 0.5) * 0.3 * detail;
+          float h = fbm(g / 9000.0) * 1.3 + crater(g / 9000.0, 0.16) * 0.7;
+          h -= channel(g) * 0.35;
+          h += crater(g / 1300.0 + 31.0, 0.12) * 0.35 * detail + (fbm(g / 240.0) - 0.5) * 0.3 * detail + dunes(g) * 0.05 * detail;
           return h; }
         void main(){
           #include <logdepthbuf_fragment>
@@ -197,21 +206,29 @@ export function CrashSequence({ active }: { active: boolean }) {
           vec3 col = mix(uRust * 0.78, uSand, smoothstep(0.3, 0.75, a));
           col = mix(col, uShadow * 1.15, smoothstep(0.52, 0.8, b) * 0.55);   // dark basaltic patches
           col = mix(col, uDust, smoothstep(0.6, 0.85, m) * 0.22 * detail);  // bright dust
-          col *= 1.0 + crater(vG / 7000.0, 0.28) * 0.1;
+          // Wind streaks: long light and dark tails all pointing one way, as seen from orbit.
+          float st = fbm(vec2(dot(vG, vec2(0.83, 0.55)) / 24000.0, dot(vG, vec2(-0.55, 0.83)) / 2600.0) + 9.0);
+          col = mix(col, uDust * 0.95, smoothstep(0.58, 0.78, st) * 0.22);
+          col = mix(col, uShadow, smoothstep(0.62, 0.8, 1.0 - st) * 0.12);
+          col = mix(col, uShadow * 0.8, channel(vG) * 0.55);                 // dark sediment in the channels
+          col = mix(col, uShadow * 0.75, dunes(vG) * 0.35 * detail);          // dark basaltic dune sand
+          col = mix(col, uShadow * 0.9, smoothstep(0.15, 0.5, 1.0 - n.y) * 0.5); // bare rock on steep slopes
           // The crash site: the real HiRISE photo, tinted, fading in at low altitude, feathered at its edges.
           vec2 uv = (vG - uPhotoO) / uPhotoS; uv.y = 1.0 - uv.y;
           vec2 edge = smoothstep(vec2(0.0), vec2(0.12), uv) * smoothstep(vec2(0.0), vec2(0.12), 1.0 - uv);
           float pk = uPhotoK * edge.x * edge.y;
           if (pk > 0.001) {
             float lum = dot(texture2D(uPhoto, uv).rgb, vec3(0.333));
-            vec3 pc = mix(uShadow * 0.9, uSand * 1.2, lum);
+            vec3 pc = col * (0.45 + 1.5 * lum);  // the photo's detail at the surrounding terrain's brightness, so no seam
             col = mix(col, pc, pk); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), pk)); // the photo carries its own shading
           }
           float diff = max(dot(n, uSun), 0.0);
           col *= uAmb + diff * 1.15;
           float d = length(vW - cameraPosition);
           float f = smoothstep(uFogNear, uFogFar, d);
-          gl_FragColor = vec4(mix(col, uFog, f), 1.0);
+          vec3 vdir = normalize(vW - cameraPosition);
+          vec3 fogC = uFog * (1.0 + 0.45 * pow(max(dot(vdir, uSun), 0.0), 6.0));  // dust glows brighter toward the Sun
+          gl_FragColor = vec4(mix(col, fogC, f * 0.92), 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -487,13 +504,20 @@ export function CrashSequence({ active }: { active: boolean }) {
 
       // Overlays: telemetry, what is happening, the impact flash, and the fade to black (eyes shut).
       if (hud.current) {
+        const v = impacted ? 0 : s.v;
+        const nearPeakG = !impacted && Math.abs(t - RUN.events.peakG) <= 4;
         hud.current.textContent = [
           `ALT     ${alt >= 10_000 ? (alt / 1000).toFixed(1) : (alt / 1000).toFixed(2)} km`,
-          `SPEED   ${s.v >= 1000 && !impacted ? `${(s.v / 1000).toFixed(2)} km/s` : `${Math.round(impacted ? 0 : s.v)} m/s`}`,
-          `DECEL   ${(impacted ? 0 : s.gLoad).toFixed(1)} g`,
-          `HEATING ${Math.round(heat * 100)}%`,
+          `SPEED   ${Math.round(v * 3.6).toLocaleString('en-US')} km/h   MACH ${(v / MARS_SOUND).toFixed(1)}`,
+          `DECEL   ${(impacted ? 0 : s.gLoad).toFixed(1)} g${nearPeakG ? '  ◂ PEAK' : ''}`,
+          `HEATING ${Math.round(heat * 100)}%${heat > 0.97 ? '  ◂ PEAK' : ''}`,
           `GRAVITY ${MARS_G} m/s²   T+${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`,
         ].join('\n');
+      }
+      // Timeline bar: fill up to "now" and light each event as it happens (the failures in alarm red).
+      if (bar.current) {
+        bar.current.style.setProperty('--edl-pos', String(impacted ? 1 : timelinePos(MARKS, t)));
+        bar.current.querySelectorAll<HTMLElement>('.edl-mark').forEach((k, i) => { k.dataset.on = impacted || t >= MARKS[i].t ? '1' : '0'; });
       }
       if (cap.current) {
         const label = impacted ? '▲ IMPACT' : SEG[Math.min(seg, SEG.length - 1)].label + (seg === 0 && heat > 0.6 ? ': PEAK HEATING' : '');
@@ -527,6 +551,17 @@ export function CrashSequence({ active }: { active: boolean }) {
       <pre ref={hud} className="crash-hud" />
       <p ref={cap} className="crash-cap" />
       <p className="crash-note">SIMULATED DESCENT · physics sped up ~50× · failures are game fiction</p>
+      <div ref={bar} className="edl-bar">
+        <p className="edl-title">ENTRY · DESCENT · LANDING <span>Earth hears it ~11 min later: no one can help in time</span></p>
+        <div className="edl-track"><div className="edl-fill" /></div>
+        <ol className="edl-marks">
+          {MARKS.map((m, i) => (
+            <li key={m.id} className="edl-mark" data-failed={m.failed ? '1' : '0'} data-on="0" style={{ left: `${(i / (MARKS.length - 1)) * 100}%` }}>
+              <i />{m.failed ? `▲ ${m.label}` : m.label}
+            </li>
+          ))}
+        </ol>
+      </div>
       <div ref={flash} className="crash-flash" />
       <div ref={dark} className="crash-dark" />
     </div>

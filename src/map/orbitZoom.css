@@ -1,5 +1,5 @@
 /* Map role: the locating shot after the crash (OrbitZoom.tsx). Colours only from the :root palette. */
-.orbit-zoom { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none; background: var(--space); overflow: hidden; }
+.orbit-zoom { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none; background: var(--space); overflow: hidden; transition: opacity 1s ease-in-out; }
 .orbit-zoom.on { opacity: 1; }
 .orbit-zoom canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .orbit-zoom .oz-labels { position: absolute; inset: 0; z-index: 1; }

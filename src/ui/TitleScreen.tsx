@@ -49,9 +49,11 @@ interface Step {
   radioAt?: number;
   minMs?: number;
 }
+/** The cruise between the launch and the cabin; title.css's cruise animations last as long (3.4 s). */
+const CRUISE_MS = 3400;
 const NEXT: Partial<Record<Phase, Step>> = {
   launch: { to: 'cruise', ms: LAUNCH_MS },
-  cruise: { to: 'cabin', ms: 2600 },
+  cruise: { to: 'cabin', ms: CRUISE_MS },
   cabin: { to: 'meteor', ms: CABIN_S.lapse * 1000 }, // the time-lapse only: the meteor strike is the emergency
   meteor: { to: 'fault', ms: METEOR_MS }, // the 3D strike; the hit lands on the sound's bang at 1.1 s
   fault: { to: 'crash', ms: 11000, minMs: 5000, radio: RADIO.mayday, radioAt: 700 },
@@ -59,7 +61,7 @@ const NEXT: Partial<Record<Phase, Step>> = {
   locate: { to: 'wake', ms: ORBIT_ZOOM_MS },
   door: { to: 'blur', ms: 15500, minMs: 9000, radio: RADIO.rover, radioAt: 3800 },
 };
-const BLUR_MS = 1200;
+const BLUR_MS = 1800;
 /** Wake: the eyes stay shut at least this long, open once the 3D view has drawn, and stop waiting after WAKE_MAX_MS. */
 const WAKE_MIN_MS = 1400;
 const WAKE_MAX_MS = 9000;
@@ -226,7 +228,8 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
 
       <Suspense fallback={null}>
       {/* The meteor strike, in 3D; it keeps running through the fault (the mayday call). */}
-      <MeteorStrike active={phase === 'meteor' || phase === 'fault'} alarm={phase === 'fault'} />
+      {/* The 3D strike runs on through the mayday call, then dives at Mars and dissolves into the entry. */}
+      <MeteorStrike active={phase === 'meteor' || phase === 'fault' || phase === 'crash'} alarm={phase === 'fault'} leaving={phase === 'crash'} />
 
       {/* The launch from Earth, in 3D. */}
       <LaunchScene active={phase === 'launch'} />
@@ -289,6 +292,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
         <p className="title-kicker">TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS 2026</p>
         <h1 className="title-word">AER</h1>
         <p className="title-sub">ATMOSPHERIC EQUILIBRIUM &amp; RECOVERY</p>
+        <p className="title-mission">MISSION AER-1 · ASTEROID-BELT PROSPECTING · VIA A MARS FLYBY</p>
         <p className="title-tag">Plan a Marswalk you can survive.</p>
 
         {panel === 'menu' && (

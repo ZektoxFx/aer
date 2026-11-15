@@ -14,11 +14,11 @@ export interface RadioLine {
 export const RADIO: Record<'mayday' | 'rover', RadioLine> = {
   mayday: {
     from: 'AER CONTROL · EARTH',
-    text: "Mayday, mayday. AER-1, this is Control. A meteor has hit your engine. You can't make it home. Divert to Mars, the nearest planet, and prepare for an emergency landing.",
+    text: "Mayday, mayday. AER-1, this is Control. A meteoroid has hit your engine during the Mars flyby. You can't reach the belt or make it home. Take the lifeboat capsule down to Mars and prepare for an emergency landing.",
   },
   rover: {
     from: 'SUIT RADIO · STORED MESSAGE',
-    text: "AER-1, if you hear this, you made it down. Your ship's radio is gone. NASA's Perseverance rover is about two kilometres west of you. Find it, and use its radio to call Earth. Control out.",
+    text: "AER-1, if you hear this, you made it down. Your ship's radio is gone. NASA's Perseverance rover has explored this old lake bed since 2021, and it is about two kilometres west of you. Find it, and use its radio to call Earth. Control out.",
   },
 };
 

@@ -9,7 +9,7 @@ export const MARS_M_PER_DEG = (2 * Math.PI * 3_389_500) / 360;
 export const JEZERO = { lat: 18.38, lon: 77.58, radiusM: 22_500 };
 
 /** Seconds of each part of the shot. */
-export const ZOOM_S = { descend: 5.6, tilt: 2.2, hold: 1.9 };
+export const ZOOM_S = { descend: 7.0, tilt: 2.8, hold: 2.3 };
 export const ORBIT_ZOOM_MS = Math.round((ZOOM_S.descend + ZOOM_S.tilt + ZOOM_S.hold) * 1000);
 
 /** Start and end height of the drop (m above the cabin), and the final oblique view. */
