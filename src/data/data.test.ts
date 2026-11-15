@@ -15,7 +15,7 @@ import weatherRaw from '../../public/data/weather.json?raw';
 import type {
   ContentFile, CreditsFile, DustDevilFile, DustFile, PoiFile, RelayFile, SunlightTable, TerrainLayers, TerrainPatchMeta, TerrainTilesFile, WeatherFile,
 } from './files';
-import { distanceFactor, solarWm2, sunAzimuthDeg, sunElevationDeg } from './sunlight';
+import { distanceFactor, solarWm2, sunElevationDeg } from './sunlight';
 import { decodeTerrainPatch, patchHeightAt } from './terrainPatch';
 import type { DataPack } from './types';
 
@@ -247,30 +247,7 @@ describe('season (Ls) on every sol', () => {
   });
 });
 
-describe('sun direction and photo tiles for the 3D view', () => {
-  const LAT = 18.4;
-
-  it('puts the sun in the east in the morning, on the meridian at noon and in the west in the afternoon', () => {
-    for (const ls of [0, 90, 153, 270]) {
-      const am = sunAzimuthDeg(LAT, ls, 8), pm = sunAzimuthDeg(LAT, ls, 16);
-      expect(am).toBeGreaterThan(0);
-      expect(am).toBeLessThan(180);
-      expect(pm).toBeCloseTo(360 - am, 6); // mirrored about noon
-    }
-    // Sol 312 (Ls 153): the sun passes south of overhead, so it is due south at noon.
-    expect(sunAzimuthDeg(LAT, 153, 12)).toBeCloseTo(180, 6);
-    // Northern midsummer (Ls 90): the sun is 25.19 deg north, past Jezero's 18.4, so it is due north at noon.
-    expect(sunAzimuthDeg(LAT, 90, 12) % 360).toBeCloseTo(0, 6);
-    // At the equinox it rises due east and sets due west.
-    expect(sunAzimuthDeg(LAT, 0, 6)).toBeCloseTo(90, 6);
-    expect(sunAzimuthDeg(LAT, 0, 18)).toBeCloseTo(270, 6);
-  });
-
-  it('agrees with the sun height: at the horizon at sunrise, highest at noon', () => {
-    expect(sunElevationDeg(LAT, 0, 6)).toBeCloseTo(0, 6);
-    expect(sunElevationDeg(LAT, 153, 12)).toBeGreaterThan(sunElevationDeg(LAT, 153, 9));
-  });
-
+describe('photo tiles for the 3D view', () => {
   it('photo tiles sit inside the map, match their pixel size, and the finest is centred on the cabin', async () => {
     const file = load<TerrainTilesFile>('terrain_tiles.json');
     const fs = (await import(/* @vite-ignore */ 'node:' + 'fs')) as { statSync(p: URL): { size: number } };

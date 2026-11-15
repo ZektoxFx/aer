@@ -13,6 +13,8 @@ import type { GameState } from './types';
 const sol13: SolWeather = { sol: 13, pressureKPa: 0.628, tempMinC: -79.2, tempMaxC: -12.4, windMS: 3.8, tau: 0.45 };
 const at = (hour: number) => (hour / 24) * MIN_PER_SOL;
 const walk = { speedMS: 1, slopeDeg: 0, loadKg: 0 };
+/** Real seconds that make one game hour at the exploring time warp. */
+const HOUR_S = 3600 / SPEED_X.traverse;
 
 describe('time of day', () => {
   it('converts game minutes to local hours, wrapping each sol', () => {
@@ -49,13 +51,13 @@ describe('game clock', () => {
     expect(r.state.suit.o2Kg).toBe(g.suit.o2Kg);
   });
 
-  it('walking runs at time warp: 1 real second = 1 game minute', () => {
+  it('walking runs at time warp: 3 real seconds = 2 game minutes (40×)', () => {
     const g = { ...newGame(sol13), activity: walk, shelter: 'none' as const };
-    const r = tick(g, 1);
-    expect(SPEED_X.traverse).toBe(60);
+    const r = tick(g, 3);
+    expect(SPEED_X.traverse).toBe(40);
     expect(r.speed).toBe('traverse');
-    expect(r.state.clockMin - g.clockMin).toBeCloseTo(1, 9);
-    expect(g.suit.o2Kg - r.state.suit.o2Kg).toBeCloseTo(0.0765 / 60, 9); // 300 W for one minute
+    expect(r.state.clockMin - g.clockMin).toBeCloseTo(2, 9);
+    expect(g.suit.o2Kg - r.state.suit.o2Kg).toBeCloseTo((0.0765 / 60) * 2, 9); // 300 W for two minutes
   });
 
   it('a storm warning slows the clock to 24× (5 real minutes = 2 Mars hours)', () => {
@@ -82,7 +84,7 @@ describe('game clock', () => {
   it('cabin loads draw on the cabin battery at night, including the docked suit', () => {
     const g0 = newGame(sol13);
     const g = { ...g0, clockMin: at(23), suit: { ...g0.suit, elapsedMin: at(23) }, loads: [BASE_LOADS.moxie] };
-    const r = tick(g, 60); // one game hour
+    const r = tick(g, HOUR_S); // one game hour
     expect(g.power.batteryWh - r.state.power.batteryWh).toBeCloseTo(380, 6); // MOXIE 300 W + suit electronics 80 W
     expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh, 6);
   });
@@ -94,7 +96,7 @@ describe('cabin charging', () => {
   it('docked in the cabin, the suit battery refills from cabin power', () => {
     const g0 = atNight(newGame(sol13));
     const g = { ...g0, suit: { ...g0.suit, batteryWh: 300 } };
-    const r = tick(g, 60); // one game hour: 200 W charger − 80 W electronics = +120 Wh
+    const r = tick(g, HOUR_S); // one game hour: 200 W charger − 80 W electronics = +120 Wh
     expect(r.state.suit.batteryWh).toBeCloseTo(420, 6);
     expect(g.power.batteryWh - r.state.power.batteryWh).toBeCloseTo(200, 6);
     expect(r.forecast.batteryMin).toBe(Infinity);
@@ -102,13 +104,13 @@ describe('cabin charging', () => {
 
   it('never charges past full', () => {
     const g0 = atNight(newGame(sol13));
-    const r = tick({ ...g0, suit: { ...g0.suit, batteryWh: FULL_SUIT.batteryWh - 10 } }, 60);
+    const r = tick({ ...g0, suit: { ...g0.suit, batteryWh: FULL_SUIT.batteryWh - 10 } }, HOUR_S);
     expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh, 6);
   });
 
   it('with the cabin battery flat at night, the charger is cut and the suit drains', () => {
     const g0 = atNight(newGame(sol13));
-    const r = tick({ ...g0, power: { ...g0.power, batteryWh: 0 } }, 60);
+    const r = tick({ ...g0, power: { ...g0.power, batteryWh: 0 } }, HOUR_S);
     expect(r.power.shed).toContain('suitCharger');
     expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh - 80, 6);
     expect(Number.isFinite(r.forecast.batteryMin)).toBe(true);
@@ -116,7 +118,7 @@ describe('cabin charging', () => {
 
   it('outside the cabin nothing charges the suit', () => {
     const g0 = atNight(newGame(sol13));
-    const r = tick({ ...g0, shelter: 'none' }, 60);
+    const r = tick({ ...g0, shelter: 'none' }, HOUR_S);
     expect(r.state.suit.batteryWh).toBeCloseTo(FULL_SUIT.batteryWh - 80, 6);
     expect(r.state.power.batteryWh).toBe(g0.power.batteryWh);
     expect(Number.isFinite(r.forecast.batteryMin)).toBe(true);

@@ -18,3 +18,8 @@ export type { JezeroFiles, MapContent } from './realData';
 export * from './world';
 export { buildMapWorld } from './world3d';
 export type { MapWorld3D } from './world3d';
+export { buildQuestBeacon } from './questBeacon';
+export type { QuestBeacon } from './questBeacon';
+// The locating shot after the intro crash (orbit → Jezero → the cabin).
+export { OrbitZoom } from './OrbitZoom';
+export { ORBIT_ZOOM_MS } from './locate';

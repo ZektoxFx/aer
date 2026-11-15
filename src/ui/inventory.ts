@@ -37,6 +37,8 @@ export interface PackEntry {
   contains?: Partial<Record<SuitKey, number>>;
   /** Manual pages: the page number in the pack's fieldManualPages. */
   page?: number;
+  /** Blueprints: what it shows how to build (a job id in ship.ts). */
+  blueprint?: string;
   note?: string;
 }
 
@@ -75,6 +77,10 @@ export const SALVAGE: Record<string, Omit<PackEntry, 'id'>> = {
     kind: 'scrap', name: 'Heat shield tiles', massKg: 3, yields: { insulation: 3 },
     note: 'The heat shield is covered in PICA tiles, a light carbon ablator that kept out the heat of entry (game fiction: salvaging it).',
   },
+  three_forks_depot: {
+    kind: 'part', name: 'Three Forks sample tubes (10)', massKg: 2,
+    note: 'The 10 sealed tubes Perseverance left at Three Forks (sol 653–690) for a future sample return. Carry them home for Earth labs (game fiction: in reality they wait for a sample-return mission; mass is a design value).',
+  },
 };
 
 const PICKABLE = new Set<MapItem['kind']>(['o2', 'lioh', 'water', 'battery', 'repair', 'scrap', 'manual']);
@@ -108,6 +114,10 @@ export function pickupTarget(world: Pick<MapWorldState, 'items' | 'found'> | nul
 /** Turn a map item into what goes in the backpack, using content.json for mass, refills and scrap yields. */
 export function packEntryFor(item: MapItem, content: ContentFile | null | undefined, rng: () => number = Math.random): PackEntry {
   if (isSalvage(item)) return { id: item.id, itemKind: 'scrap', ...SALVAGE[item.id] };
+  // Blueprints are UI items (debris.ts) with ids 'blueprint:<job id>'.
+  if (item.id.startsWith('blueprint:')) {
+    return { id: item.id, kind: 'page', itemKind: 'manual', name: item.label, massKg: 0, blueprint: item.id.slice('blueprint:'.length), note: item.note };
+  }
   if (item.kind === 'manual') {
     const page = Number(item.contentId ?? item.id.replace(/\D+/g, ''));
     return { id: item.id, kind: 'page', itemKind: 'manual', name: item.label, massKg: 0, page: Number.isFinite(page) ? page : undefined };
@@ -132,7 +142,7 @@ export function packEntryFor(item: MapItem, content: ContentFile | null | undefi
       }
     }
     return {
-      id: item.id, kind: 'scrap', itemKind: 'scrap', name: piece.name, massKg: piece.massKg, yields: { ...piece.yields },
+      id: item.id, kind: 'scrap', itemKind: 'scrap', name: item.id.startsWith('aer1-') ? item.label : piece.name, massKg: piece.massKg, yields: { ...piece.yields },
       ...(contains ? { contains } : {}), note: piece.note,
     };
   }

@@ -76,13 +76,15 @@
 
 /* ---- Top right: minimap ---- */
 .v-map {
-  position: absolute; top: var(--edge); right: calc(var(--edge) + 14px); z-index: 2; width: min(330px, 32vw);
+  position: absolute; top: var(--edge); right: calc(var(--edge) + 14px); z-index: 2; width: min(290px, 30vw);
   display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 2 * var(--edge) - 70px); overflow: auto;
 }
 .v-map .hud-map-canvas { min-height: 0; border-radius: 14px; border-color: var(--line); }
 /* Neat minimap: keep the map, its route line and buttons; drop the help and credit text (credits are in the footer). */
 .v-map .hud-map > :not(.hud-map-canvas):not(.hud-map-bar) { display: none; }
 .v-map .hud-map-bar { font-size: 9px; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+/* In 3D, drop the click help under the minimap (the how-to card has it); route status and warnings stay. */
+.v-map .hud-map-bar > .dim { display: none; }
 .v-map .hud-map-btns button { font-size: 10px; padding: 2px 8px; background: var(--glass); border-color: var(--line); }
 .v-toggle {
   align-self: flex-end; font: inherit; font-size: 11px; letter-spacing: 0.12em; cursor: pointer; color: var(--fg);
@@ -195,11 +197,16 @@
 
 /* ---- Mission card under the minimap ---- */
 .v-mission {
-  padding: 8px 12px 10px; font-size: 11px;
+  padding: 7px 11px 8px; font-size: 11px;
   background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
-.v-mission.closed { padding-bottom: 8px; }
+.v-mission-more { font-size: 9px; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.v-mission-head:hover .v-mission-more { color: var(--fg); }
+/* Collapsed: only the next step, one line plus its live detail. */
+.v-mission-next { margin: 5px 0 0; display: grid; grid-template-columns: 12px 1fr; gap: 6px; line-height: 1.35; color: var(--fg); }
+.v-mission-next .v-check { color: var(--warning); }
+.v-mission-next em { display: block; font-style: normal; font-size: 10px; color: var(--warning); font-variant-numeric: tabular-nums; }
 .v-mission-head {
   width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 0; cursor: pointer;
   font: inherit; font-size: 11px; letter-spacing: 0.12em; color: var(--fg); background: none; border: 0;
@@ -332,3 +339,197 @@
 .end-card dt { color: color-mix(in srgb, var(--fg) 65%, transparent); }
 .end-card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .end-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---- Sun dial beside the clock: the Sun's turn through the sol ---- */
+.v-clockrow { display: flex; align-items: center; gap: 10px; }
+.sun-dial { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.sun-dial figcaption { font-size: 9px; letter-spacing: 0.08em; color: color-mix(in srgb, var(--fg) 80%, transparent); font-variant-numeric: tabular-nums; }
+.sun-dial svg { overflow: visible; filter: drop-shadow(0 1px 3px color-mix(in srgb, var(--bg) 90%, transparent)); }
+.sd-day { fill: color-mix(in srgb, var(--mars-sky) 35%, transparent); }
+.sd-night { fill: color-mix(in srgb, var(--space) 55%, transparent); }
+.sd-ring { fill: none; stroke: color-mix(in srgb, var(--fg) 45%, transparent); stroke-width: 1; }
+.sd-horizon { stroke: var(--fg); stroke-width: 1.2; }
+.sd-hand { stroke: color-mix(in srgb, var(--fg) 50%, transparent); stroke-width: 1; stroke-dasharray: 2 2; }
+.sd-sun { fill: var(--warning); stroke: var(--fg); stroke-width: 0.8; }
+.sd-sun.hazy { fill: color-mix(in srgb, var(--warning) 45%, transparent); }
+.sun-dial.night .sd-sun { fill: var(--dim); stroke: none; }
+.sd-cardinal { font-size: 6px; fill: color-mix(in srgb, var(--fg) 70%, transparent); }
+
+/* ---- Repair / build animation ---- */
+.v-work {
+  position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); z-index: 4;
+  width: min(420px, 80vw); padding: 12px 16px; text-align: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent);
+  animation: g3-pop 0.18s ease-out;
+}
+.v-work-title { margin: 0 0 8px; color: var(--warning); letter-spacing: 0.1em; font-size: 13px; }
+.v-work-sub { margin: 8px 0 0; font-size: 10px; color: color-mix(in srgb, var(--fg) 75%, transparent); letter-spacing: 0.06em; }
+.v-work-bar { display: block; height: 4px; background: var(--warning); transform-origin: left; animation-name: v-work-fill; animation-timing-function: linear; animation-fill-mode: both; }
+@keyframes v-work-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .v-work-bar { animation-name: none; } }
+
+/* ---- Low-oxygen alert: pops up at the top centre, small, and never blocks the middle of the view ---- */
+.v-alert {
+  width: min(360px, 80vw); padding: 9px 14px 10px; text-align: left; border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent); border: 1px solid var(--warning);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--warning) 35%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  animation: v-alert-in 0.25s ease-out, v-alert-pulse 1.4s ease-in-out 0.25s infinite alternate;
+}
+.v-alert.critical { border-color: var(--critical); box-shadow: 0 0 22px color-mix(in srgb, var(--critical) 50%, transparent); animation-duration: 0.25s, 0.6s; }
+.v-alert p { margin: 0; font-size: 11px; line-height: 1.45; }
+.v-alert b { font-weight: normal; font-variant-numeric: tabular-nums; color: var(--warning); }
+.v-alert.critical b { color: var(--critical); }
+.v-alert-title { color: var(--warning); letter-spacing: 0.16em; font-size: 12px !important; margin-bottom: 3px !important; }
+.v-alert.critical .v-alert-title { color: var(--critical); }
+.v-alert-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.v-alert-acts button {
+  font: inherit; font-size: 10px; letter-spacing: 0.12em; cursor: pointer; color: var(--fg); padding: 3px 12px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 999px;
+}
+.v-alert-acts button:first-child:not(:last-child) { border-color: var(--warning); color: var(--warning); }
+.v-alert-acts button:hover { border-color: var(--fg); }
+@keyframes v-alert-in { from { transform: translateY(-10px); opacity: 0; } }
+@keyframes v-alert-pulse { to { box-shadow: 0 0 4px transparent; } }
+@media (prefers-reduced-motion: reduce) { .v-alert, .v-alert.critical { animation: none; } }
+
+/* Field journal (Act 5 of docs/STORY.md): habitability findings unlocked by play. */
+.v-journal {
+  margin: 0; padding: 10px 12px; font-size: 11px; max-height: 46vh; overflow-y: auto;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: g3-pop 0.18s ease-out;
+}
+.v-journal-why { margin: 0 0 6px; color: color-mix(in srgb, var(--fg) 70%, transparent); line-height: 1.45; }
+.v-journal ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.v-journal li { display: grid; gap: 2px; line-height: 1.45; color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-journal li b { font-weight: normal; letter-spacing: 0.06em; }
+.v-journal li.done { color: var(--fg); }
+.v-journal li.done b { color: var(--warning); }
+.v-journal li em { font-style: normal; font-size: 9.5px; color: color-mix(in srgb, var(--fg) 50%, transparent); }
+.end-takehome { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.end-takehome h3 { margin: 0; font-size: 12px; letter-spacing: 0.16em; font-weight: normal; color: var(--warning); }
+.end-takehome ul { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+.end-takehome-note { font-size: 12px; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+@media (prefers-reduced-motion: reduce) { .v-journal { animation: none; } }
+
+/* Quest guide inside the mission card: the one next action and where to go (a beacon marks it in 3D). */
+.v-quest { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: grid; gap: 3px; }
+.v-quest-task { margin: 0; line-height: 1.4; color: var(--fg); }
+.v-quest-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px; font-size: 9px; letter-spacing: 0.12em;
+  color: var(--space); background: var(--warning); vertical-align: 1px;
+}
+.v-quest-way { margin: 0; font-size: 10px; color: var(--warning); font-variant-numeric: tabular-nums; }
+.v-quest-needs { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 2px; font-size: 10px; color: var(--fg); }
+.v-quest-needs li.done { color: color-mix(in srgb, var(--fg) 50%, transparent); }
+
+/* ---- End card route replay (Map: RouteReplay): the camera rises off the astronaut over the HiRISE map ---- */
+.end-card:has(.route-replay) { max-width: min(760px, 94vw); max-height: 94vh; overflow-y: auto; animation: end-rise 0.9s ease-out; }
+@keyframes end-rise { 0% { opacity: 0; transform: scale(1.06); filter: blur(6px); } 100% { opacity: 1; transform: none; filter: none; } }
+.route-replay { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-replay canvas { display: block; width: 100%; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--fg) 35%, transparent); background: var(--space); }
+.route-replay figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.route-save { font-size: 11px; }
+.route-race-note { flex-basis: 100%; order: 2; font-size: 11px; color: var(--earth-glow); opacity: 0.85; }
+
+/* ---- Earth's reply after the light delay (EarthReply.tsx) ---- */
+.earth-reply { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--earth-glow) 35%, transparent); background: color-mix(in srgb, var(--space) 55%, transparent); }
+.earth-reply-head { margin: 0; font-size: 10px; letter-spacing: 0.2em; display: flex; justify-content: space-between; color: var(--fg); }
+.earth-reply-head span { color: var(--earth-glow); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.earth-reply-track { position: relative; height: 26px; margin: 2px 40px; border-bottom: 1px dashed color-mix(in srgb, var(--fg) 35%, transparent); }
+.earth-reply-track i { position: absolute; bottom: -7px; width: 12px; height: 12px; border-radius: 50%; font-style: normal; }
+.earth-reply-track i::after { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: 0.1em; }
+.er-mars { left: -40px; background: var(--mars-sand); }
+.er-earth { right: -40px; background: var(--earth-glow); box-shadow: 0 0 10px var(--earth-glow); }
+.er-mars::after { content: 'MARS'; color: var(--mars-sky); }
+.er-earth::after { content: 'EARTH'; color: var(--earth-glow); }
+.er-dot { position: absolute; bottom: -4px; left: 0; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%;
+  background: var(--fg); box-shadow: 0 0 10px var(--warning), -10px 0 8px -2px color-mix(in srgb, var(--warning) 60%, transparent); }
+.er-dot[data-back='1'] { background: var(--earth-glow); box-shadow: 0 0 10px var(--earth-glow), 10px 0 8px -2px color-mix(in srgb, var(--earth-glow) 60%, transparent); }
+.earth-reply-dist { margin: 16px 0 0 !important; font-size: 10px !important; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.earth-reply-log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; line-height: 1.45; }
+.earth-reply-log li { opacity: 0.25; transition: opacity 0.4s; }
+.earth-reply-log li[data-on='1'] { opacity: 1; }
+.earth-reply-log b { font-weight: 600; color: var(--earth-glow); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.earth-reply-log .er-reply[data-on='1'] { color: var(--fg); animation: er-flash 0.8s ease-out; }
+.earth-reply-log em { opacity: 0.6; }
+@keyframes er-flash { 0% { text-shadow: 0 0 12px var(--earth-glow); } 100% { text-shadow: none; } }
+
+/* ---- Then and now at the NASA sites (sitePhotos.ts): the archived photo beside the live 3D view ---- */
+.v-thennow { position: fixed; left: 18px; top: 30%; z-index: 6; width: min(300px, 70vw); padding: 8px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: auto;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 40%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: thennow-in 0.5s ease-out; }
+.v-thennow-head { margin: 0; display: flex; align-items: center; gap: 4px; font-size: 10px; letter-spacing: 0.12em; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+.v-thennow-head span, .v-thennow-now span { color: var(--warning); font-weight: 600; }
+.v-thennow-head button { margin-left: auto; background: none; border: 0; color: var(--fg); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.v-thennow img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; filter: sepia(0.15); }
+.v-thennow-cap { margin: 0; font-size: 9.5px; color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-thennow-now { margin: 0; font-size: 11px; color: var(--fg); }
+@keyframes thennow-in { 0% { opacity: 0; transform: translateX(-12px); } 100% { opacity: 1; transform: none; } }
+@media (max-width: 640px) { .v-thennow { top: auto; bottom: 150px; width: 200px; } }
+
+/* ---- Supply card: what it is, what it does, how to use it (replaces the one-line prompt for supplies) ---- */
+.v-supply {
+  position: absolute; left: 50%; bottom: calc(var(--edge) + 104px); transform: translateX(-50%); z-index: 3;
+  width: min(380px, calc(100% - 32px)); padding: 10px 14px 12px; text-align: left;
+  background: color-mix(in srgb, var(--bg) 78%, transparent); border: 1px solid var(--fg); border-radius: 12px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: g3-pop 0.18s ease-out;
+}
+.v-supply.full { border-color: var(--warning); }
+.v-supply-kicker { margin: 0; font-size: 9px; letter-spacing: 0.2em; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.v-supply h3 { margin: 2px 0 6px; font-size: 15px; font-weight: normal; letter-spacing: 0.12em; }
+.v-supply-does { margin: 0 0 4px; font-size: 12px; line-height: 1.45; }
+.v-supply-does b { font-weight: normal; color: var(--earth-glow); }
+.v-supply-note { margin: 0 0 6px; font-size: 10px; line-height: 1.45; color: color-mix(in srgb, var(--fg) 65%, transparent); }
+.v-supply-steps { margin: 0 0 8px; padding-left: 18px; font-size: 11px; line-height: 1.6; }
+.v-supply kbd, .v-roverfact kbd, .vbar-key {
+  display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; font: inherit; font-size: 10px;
+  border: 1px solid color-mix(in srgb, var(--fg) 60%, transparent); border-radius: 4px; color: var(--fg);
+}
+.v-supply .v-pickup-btn { width: 100%; }
+.v-supply .v-pickup-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Quick-use key on each suit bar: lit when the pack holds that supply. */
+.vbar-key { margin: 0 0 0 5px; padding: 0 3px; font-size: 9px; opacity: 0.45; }
+.vbar-key.has { opacity: 1; border-color: var(--earth-glow); color: var(--earth-glow); }
+.vbar-key small { font-size: 8px; margin-left: 1px; }
+.vbar { grid-template-columns: 6.4em 1fr 3.4em; }
+
+/* ---- "You found Perseverance": real NASA images and facts ---- */
+.v-roverfact { max-width: min(640px, 94vw); max-height: calc(100% - 40px); overflow: auto; }
+.v-roverfact h2 { letter-spacing: 0.24em; }
+.v-roverfact-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 12px; }
+.v-roverfact-photos figure { margin: 0; }
+.v-roverfact-photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.v-roverfact-photos figcaption { margin-top: 4px; font-size: 10px; line-height: 1.4; color: color-mix(in srgb, var(--fg) 80%, transparent); }
+.v-roverfact-photos figcaption span { display: block; margin-top: 2px; font-size: 9px; color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-roverfact-facts { margin: 0 0 10px; padding-left: 18px; font-size: 12px; line-height: 1.55; display: flex; flex-direction: column; gap: 6px; }
+.v-roverfact-next { margin: 0 0 8px; font-size: 12px; color: var(--earth-glow); }
+@media (max-width: 560px) { .v-roverfact-photos { grid-template-columns: 1fr; } }
+
+/* ---- Simple, easy-to-read how-to card and manual pages ---- */
+.howto-simple { max-width: min(520px, 94vw); }
+.howto-lead, .howto-alive { margin: 0 0 12px; font-size: 14px; line-height: 1.5; }
+.howto-lead span, .howto-alive span, .v-manual-use > span {
+  display: block; margin-bottom: 2px; font-size: 9px; letter-spacing: 0.22em; color: var(--warning);
+}
+.howto-lead { font-size: 16px; color: var(--fg); }
+.howto-alive { font-size: 12px; color: color-mix(in srgb, var(--fg) 85%, transparent); }
+.howto-steps { margin: 0 0 12px; padding-left: 22px; font-size: 13px; line-height: 1.55; display: flex; flex-direction: column; gap: 3px; }
+.howto-steps b { font-weight: normal; color: var(--warning); }
+.howto-steps li::marker { color: var(--warning); }
+.howto-keys { grid-template-columns: auto 1fr !important; font-size: 11px !important; padding-top: 10px; border-top: 1px solid var(--line); }
+.howto-keys dt { white-space: nowrap; }
+
+.v-manual { max-width: min(520px, 94vw); }
+.v-manual h2 { font-size: 18px !important; letter-spacing: 0.1em !important; text-transform: none; }
+.v-manual-lead { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: var(--fg); }
+.v-manual-use { margin: 0 0 12px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent); border-radius: 8px; }
+.v-manual-use p { margin: 0; font-size: 12px; line-height: 1.5; }
+.v-manual-use b { font-weight: normal; color: var(--warning); }
+.v-manual-more { margin: 0 0 10px; font-size: 12px; line-height: 1.6; color: color-mix(in srgb, var(--fg) 85%, transparent); }
+.v-manual-more summary { cursor: pointer; font-size: 10px; letter-spacing: 0.2em; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+.v-manual-more p { margin: 6px 0 0; }

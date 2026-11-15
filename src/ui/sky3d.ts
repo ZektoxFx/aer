@@ -31,14 +31,7 @@ uniform vec3 sunColor;
 uniform vec3 glowColor;
 uniform float sunVis;
 uniform float glowAmt;
-uniform float starVis;
 varying vec3 vDir;
-
-float hash3(vec3 p) {
-  p = fract(p * 0.3183099 + 0.1);
-  p *= 17.0;
-  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-}
 
 void main() {
   vec3 d = normalize(vDir);
@@ -53,14 +46,6 @@ void main() {
   // The sun's disc, about 0.5 degrees across on screen (0.35 in reality, so it is still a small sun).
   col += sunColor * sunVis * smoothstep(0.99994, 0.99997, mu);
 
-  // Stars: one cell in 400 on a fine grid over the dome holds a star.
-  if (starVis > 0.001) {
-    vec3 g = d * 220.0;
-    vec3 cell = floor(g);
-    float star = step(0.9975, hash3(cell)) * smoothstep(0.38, 0.0, length(fract(g) - 0.5));
-    col += vec3(star) * starVis * (0.45 + 0.55 * hash3(cell + 7.0)) * smoothstep(0.02, 0.3, d.y);
-  }
-
   // No tone mapping here: three.js doesn't tone-map fog either, so the horizon and the haze stay the same colour.
   gl_FragColor = vec4(min(col, vec3(1.0)), 1.0);
   #include <colorspace_fragment>
@@ -70,17 +55,19 @@ export interface Sky {
   mesh: THREE.Mesh;
   /**
    * Set the sky for this frame. `day` is 0 (night) to 1, `dust` is 0 (clear) to 1 (storm), `tau` the dust optical
-   * depth, and the sun's position in degrees. Returns the horizon colour, for the fog.
+   * depth, and `sun` the unit vector toward the Sun (x east, y up, z south; from sun.ts). Returns the horizon
+   * colour, for the fog.
    */
-  update: (day: number, dust: number, tau: number, sunAzimuthDeg: number, sunElevationDeg: number) => THREE.Color;
+  update: (day: number, dust: number, tau: number, sun: { x: number; y: number; z: number }) => THREE.Color;
   /** Direction to the sun as last set (unit vector). */
   sunDir: THREE.Vector3;
   dispose: () => void;
 }
 
 /**
- * A sky dome that follows the camera: a dusty horizon and deeper zenith, the sun with its dust glow, and stars
- * at night. Its horizon is exactly the fog colour, so far hills fade into the sky without a seam.
+ * A sky dome that follows the camera: a dusty horizon and deeper zenith, and the sun with its dust glow. (The
+ * stars and Earth are drawn over it by buildCelestial in props3d.ts.) Its horizon is exactly the fog colour, so
+ * far hills fade into the sky without a seam.
  *
  * The sun's brightness follows the real direct-beam law: exp(−τ / sin(elevation)). So it dims near the horizon
  * and disappears in a storm, as it does on Mars.
@@ -101,7 +88,6 @@ export function buildSky(): Sky {
     glowColor: { value: glowHigh.clone() },
     sunVis: { value: 1 },
     glowAmt: { value: 0.5 },
-    starVis: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false, toneMapped: false,
@@ -112,20 +98,19 @@ export function buildSky(): Sky {
   mesh.renderOrder = -1;
   mesh.frustumCulled = false;
   const out = new THREE.Color(), zen = new THREE.Color();
-  const update: Sky['update'] = (day, dust, tau, azDeg, elDeg) => {
+  const update: Sky['update'] = (day, dust, tau, sun) => {
     // Night darkens the sky; dust washes the zenith out toward the horizon colour.
     uniforms.horizon.value.copy(night).lerp(horizonDay, 0.12 + 0.88 * day);
     uniforms.zenith.value.copy(night).lerp(zen.copy(zenithDay).lerp(horizonDay, dust * 0.8), 0.08 + 0.92 * day);
-    sunDirection(azDeg, elDeg, uniforms.sunDir.value);
-    const el = (elDeg * Math.PI) / 180;
-    const airmass = 1 / Math.max(Math.sin(el), 0.05);
+    const dir = uniforms.sunDir.value.set(sun.x, sun.y, sun.z).normalize();
+    const elDeg = (Math.asin(dir.y) * 180) / Math.PI;
+    const airmass = 1 / Math.max(dir.y, 0.05);
     const above = THREE.MathUtils.smoothstep(elDeg, -1.2, 0.6);
     // Direct beam through the dust (Beer–Lambert), then the scattered glow, which needs some dust to exist
     // and fades more slowly than the disc.
     uniforms.sunVis.value = Math.exp(-tau * airmass) * above;
     uniforms.glowAmt.value = THREE.MathUtils.smoothstep(elDeg, -6, 4) * (0.35 + 0.65 * (1 - Math.exp(-2 * tau))) * Math.exp(-0.12 * tau * airmass);
     uniforms.glowColor.value.copy(glowLow).lerp(glowHigh, THREE.MathUtils.smoothstep(elDeg, 2, 28));
-    uniforms.starVis.value = Math.max(0, 1 - day * 2.2) * Math.exp(-tau * 1.2);
     return out.copy(uniforms.horizon.value);
   };
   return { mesh, update, sunDir: uniforms.sunDir.value, dispose: () => { geo.dispose(); mat.dispose(); } };

@@ -12,8 +12,11 @@ export function cssColor(name: string, fallback = '#ffffff'): THREE.Color {
 
 export interface AstronautModel {
   group: THREE.Group;
-  /** Pose for this frame: `phase` advances with each step, `moving` 0..1 blends standing → walking, `t` is seconds. */
-  pose: (phase: number, moving: number, t: number) => void;
+  /**
+   * Pose for this frame: `phase` advances with each step, `moving` 0..1 blends standing → walking, `t` is seconds,
+   * `work` 0..1 blends in kneeling at a job with the arms forward (the repair animation).
+   */
+  pose: (phase: number, moving: number, t: number, work?: number) => void;
   /** Helmet lamp: the view turns it up at night. */
   lamp: THREE.SpotLight;
 }
@@ -90,7 +93,7 @@ export function buildAstronaut(): AstronautModel {
   const armL = limb(-0.32, 1.42, 0.075, 0.22, 0.2, new THREE.SphereGeometry(0.075, 10, 8), 0);
   const armR = limb(0.32, 1.42, 0.075, 0.22, 0.2, new THREE.SphereGeometry(0.075, 10, 8), 0);
 
-  const pose = (phase: number, moving: number, t: number) => {
+  const pose = (phase: number, moving: number, t: number, work = 0) => {
     const s = Math.sin(phase) * 0.55 * moving;
     // Legs swing; the knee bends on the leg coming forward.
     legL.upper.rotation.x = s;
@@ -107,6 +110,21 @@ export function buildAstronaut(): AstronautModel {
     // Step bounce while walking; slow breathing while standing.
     body.position.y = Math.abs(Math.sin(phase)) * 0.045 * moving + Math.sin(t * 1.6) * 0.008 * (1 - moving);
     head.rotation.y = Math.sin(t * 0.4) * 0.12 * (1 - moving);
+    if (work > 0) {
+      // Working: crouched, both arms out in front, the right hand tapping away at the job.
+      const tap = Math.sin(t * 16) * 0.12;
+      // (Positive x turns a limb forward; knees bend with negative x, as in the walk.)
+      armL.upper.rotation.x += (1.15 - armL.upper.rotation.x) * work;
+      armR.upper.rotation.x += (1.0 + tap - armR.upper.rotation.x) * work;
+      armL.lower.rotation.x += (0.5 - armL.lower.rotation.x) * work;
+      armR.lower.rotation.x += (0.7 + tap - armR.lower.rotation.x) * work;
+      legL.upper.rotation.x += (1.25 - legL.upper.rotation.x) * work;
+      legL.lower.rotation.x += (-1.25 - legL.lower.rotation.x) * work;
+      legR.upper.rotation.x += (-0.2 - legR.upper.rotation.x) * work;
+      legR.lower.rotation.x += (-1.4 - legR.lower.rotation.x) * work;
+      body.position.y += -0.3 * work;
+      head.rotation.x = -0.35 * work;
+    } else head.rotation.x = 0;
   };
 
   return { group: root, pose, lamp };

@@ -1,0 +1,47 @@
+/* Map role: the locating shot after the crash (OrbitZoom.tsx). Colours only from the :root palette. */
+.orbit-zoom { position: absolute; inset: 0; z-index: 3; opacity: 0; pointer-events: none; background: var(--space); overflow: hidden; transition: opacity 1s ease-in-out; }
+.orbit-zoom.on { opacity: 1; }
+.orbit-zoom canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.orbit-zoom .oz-labels { position: absolute; inset: 0; z-index: 1; }
+.oz-lab {
+  position: absolute; left: 0; top: 0; margin: -18px 0 0 8px; white-space: nowrap; opacity: 0; transition: opacity 0.35s;
+  font: 600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.1em; color: var(--fg);
+  text-shadow: 0 1px 4px var(--space), 0 0 2px var(--space);
+}
+.oz-lab::before { content: ''; position: absolute; left: -8px; top: 16px; width: 5px; height: 5px; border-radius: 50%; background: var(--fg); }
+.oz-lab.you { color: var(--warning); font-size: 13px; }
+.oz-lab.you::before { background: var(--warning); }
+.oz-reticle { position: absolute; left: 0; top: 0; z-index: 1; transition: opacity 0.4s; }
+.oz-reticle i { position: absolute; width: 14px; height: 14px; border: 2px solid var(--warning); }
+.oz-reticle i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.oz-reticle i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.oz-reticle i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.oz-reticle i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+.oz-tele {
+  position: absolute; left: 14px; top: 14px; margin: 0; padding: 8px 12px; z-index: 2;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--fg);
+  background: color-mix(in srgb, var(--space) 60%, transparent); border-left: 2px solid var(--warning);
+}
+.oz-stage {
+  position: absolute; top: 8%; left: 0; right: 0; margin: 0; z-index: 2; text-align: center;
+  font: 600 15px ui-monospace, Consolas, monospace; letter-spacing: 0.22em; color: var(--fg); text-shadow: 0 1px 6px var(--space);
+}
+.oz-scale { position: absolute; left: 16px; bottom: 44px; z-index: 2; display: flex; align-items: center; gap: 8px; font: 11px ui-monospace, Consolas, monospace; color: var(--fg); }
+.oz-scale span { display: block; height: 6px; border: 2px solid var(--fg); border-top: 0; }
+.oz-lock {
+  position: absolute; left: 50%; bottom: 14%; z-index: 2; transform: translateX(-50%); opacity: 0;
+  width: min(560px, calc(100% - 32px)); padding: 14px 18px; text-align: center;
+  font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--fg);
+  background: color-mix(in srgb, var(--space) 70%, transparent); border: 1px solid var(--warning);
+}
+.oz-lock strong { display: block; font-size: 15px; letter-spacing: 0.18em; color: var(--warning); }
+.oz-lock span { display: block; color: var(--dim); }
+.oz-lock p { margin: 8px 0 0; font-size: 13px; }
+.oz-credit { position: absolute; left: 16px; right: 140px; bottom: 14px; margin: 0; z-index: 2; font: 10px ui-monospace, Consolas, monospace; color: var(--dim); }
+.oz-fade { position: absolute; inset: 0; z-index: 3; background: var(--space); opacity: 1; pointer-events: none; }
+@media (max-width: 600px) {
+  .oz-tele { font-size: 10px; }
+  .oz-stage { top: 18%; font-size: 12px; }
+  .oz-credit { right: 16px; bottom: 34px; }
+  .oz-scale { bottom: 70px; }
+}

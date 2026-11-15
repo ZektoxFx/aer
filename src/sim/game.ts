@@ -7,7 +7,8 @@ import { MIN_PER_SOL, conditionsAt, shelterEnvironment, soilingAfter, stormPhase
 import type { Activity, ClockSpeed, Environment, Forecast, GameState, SuitState, TickResult } from './types';
 
 /** Game minutes per real minute at each clock speed (§6.4). traverse is a design value to tune in playtesting. */
-export const SPEED_X: Record<ClockSpeed, number> = { paused: 0, traverse: 60, storm: 24, emergency: 1 };
+// traverse was 60×; 40× keeps 3D walking readable on screen (0.8 m/s shows as ~32 m/s) with the same cost per metre.
+export const SPEED_X: Record<ClockSpeed, number> = { paused: 0, traverse: 40, storm: 24, emergency: 1 };
 
 const REST: Activity = { speedMS: 0, slopeDeg: 0, loadKg: 0 };
 

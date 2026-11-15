@@ -16,7 +16,8 @@ import { buildLayout } from './layout';
 import type { MapItem } from './layout';
 import { MapView } from './MapView';
 import type { MapLayers, Ping } from './MapView';
-import { findPath, makeGrid, rangeField } from './pathfind';
+import { findPath, makeGrid, type RangeField } from './pathfind';
+import { rangeFieldAsync } from './rangeAsync';
 import { buildJezeroLayout } from './realData';
 import type { MapContent } from './realData';
 import { planRoute } from './route';
@@ -168,10 +169,14 @@ export function HudMap({ pack, suit, env, storm, sol, night = false, astronaut, 
     const id = setTimeout(() => setRest({ at: pos, ...live.current }), SETTLE_MS);
     return () => clearTimeout(id);
   }, [pos, rest.at]);
-  const range = useMemo(
-    () => rangeField(grid, { ...WALK, env: rest.env }, rest.at, layout.base, rest.suit),
-    [grid, rest, layout.base],
-  );
+  // Computed in a Web Worker (rangeAsync.ts): two whole-grid searches used to freeze the game for ~0.5 s at every stop.
+  // The last zone stays on screen until the new one arrives.
+  const [range, setRange] = useState<RangeField | null>(null);
+  useEffect(() => {
+    let current = true;
+    rangeFieldAsync(grid, { ...WALK, env: rest.env }, rest.at, layout.base, rest.suit).then((r) => { if (current) setRange(r); });
+    return () => { current = false; };
+  }, [grid, rest, layout.base]);
 
   // The route is planned from where the player is now.
   const planModel = useMemo(() => ({ ...WALK, env: planAt.env }), [planAt.env]);

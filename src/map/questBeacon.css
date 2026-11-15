@@ -1,0 +1,17 @@
+/* Quest beacon's on-screen marker (Map): the current goal's name and distance, pinned to the screen edge when off view. */
+.quest-marker {
+  position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; opacity: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; color: var(--fg);
+  text-shadow: 0 0 6px var(--space), 0 0 2px var(--space);
+  will-change: transform;
+}
+.quest-marker b {
+  order: 1; font-weight: normal; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--space) 55%, transparent);
+  max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.quest-marker i { order: 2; font-style: normal; font-size: 13px; color: var(--warning); font-variant-numeric: tabular-nums; }
+.quest-marker-arrow { order: 3; color: var(--warning); font-size: 15px; line-height: 1; transition: transform 0.12s linear; }
+.quest-marker.off .quest-marker-arrow { order: 0; font-size: 22px; }
+.quest-marker.off b { opacity: 0.85; }

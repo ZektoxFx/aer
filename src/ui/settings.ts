@@ -6,7 +6,7 @@ export interface Settings {
   reducedMotion: boolean;
   /** Scale the game interface up for readability. */
   largeText: boolean;
-  /** Intro sound effects and the radio voice (captions are always shown). */
+  /** Sound: intro effects, the radio voice and the in-game sound (captions are always shown). */
   sound: boolean;
 }
 
@@ -45,12 +45,13 @@ export function browserStorage(): Storage | null {
 export const CONTROLS: { keys: string; action: string }[] = [
   { keys: 'W A S D', action: '3D: walk (arrow keys work too)' },
   { keys: 'Shift', action: '3D: run' },
-  { keys: 'Mouse', action: '3D: click the view, then move to look (Esc frees the cursor)' },
-  { keys: 'Q · E · scroll', action: '3D: turn the camera · zoom' },
+  { keys: 'Mouse', action: '3D: move over the view to look around (click to lock the cursor; Esc frees it)' },
+  { keys: 'Q · E · scroll', action: '3D: turn the camera · zoom in (third person)' },
   { keys: 'V', action: '3D: first / third person' }, // LOCAL DRAFT (Map/Aiman)
   { keys: 'F · I', action: '3D: pick up what is in reach · open the pack' },
   { keys: 'Space', action: 'Pause / resume' },
-  { keys: '1 · 2 · 3 · 4', action: '2D HUD: in cabin · rest · walk · run' },
+  { keys: 'M', action: '3D: sound on / off' },
+  { keys: '1 · 2 · 3 · 4', action: '3D: use an O₂ bottle · LiOH canister · water pack · battery pack. 2D HUD: in cabin · rest · walk · run' },
   { keys: 'S · T · H · R', action: '2D HUD: Sol 1 · storm · skip hour · restart' },
 ];
 

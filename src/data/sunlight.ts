@@ -37,18 +37,3 @@ export function sunElevationDeg(latDeg: number, lsDeg: number, ltstHours: number
   const s = Math.sin(latDeg * r) * Math.sin(dec) + Math.cos(latDeg * r) * Math.cos(dec) * Math.cos(h);
   return Math.asin(s) / r;
 }
-
-/**
- * Sun azimuth (degrees clockwise from north: 90 = east, 180 = south, 270 = west) for a latitude, season (Ls) and
- * Local True Solar Time in hours. Same spherical astronomy as sunElevationDeg, so the two agree: the sun rises in
- * the east, crosses the meridian at 12:00 LTST and sets in the west.
- */
-export function sunAzimuthDeg(latDeg: number, lsDeg: number, ltstHours: number): number {
-  const r = Math.PI / 180;
-  const lat = latDeg * r;
-  const dec = Math.asin(Math.sin(25.19 * r) * Math.sin(lsDeg * r));
-  const h = (ltstHours - 12) * 15 * r;
-  const east = -Math.sin(h) * Math.cos(dec);
-  const north = Math.cos(lat) * Math.sin(dec) - Math.sin(lat) * Math.cos(dec) * Math.cos(h);
-  return ((Math.atan2(east, north) / r) + 360) % 360;
-}
