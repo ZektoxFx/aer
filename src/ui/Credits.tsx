@@ -113,6 +113,13 @@ export function Credits({ onClose, won = false }: { onClose: () => void; won?: b
           </section>
         )}
 
+        {credits?.audioCredits && (
+          <section>
+            <h2>SOUND AND MUSIC</h2>
+            <ul className="credits-plain">{credits.audioCredits.map((x) => <li key={x}>{x}</li>)}</ul>
+          </section>
+        )}
+
         <section>
           <h2>SUIT SCIENCE</h2>
           <ul className="credits-plain">{SUIT_SCIENCE.map((x) => <li key={x}>{x}</li>)}</ul>
@@ -128,7 +135,6 @@ export function Credits({ onClose, won = false }: { onClose: () => void; won?: b
           <h2>AI USE</h2>
           <ul className="credits-plain">
             {(credits?.aiDisclosure ?? []).map((x) => <li key={x}>{x}</li>)}
-            <li>Sound effects are synthesized in the browser; the radio voice is the browser's built-in speech.</li>
           </ul>
         </section>
 

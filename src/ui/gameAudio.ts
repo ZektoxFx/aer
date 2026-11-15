@@ -1,4 +1,6 @@
-// In-game sound, synthesized in the browser with Web Audio (no audio files), like the intro (introAudio.ts).
+// In-game sound, mostly synthesized in the browser with Web Audio, like the intro (introAudio.ts). One recording:
+// real Mars wind from Perseverance's SuperCam microphone (public/audio/mars-wind.mp3, tools/audio/bake_audio.py),
+// layered under the synthesized wind. If it can't be loaded, the synthesized wind plays alone.
 //
 // Two kinds of sound:
 // - Inside the helmet (clear): the suit's fan, your breathing (faster and heavier with effort and CO₂), the suit's
@@ -52,6 +54,9 @@ export function windLevel(windMS: number, storm: number): number {
   return Math.min(1, 0.12 + Math.min(1, windMS / 20) * 0.45 + storm * 0.55);
 }
 
+/** NASA's sol-4 SuperCam wind recording, baked as a seamless loop between these times (public/audio/audio.json). */
+export const MARS_WIND = { url: '/audio/mars-wind.mp3', loopStartS: 0.25, loopEndS: 37.209 };
+
 export function createGameAudio(): GameAudio | null {
   const AC: typeof AudioContext | undefined = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AC) return null;
@@ -102,6 +107,24 @@ export function createGameAudio(): GameAudio | null {
   gritSrc.start();
   const roar = filter('lowpass', 140, 0.9), roarG = gain(0);
   windSrc.connect(roar).connect(roarG).connect(air);
+  // Real Mars wind (Perseverance SuperCam, sol 4), looped; joins once it has loaded.
+  const realWindG = gain(0);
+  realWindG.connect(air);
+  let realWind = false, disposed = false;
+  let realSrc: AudioBufferSourceNode | null = null;
+  fetch(MARS_WIND.url)
+    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+    .then((b) => ctx.decodeAudioData(b))
+    .then((buf) => {
+      if (disposed) return;
+      const s = ctx.createBufferSource();
+      s.buffer = buf; s.loop = true;
+      s.loopStart = MARS_WIND.loopStartS; s.loopEnd = Math.min(MARS_WIND.loopEndS, buf.duration);
+      s.connect(realWindG);
+      s.start(0, MARS_WIND.loopStartS);
+      realSrc = s; realWind = true;
+    })
+    .catch(() => { /* offline or unsupported: the synthesized wind carries on alone */ });
 
   // ---- Inside the suit: life-support fan hum ----
   const fanSrc = noiseSrc();
@@ -225,7 +248,9 @@ export function createGameAudio(): GameAudio | null {
     if (now() > nextGust) { gustTarget = 0.35 + Math.random() * 0.65; nextGust = now() + 1.5 + Math.random() * 3; }
     gust += (gustTarget - gust) * 0.08;
     const w = windLevel(s.windMS, s.storm) * (s.night ? 0.8 : 1) * (0.6 + 0.4 * gust);
-    smooth(windLowG.gain, 0.22 * w, 0.5);
+    // With the real recording playing, the synthesized wind steps back and adds the gusts on top.
+    smooth(realWindG.gain, realWind ? 0.9 * w : 0, 0.6);
+    smooth(windLowG.gain, (realWind ? 0.12 : 0.22) * w, 0.5);
     smooth(windHighG.gain, 0.09 * w * (0.4 + s.storm), 0.5);
     smooth(roarG.gain, 0.5 * s.storm, 0.8);
     smooth(gritG.gain, s.inCabin ? 0 : 0.035 * s.storm * (0.5 + gust), 0.3);
@@ -243,6 +268,8 @@ export function createGameAudio(): GameAudio | null {
 
   const dispose = () => {
     alarm(null); work(false);
+    disposed = true;
+    try { realSrc?.stop(); } catch { /* already stopped */ }
     window.removeEventListener('pointerdown', unlock);
     window.removeEventListener('keydown', unlock);
     master.gain.setTargetAtTime(0, now(), 0.15);

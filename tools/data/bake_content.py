@@ -313,6 +313,12 @@ CREDITS = {
         "Earth on the title screen: NASA, Apollo 17 crew, photo AS17-148-22727 (December 7, 1972)",
         "Per-photo details: /data/photos/photos.json",
     ],
+    # Sources and licences: tools/audio/bake_audio.py and public/audio/audio.json.
+    "audioCredits": [
+        "Mars wind: recorded by Perseverance's SuperCam microphone on sol 4 (22 February 2021), NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero. Levelled and looped for the game.",
+        "Music (CC0, OpenGameArt.org): Cosmic Navigation by Synth-thetic · Space Music: Out There by yd · Urgent and Transmission (Dark Sci-Fi Audio Pack) by SRG774 · Ending Scene (orchestral version) by nene",
+        "Other sound effects are synthesized in the browser; the radio voice is the browser's built-in speech.",
+    ],
     "fiction": "The AER-1 lander, its crew, its supplies and tank, the rover's beacon and the radio bridge are game "
                "fiction. Perseverance, Ingenuity, the landing hardware, the sample sites and all data layers are real.",
     "aiDisclosure": [

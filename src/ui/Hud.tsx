@@ -48,6 +48,7 @@ import { compassPoint, sunPosition } from './sun';
 import { SunDial } from './SunDial';
 import { debrisItems } from './debris';
 import { Credits } from './Credits';
+import { gameTrack, getMusic } from './music';
 import { ROVER_FACTS, ROVER_PHOTOS, ROVER_SOURCES } from './roverFacts';
 import type { BaseLook } from './props3d';
 import './game3d.css';
@@ -123,6 +124,15 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const st = browserStorage();
     saveSettings({ ...loadSettings(st), sound: next }, st);
   };
+  // Background music (music.ts): exploring, the storm, and the ending's track. Music setting (title screen, MENU, N).
+  const [musicOn, setMusicOn] = useState(() => loadSettings(browserStorage()).music);
+  const toggleMusic = () => {
+    const next = !musicOn;
+    setMusicOn(next);
+    const st = browserStorage();
+    saveSettings({ ...loadSettings(st), music: next }, st);
+  };
+  useEffect(() => () => getMusic()?.release('game'), []);
   const onStep3d = useCallback((run: boolean) => audioRef.current?.step(run), []);
   const [o2Hidden, setO2Hidden] = useState<{ level: 'low' | 'critical'; untilMin: number } | null>(null);
   // Pickups and the pack (3D): what is in reach, what is carried, and which manual page is open.
@@ -718,6 +728,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (e.metaKey || e.ctrlKey || e.altKey || (t instanceof Element && t.closest('input, select, textarea'))) return;
     // Space on a focused button presses that button, as browsers do; don't also pause.
     if (e.key === ' ' && t instanceof Element && t.closest('button')) return;
+    if (e.key.toLowerCase() === 'n') { toggleMusic(); return; }
     if (modeRef.current === '3d') {
       const k = e.key.toLowerCase();
       if (workRef.current && (k === 'f' || k === 'i')) return;
@@ -761,6 +772,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   }, [frame, soundPaused]); // eslint-disable-line react-hooks/exhaustive-deps
   const o2Alarm: 'low' | 'critical' | null = mode !== '3d' || endCard || mission ? null
     : s.suit.o2Kg <= 0 || fc.o2Min < 10 ? 'critical' : fc.o2Min < 30 ? 'low' : null;
+  const track = gameTrack(endCard?.result ?? null, stormStrength(frame.env.tau), s.storm ? stormPhase(s.storm, s.clockMin) : 'none');
+  useEffect(() => { getMusic()?.setEnabled(soundOn && musicOn); }, [soundOn, musicOn]);
+  useEffect(() => { getMusic()?.request('game', track, track === 'storm' ? 1.5 : 3); }, [track]);
+  const musicDucked = paused || work !== null || roverInfoOpen || credits === 'menu';
+  useEffect(() => { getMusic()?.duck(musicDucked); }, [musicDucked]);
   useEffect(() => { audioRef.current?.alarm(o2Alarm); }, [o2Alarm, soundOn]);
   useEffect(() => { audioRef.current?.work(work !== null); }, [work, soundOn]);
   useEffect(() => { if (roverInfoOpen) audioRef.current?.cue('rover'); }, [roverInfoOpen]);
@@ -796,6 +812,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     else if (id === 'skip') skipHour();
     else if (id === 'restart') restart();
     else if (id === 'sound') toggleSound();
+    else if (id === 'music') toggleMusic();
     else if (id === 'credits') { setPaused(true); setCredits('menu'); }
     else if (id === 'howto') { setHowToOpen(true); hintOnRef.current = true; setHintOn(true); }
     else if ((id === 'hud' || id === 'telemetry') && onView) onView(id);
@@ -1208,6 +1225,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
               ['RESTART AT THE CABIN', 'restart', false],
               ['HOW TO PLAY', 'howto', false],
               [soundOn ? 'SOUND: ON (M)' : 'SOUND: OFF (M)', 'sound', false],
+              [musicOn ? 'MUSIC: ON (N)' : 'MUSIC: OFF (N)', 'music', false],
               ['CREDITS', 'credits', false],
               ...(onView ? [['SWITCH TO 2D HUD', 'hud', false], ['TELEMETRY CHARTS', 'telemetry', false]] as const : []),
             ] as const).map(([label, id, disabled]) => (
