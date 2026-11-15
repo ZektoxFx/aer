@@ -306,7 +306,7 @@ export function TitleScreen({ settings, onSettings, onReveal, onDone }: Props) {
             <label className="opt"><input type="checkbox" checked={settings.skipIntro} onChange={() => toggle('skipIntro')} /> Skip the intro on START</label>
             <label className="opt"><input type="checkbox" checked={settings.reducedMotion} onChange={() => toggle('reducedMotion')} /> Reduce animations</label>
             <label className="opt"><input type="checkbox" checked={settings.largeText} onChange={() => toggle('largeText')} /> Larger interface</label>
-            <label className="opt"><input type="checkbox" checked={settings.sound} onChange={() => toggle('sound')} /> Intro sound and radio voice</label>
+            <label className="opt"><input type="checkbox" checked={settings.sound} onChange={() => toggle('sound')} /> Sound: intro, radio voice and game</label>
             <h3>CONTROLS</h3>
             <dl className="controls-list">
               {CONTROLS.map((c) => <div key={c.keys}><dt>{c.keys}</dt><dd>{c.action}</dd></div>)}
