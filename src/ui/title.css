@@ -369,12 +369,6 @@
    Colours still come only from the :root variables. */
 .intro { place-items: end center; }
 .earth-wrap { left: 50%; top: 38%; --globe: min(60vmin, 54vh); }
-/* The globe canvas is 1.515 × the Earth's diameter (the disc fills 66% of it; the rest holds the halo and orbits). */
-.earth-globe {
-  position: absolute; z-index: 1; pointer-events: none;
-  left: calc(var(--globe) * -0.7576); top: calc(var(--globe) * -0.7576);
-  width: calc(var(--globe) * 1.5152); height: calc(var(--globe) * 1.5152);
-}
 .stars { opacity: 0.8; }
 /* A faint dotted field behind everything, as on the AURIS pages. */
 .space::before {
