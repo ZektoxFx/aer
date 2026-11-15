@@ -37,7 +37,7 @@ export function clockLabel(clockMin: number): { sol: number; time: string } {
 
 export const SPEED_LABEL: Record<ClockSpeed, string> = {
   paused: '❚❚ PAUSED',
-  traverse: '▶▶ 60×',
+  traverse: '▶▶ 40×',
   storm: '▶ 24× STORM',
   emergency: '▶ 1× EMERGENCY',
 };
