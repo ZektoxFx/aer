@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 // into the first download.
 import { HudMap } from '../map/HudMap';
 import { RouteReplay, type ReplayMark } from '../map/RouteReplay';
+import { EarthReply } from './EarthReply';
 import { trailAdd } from '../map/replayPath';
 import type { MapItem, MapWorldState, Pt, RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, outdoorEnv, sunElevationDeg, tick } from '../sim/game';
@@ -768,6 +769,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           {' '}Next time, watch the countdown top left, carry spare O₂ and LiOH, and turn back by the map's TURN BACK BY time.
         </p>
       )}
+      {endCard.result === 'won' && <EarthReply orbiter={orbiterName(endCard.orbiter)} />}
       <dl>
         <dt>Time on Mars</dt><dd>{formatMinutes(endCard.onMarsMin)}</dd>
         <dt>Ship repairs</dt><dd>{ship.repaired.length}/{REPAIRS.length}</dd>
