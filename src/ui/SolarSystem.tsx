@@ -7,6 +7,8 @@
 // Since 15 Nov: the planets start where they really are today (mean orbits, heliocentric.ts) and run on at a few
 // days per second; a readout gives the date, the Earth–Mars distance and the radio delay. The view leans gently
 // with the mouse (parallax), and the title letters resolve in (title.css).
+// The story: AER-1 was bound for the asteroid belt, using a Mars flyby on the way. So Mars is tagged FLYBY, the
+// belt is drawn and tagged MISSION TARGET, and the planned route runs Earth -> Mars flyby -> the belt.
 import { useEffect, useRef } from 'react';
 import { daysSinceJ2000, earthMars, ELEMENTS, meanLongitude } from './heliocentric';
 
@@ -76,6 +78,12 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
     earthImg.onload = () => { earthReady = true; };
     earthImg.src = EARTH_PHOTO;
 
+    // The main asteroid belt between Mars and Jupiter (2.2-3.2 AU really; here between their picture orbits).
+    const BELT = { r0: 0.53, r1: 0.59, periodD: 1680 };
+    const belt = Array.from({ length: 1400 }, () => ({
+      a: Math.random() * Math.PI * 2, r: BELT.r0 + Math.random() * (BELT.r1 - BELT.r0), y: (Math.random() - 0.5) * 0.012,
+      s: 0.7 + Math.pow(Math.random(), 3) * 1.6, k: 0.45 + Math.random() * 0.55,
+    }));
     // Particles round the Sun, like the black hole's disc (tilted ring, hidden behind the sphere).
     const parts = Array.from({ length: 900 }, () => ({
       a: Math.random() * Math.PI * 2, k: 1.15 + Math.pow(Math.random(), 1.6) * 1.4, v: 0.05 + Math.random() * 0.12,
@@ -175,6 +183,20 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
       };
       const order = PLANETS.map((_, i) => i).sort((a, b) => pos[a].depth - pos[b].depth);
 
+      // The belt: rocks spinning slowly round with the planets (back half now, front half after the Sun).
+      const beltTurn = -(simT * DAYS_PER_S / BELT.periodD) * Math.PI * 2;
+      const drawBelt = (front: boolean) => {
+        for (const b of belt) {
+          const a = b.a + beltTurn, depth = Math.sin(a);
+          if ((depth >= 0) !== front) continue;
+          const rx = b.r * half;
+          const x = sx + Math.cos(a) * rx, y = sy + depth * rx * tilt + b.y * h;
+          if (!front && Math.hypot(x - sx, y - sy) < sr) continue;
+          g.fillStyle = rgba(dust, b.k * (front ? 1 : 0.6));
+          g.fillRect(x, y, b.s, b.s);
+        }
+      };
+      drawBelt(false);
       // Behind the Sun first.
       order.filter((i) => pos[i].depth < 0).forEach(drawPlanet);
 
@@ -230,12 +252,27 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
         const away = ty < sy ? -1 : 1, ly = ty + away * 26;
         g.strokeStyle = rgba(sunHot, 0.5); g.lineWidth = 1; g.beginPath(); g.moveTo(tx, ty + away * 4); g.lineTo(tx, ly - away * 10); g.stroke();
         g.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = rgba(sunHot, 0.95);
-        g.fillText('EARTH → MARS ≈ 7 MONTHS', tx, ly);
-        g.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = rgba(dust, 0.75);
-        g.fillText('Perseverance: 203 days · ~472 million km', tx, ly + away * 14);
+        // Short tag only: the full route sits in the readout panel, so it never runs into the title letters.
+        g.fillText('AER-1 ROUTE', tx, ly);
         g.textAlign = 'left';
       }
 
+      // The planned leg after the flyby: on from Mars to the belt (fainter: it never happened).
+      {
+        const am = Math.atan2((ma.y - sy) / tilt, ma.x - sx) - 0.75, br = ((BELT.r0 + BELT.r1) / 2) * half;
+        const bx = sx + Math.cos(am) * br, by = sy + Math.sin(am) * br * tilt;
+        const mx2 = (ma.x + bx) / 2, my2 = (ma.y + by) / 2, ox2 = mx2 - sx, oy2 = my2 - sy, ol2 = Math.hypot(ox2, oy2) || 1;
+        const bow2 = Math.hypot(bx - ma.x, by - ma.y) * 0.25;
+        g.setLineDash([3, 8]); g.lineDashOffset = st ? 0 : -now / 60;
+        g.strokeStyle = rgba(sunHot, 0.32); g.lineWidth = 1;
+        g.beginPath(); g.moveTo(ma.x, ma.y); g.quadraticCurveTo(mx2 + (ox2 / ol2) * bow2, my2 + (oy2 / ol2) * bow2, bx, by); g.stroke();
+        g.setLineDash([]);
+        g.strokeStyle = rgba(sunHot, 0.6); g.beginPath(); g.arc(bx, by, 4, 0, Math.PI * 2); g.stroke();
+        g.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.textAlign = 'center';
+        g.fillStyle = rgba(dust, 0.6); g.fillText('PLANNED', bx, by + (by > sy ? 14 : -12));
+        g.textAlign = 'left';
+      }
+      drawBelt(true);
       // In front of the Sun.
       order.filter((i) => pos[i].depth >= 0).forEach(drawPlanet);
 
@@ -254,10 +291,20 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
         g.stroke();
         g.fillStyle = rgba(sunHot, 0.95); g.fillText(p.name.toUpperCase(), lx, ly - 8);
         g.fillStyle = rgba(c, 0.85); g.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-        g.fillText(p.kind === 'earth' ? 'HOME' : 'DESTINATION', lx, ly + 9);
+        g.fillText(p.kind === 'earth' ? 'HOME' : 'FLYBY', lx, ly + 9);
         g.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
       }
 
+      // The belt's tag, on its right edge (the readout panel covers the left).
+      {
+        const bx = sx + BELT.r1 * half + 6, by = sy - 40;
+        g.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.textBaseline = 'middle'; g.textAlign = 'left';
+        g.strokeStyle = rgba(sunMid, 0.7); g.lineWidth = 1;
+        g.beginPath(); g.moveTo(bx - 4, by); g.lineTo(bx + 8, by - 18); g.lineTo(bx + 118, by - 18); g.stroke();
+        g.fillStyle = rgba(sunHot, 0.95); g.fillText('ASTEROID BELT', bx + 10, by - 27);
+        g.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = rgba(sunMid, 0.9);
+        g.fillText('MISSION TARGET', bx + 10, by - 8);
+      }
       // The readout: the simulated date, how far apart Earth and Mars are, and the radio delay (4× a second).
       if (readout.current && now - lastText > 250) {
         lastText = now;
@@ -294,8 +341,9 @@ export function SolarSystem({ frozen, still }: { frozen: boolean; still: boolean
           <dt>APART</dt><dd>-</dd>
           <dt>RADIO DELAY</dt><dd>-</dd>
           <dt>JEZERO</dt><dd>18.4°N 77.5°E · ~6 hPa air</dd>
+          <dt>AER-1</dt><dd>Earth → Mars flyby → asteroid belt</dd>
         </dl>
-        <p className="solar-readout-note">Earth and Mars placed for today's date (mean circular orbits, approx.), then run on at ~3 days a second. Sizes and distances not to scale.</p>
+        <p className="solar-readout-note">Earth and Mars placed for today's date (mean circular orbits, approx.), then run on at ~3 days a second. Sizes and distances not to scale. Earth to Mars takes about 7 months (Perseverance: 203 days, ~472 million km). AER-1's route and the belt target are game story.</p>
       </aside>
     </>
   );
