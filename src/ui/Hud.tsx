@@ -3,6 +3,10 @@ import { createPortal } from 'react-dom';
 // Straight from the module, not the map index: the index also exports the 3D world builder, which pulls three.js
 // into the first download.
 import { HudMap } from '../map/HudMap';
+import { RouteReplay, type ReplayMark } from '../map/RouteReplay';
+import { EarthReply } from './EarthReply';
+import { cameraName, loadSitePhotos, photoSiteNear, type SitePhoto } from './sitePhotos';
+import { trailAdd } from '../map/replayPath';
 import type { MapItem, MapWorldState, Pt, RouteResult } from '../map';
 import { SPEED_X, forecast, newGame, outdoorEnv, sunElevationDeg, tick } from '../sim/game';
 import { FULL_SUIT, metabolicW } from '../sim/simulate';
@@ -58,6 +62,11 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
 const SHELTER_NAME: Record<Shelter, string> = { cabin: 'CABIN', wreck: 'WRECK', builtShelter: 'BUILT SHELTER', none: 'OPEN GROUND' };
 
 /** In-suit HUD: a visor frame of readouts around an open centre (map and photos go there later). */
+/** What the end card shows about the run: distance, O₂ breathed, the route walked and where findings were made. */
+interface EndStats { walkedM: number; o2UsedKg: number; trail: Pt[]; foundAt: Partial<Record<FindingId, Pt>> }
+const freshStats = (): EndStats & { lastPos: Pt | null } => ({ walkedM: 0, o2UsedKg: 0, trail: [], foundAt: {}, lastPos: null });
+const snapStats = (st: EndStats): EndStats => ({ walkedM: st.walkedM, o2UsedKg: st.o2UsedKg, trail: st.trail.slice(), foundAt: { ...st.foundAt } });
+
 export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d' | '3d'; onView?: (v: 'hud' | 'telemetry') => void }) {
   const { pack } = data;
   const base = useMemo(() => basePoint(pack), [pack]);
@@ -80,6 +89,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const bagRef = useRef<Pack>(EMPTY_PACK);
   const setBag = (b: Pack) => { bagRef.current = b; setBagState(b); };
   const [near, setNear] = useState<MapItem | null>(null);
+  // Then and now: the archived Perseverance photo of the NASA site the astronaut is standing at (sitePhotos.ts).
+  const [sitePhoto, setSitePhoto] = useState<{ item: MapItem; photo: SitePhoto } | null>(null);
+  const [photosShut, setPhotosShut] = useState<string[]>([]);
+  const photosRef = useRef<Map<string, SitePhoto>>(new Map());
+  useEffect(() => { loadSitePhotos().then((m) => { photosRef.current = m; }).catch(() => {}); }, []);
   const nearRef = useRef<MapItem | null>(null);
   // The ending: Perseverance in reach, the comms link plugged in, the call sent, and the end card.
   const [nearRover, setNearRover] = useState(false);
@@ -88,7 +102,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const linkedRef = useRef(false);
   const setLinked = (v: boolean) => { linkedRef.current = v; setLinkedState(v); };
   const [called, setCalled] = useState(false);
-  const [endCard, setEndCard] = useState<{ result: 'won' | 'lost'; atMin: number; onMarsMin: number; orbiter?: string; cause?: FailCause; stats?: { walkedM: number; o2UsedKg: number } } | null>(null);
+  const [endCard, setEndCard] = useState<{ result: 'won' | 'lost'; atMin: number; onMarsMin: number; orbiter?: string; cause?: FailCause; stats?: EndStats } | null>(null);
   const endRef = useRef(false);
   const failRef = useRef<FailWatch | null>(null);
   const runStartRef = useRef<number | null>(null);
@@ -110,11 +124,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const foundRef = useRef<FindingId[]>([]);
   const setFound = (f: FindingId[]) => { foundRef.current = f; setFoundState(f); };
   const [journalOpen, setJournalOpen] = useState(false);
-  const statsRef = useRef<{ walkedM: number; o2UsedKg: number; lastPos: Pt | null }>({ walkedM: 0, o2UsedKg: 0, lastPos: null });
+  const statsRef = useRef<EndStats & { lastPos: Pt | null }>(freshStats());
   /** Add whatever these signals unlock to the journal, with a toast for the first new one. */
   const unlockFindings = (sig: FindingSignals) => {
     const fresh = newFindings(foundRef.current, sig);
     if (!fresh.length) return;
+    // Remember where each finding was made, for the route replay's markers at the end.
+    const at = sig.pos ?? statsRef.current.lastPos;
+    if (at) for (const id of fresh) statsRef.current.foundAt[id] = { ...at };
     setFound([...foundRef.current, ...fresh]);
     setToast(`New finding: ${findingById(fresh[0]).title}. Press J for the field journal.`);
   };
@@ -140,7 +157,10 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   useEffect(() => { pickWorldRef.current = pickWorld; }, [pickWorld]);
   const world3d = useMemo(() => {
     if (!mapWorld) return mapWorld;
-    const items = [...mapWorld.items.filter((i) => i.kind !== 'rover'), ...debris].filter((i) => !bag.taken.includes(i.id));
+    // Taken items leave the 3D world. Salvage sites stay (the hardware is still there), except the Three Forks cache:
+    // once its tubes are in the backpack there is nothing left to show (the 3D view animates them into the hands).
+    const gone = (i: MapItem) => bag.taken.includes(i.id) || (i.id === CACHE_SITE && bag.salvaged.includes(i.id));
+    const items = [...mapWorld.items.filter((i) => i.kind !== 'rover'), ...debris].filter((i) => !gone(i));
     return { ...mapWorld, items: [...items, ...droppedItems(bag)] };
   }, [mapWorld, bag, debris]);
   const roverItem = mapWorld?.items.find((i) => i.kind === 'rover') ?? null;
@@ -312,7 +332,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       failRef.current = f.watch;
       if (f.failed) {
         endRef.current = true;
-        setEndCard({ result: 'lost', atMin: state.clockMin, onMarsMin: state.clockMin - runStartRef.current, cause: f.failed });
+        setEndCard({ result: 'lost', atMin: state.clockMin, onMarsMin: state.clockMin - runStartRef.current, cause: f.failed, stats: snapStats(statsRef.current) });
         setPaused(true);
       }
     }
@@ -350,6 +370,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       const pos = (modeRef.current === '3d' ? moveRef.current?.pos : null) ?? walkPosRef.current ?? null;
       if (pos && st.lastPos) { const d = distM(st.lastPos, pos); if (d < 50) st.walkedM += d; }
       st.lastPos = pos ? { ...pos } : st.lastPos;
+      if (pos) trailAdd(st.trail, pos);
       const phase = (g: typeof state) => (g.storm ? stormPhase(g.storm, g.clockMin) : null);
       const was = phase(prev), now = phase(state);
       unlockFindings({
@@ -390,6 +411,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const where = aboard(m.pos, base) ? 'aboard' : atStorage(m.pos, base, shipRef.current) ? 'room' : null;
     setStoreAt((old) => (old === where ? old : where));
     if ((target?.id ?? null) !== (nearRef.current?.id ?? null)) { nearRef.current = target; setNear(target); }
+    const sp = photoSiteNear(mapWorldRef.current?.items ?? [], m.pos, photosRef.current);
+    setSitePhoto((old) => ((old?.item.id ?? null) === (sp?.item.id ?? null) ? old : sp));
     const here = inCabinZone(m.pos, base);
     atShipRef.current = here;
     const nc = nearestCover(m.pos, coversRef.current);
@@ -447,7 +470,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     clearFlow(); setMissionState(null); stopWalking(true); game.current = startGame(i); setSolIndex(i); setMode('cabin');
     setMapReset((n) => n + 1);
     setBag(EMPTY_PACK); setShip(EMPTY_SHIP); nearRef.current = null; setNear(null); setReadPage(null);
-    setFound([]); statsRef.current = { walkedM: 0, o2UsedKg: 0, lastPos: null };
+    setFound([]); statsRef.current = freshStats();
     setLinked(false); setCalled(false); setEndCard(null); endRef.current = false; failRef.current = null; setO2Hidden(null); setCredits(null);
     runStartRef.current = game.current.clockMin; setPaused(false);
     const forecast = stormForecastAt(game.current.clockMin);
@@ -594,7 +617,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     } else if (stage === 'send' && pass) {
       endRef.current = true;
       setCalled(true);
-      setEndCard({ result: 'won', atMin: game.current.clockMin, onMarsMin: game.current.clockMin - (runStartRef.current ?? game.current.clockMin), orbiter: pass.orbiter, stats: { ...statsRef.current } });
+      setEndCard({ result: 'won', atMin: game.current.clockMin, onMarsMin: game.current.clockMin - (runStartRef.current ?? game.current.clockMin), orbiter: pass.orbiter, stats: snapStats(statsRef.current) });
       setPaused(true);
     }
   };
@@ -702,10 +725,43 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       onRetry={startSol1} onClose={() => setMissionState(null)}
     />
   );
+  // The route replay at the top of the end card: the camera rises off the astronaut over the HiRISE map while the
+  // route walked draws itself; NASA sites salvaged, findings and Perseverance appear as markers (Map: RouteReplay).
+  const endReplay = endCard && pack.imageUrl && (() => {
+    const st = endCard.stats ?? freshStats();
+    const items = mapWorld?.items ?? [];
+    const rover = items.find((i) => i.kind === 'rover');
+    const marks: ReplayMark[] = [
+      { at: base, label: 'AER-1 CRASH SITE', tone: 'start' },
+      ...bag.salvaged.map((id) => items.find((i) => i.id === id)).filter((i): i is MapItem => !!i).map((i) => ({ at: i.at, label: i.label.toUpperCase(), tone: 'site' as const })),
+      ...(Object.entries(st.foundAt) as [FindingId, Pt][]).map(([id, at]) => ({ at, label: findingById(id).title, tone: 'finding' as const })),
+      ...(rover && (mapWorld?.found.has(rover.id) || endCard.result === 'won') ? [{ at: rover.at, label: 'PERSEVERANCE', tone: 'goal' as const }] : []),
+    ];
+    const t = takeHome(st, found, bag.salvaged);
+    return (
+      <RouteReplay
+        imageUrl={pack.imageUrl} area={pack.area} trail={st.trail} walkedM={st.walkedM} end={st.trail[st.trail.length - 1] ?? base} marks={marks}
+        credit="Your route on HiRISE orbital imagery of Jezero crater (USGS Mars 2020 TRN mosaic, archived)"
+        guide={endCard.result === 'won' ? {
+          title: `${t.walkedM >= 1000 ? `${(t.walkedM / 1000).toFixed(2)} km` : `${t.walkedM} m`} walked · rescued on day ${clockLabel(endCard.atMin).sol}`,
+          rows: [
+            ['Time on Mars', formatMinutes(endCard.onMarsMin)],
+            ['Suit O₂ breathed', `${(t.o2UsedKg * 1000).toFixed(0)} g`],
+            ['NASA sites salvaged', String(t.sites)],
+            ['Sample tubes', t.tubes ? `${t.tubes} from Three Forks` : 'none'],
+            ['Findings', `${t.findings}/${t.of}`],
+          ],
+          findings: found.map((id) => findingById(id).title),
+          note: 'The survival guide the next crew takes back to Mars.',
+        } : undefined}
+      />
+    );
+  })();
   const endNode = endCard && (
     <section className={endCard.result === 'won' ? 'end-card won' : 'end-card lost'} aria-label={endCard.result === 'won' ? 'Mission complete' : 'Suit failure'}>
       <p className="end-kicker">{endCard.result === 'won' ? 'MISSION COMPLETE' : 'MISSION OVER'} · DAY {clockLabel(endCard.atMin).sol} · {clockLabel(endCard.atMin).time} LTST</p>
       <h2>{endCard.result === 'won' ? 'EARTH HEARD YOU' : 'SUIT FAILURE'}</h2>
+      {endReplay}
       {endCard.result === 'won' ? (
         <p>
           Your distress call went from Perseverance's UHF radio to {orbiterName(endCard.orbiter)} passing overhead, which relays it
@@ -721,6 +777,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
           {' '}Next time, watch the countdown top left, carry spare O₂ and LiOH, and turn back by the map's TURN BACK BY time.
         </p>
       )}
+      {endCard.result === 'won' && <EarthReply orbiter={orbiterName(endCard.orbiter)} />}
       <dl>
         <dt>Time on Mars</dt><dd>{formatMinutes(endCard.onMarsMin)}</dd>
         <dt>Ship repairs</dt><dd>{ship.repaired.length}/{REPAIRS.length}</dd>
@@ -1106,6 +1163,23 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
                 </>
               )}
             </section>
+          );
+        })()}
+
+        {sitePhoto && !photosShut.includes(sitePhoto.item.id) && readPage === null && !endCard && (() => {
+          const { item, photo } = sitePhoto;
+          const d = photo.date_taken_utc ? new Date(`${photo.date_taken_utc.slice(0, 10)}T12:00:00Z`) : null;
+          const when = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
+          return (
+            <aside className="v-thennow" aria-label={`Then and now: ${item.label}`}>
+              <p className="v-thennow-head">
+                <span>THEN</span>{Number.isFinite(photo.sol) ? ` · PERSEVERANCE SOL ${photo.sol}` : ' · NASA ARCHIVE'}{when ? ` · ${when}` : ''}
+                <button onClick={() => setPhotosShut((l) => [...l, item.id])} aria-label="Hide photo">×</button>
+              </p>
+              <img src={`/data/photos/${photo.file}`} alt={`${item.label}, archived NASA photo`} />
+              <p className="v-thennow-cap">{photo.instrument ? `${cameraName(photo.instrument)} · ` : ''}{photo.credit} · archived, not live</p>
+              <p className="v-thennow-now"><span>NOW</span> · you are standing at {item.label}</p>
+            </aside>
           );
         })()}
 

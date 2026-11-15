@@ -91,6 +91,35 @@ All three merge cleanly with each other (checked with `git merge-tree`).
 
 ---
 
+### Added on 15 Nov (morning): ending route replay + Survival Guide PNG
+
+- `src/map/replayPath.ts` (pure, tested in `replayPath.test.ts`): `trailAdd` keeps a breadcrumb every 8 m
+  (thinned past 3000 points), `trailCut` cuts the trail by distance, `replayView` is the pull-back view
+  (starts 260 m wide over where the game ended, eases out to the whole map). Named differently from the
+  component on purpose: Windows ignores case, so `routeReplay.ts` and `RouteReplay.tsx` would collide.
+- `src/map/RouteReplay.tsx`: canvas replay on the HiRISE photo. Glowing route, markers (crash site, NASA
+  sites salvaged, findings where they were made, Perseverance), scale bar, equivalent camera height. On a
+  won game, "SAVE SURVIVAL GUIDE (PNG)" saves a 1200 px image: map + take-home lines + findings + credits.
+- `Hud.tsx`: `statsRef` now also holds `trail` and `foundAt` (`EndStats`, `freshStats`, `snapStats`);
+  the step loop calls `trailAdd`; `unlockFindings` records where each finding was made; both end cards
+  (won and lost) open with the replay. Chik's credits still roll by themselves after 12 s; the replay
+  finishes in about 7 s.
+- `game3d.css`: `.route-replay`, and the end card widens to 760 px when it holds the replay.
+
+The Three Forks tubes also leave the 3D world once taken (`gone()` in Hud.tsx); other salvage sites stay.
+
+### Added on 15 Nov (morning): Earth's reply, then-and-now photos
+
+- `src/ui/EarthReply.tsx` + `src/ui/heliocentric.ts` (pure, tested): on the won end card the call crosses to
+  Earth at light speed, the DSN hears it, and the reply crosses back, with a running T+ clock. The delay is
+  today's real Earth-Mars distance (mean circular orbits, JPL approximate elements), shown sped up so it ends
+  before Chik's credits roll. `heliocentric.ts` is an identical copy of the file on `map/intro-cinematic`
+  (the title screen uses it too), so the two branches merge cleanly. Reply wording and rescue = game fiction.
+- `src/ui/sitePhotos.ts` (pure, tested): within 25 m of a photographed NASA site, a card on the left shows the
+  site's archived Perseverance photo (sol, date, camera, credit from `public/data/photos/photos.json`, matched
+  to sites by the file names in `pois.json`), labelled archived, not live, with "NOW: you are standing at ...".
+  Closable per site. No data files were changed.
+
 ## 3. How it was tested
 
 - `npm test`: 264 passed. `npm run build`: OK. `npm run lint`: no new warnings.

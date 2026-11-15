@@ -422,3 +422,51 @@
 .v-quest-way { margin: 0; font-size: 10px; color: var(--warning); font-variant-numeric: tabular-nums; }
 .v-quest-needs { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 2px; font-size: 10px; color: var(--fg); }
 .v-quest-needs li.done { color: color-mix(in srgb, var(--fg) 50%, transparent); }
+
+/* ---- End card route replay (Map: RouteReplay): the camera rises off the astronaut over the HiRISE map ---- */
+.end-card:has(.route-replay) { max-width: min(760px, 94vw); max-height: 94vh; overflow-y: auto; animation: end-rise 0.9s ease-out; }
+@keyframes end-rise { 0% { opacity: 0; transform: scale(1.06); filter: blur(6px); } 100% { opacity: 1; transform: none; filter: none; } }
+.route-replay { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-replay canvas { display: block; width: 100%; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--fg) 35%, transparent); background: var(--space); }
+.route-replay figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.route-save { font-size: 11px; }
+.route-race-note { flex-basis: 100%; order: 2; font-size: 11px; color: var(--earth-glow); opacity: 0.85; }
+
+/* ---- Earth's reply after the light delay (EarthReply.tsx) ---- */
+.earth-reply { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--earth-glow) 35%, transparent); background: color-mix(in srgb, var(--space) 55%, transparent); }
+.earth-reply-head { margin: 0; font-size: 10px; letter-spacing: 0.2em; display: flex; justify-content: space-between; color: var(--fg); }
+.earth-reply-head span { color: var(--earth-glow); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.earth-reply-track { position: relative; height: 26px; margin: 2px 40px; border-bottom: 1px dashed color-mix(in srgb, var(--fg) 35%, transparent); }
+.earth-reply-track i { position: absolute; bottom: -7px; width: 12px; height: 12px; border-radius: 50%; font-style: normal; }
+.earth-reply-track i::after { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: 0.1em; }
+.er-mars { left: -40px; background: var(--mars-sand); }
+.er-earth { right: -40px; background: var(--earth-glow); box-shadow: 0 0 10px var(--earth-glow); }
+.er-mars::after { content: 'MARS'; color: var(--mars-sky); }
+.er-earth::after { content: 'EARTH'; color: var(--earth-glow); }
+.er-dot { position: absolute; bottom: -4px; left: 0; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%;
+  background: var(--fg); box-shadow: 0 0 10px var(--warning), -10px 0 8px -2px color-mix(in srgb, var(--warning) 60%, transparent); }
+.er-dot[data-back='1'] { background: var(--earth-glow); box-shadow: 0 0 10px var(--earth-glow), 10px 0 8px -2px color-mix(in srgb, var(--earth-glow) 60%, transparent); }
+.earth-reply-dist { margin: 16px 0 0 !important; font-size: 10px !important; color: color-mix(in srgb, var(--fg) 60%, transparent); }
+.earth-reply-log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; line-height: 1.45; }
+.earth-reply-log li { opacity: 0.25; transition: opacity 0.4s; }
+.earth-reply-log li[data-on='1'] { opacity: 1; }
+.earth-reply-log b { font-weight: 600; color: var(--earth-glow); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.earth-reply-log .er-reply[data-on='1'] { color: var(--fg); animation: er-flash 0.8s ease-out; }
+.earth-reply-log em { opacity: 0.6; }
+@keyframes er-flash { 0% { text-shadow: 0 0 12px var(--earth-glow); } 100% { text-shadow: none; } }
+
+/* ---- Then and now at the NASA sites (sitePhotos.ts): the archived photo beside the live 3D view ---- */
+.v-thennow { position: fixed; left: 18px; top: 30%; z-index: 6; width: min(300px, 70vw); padding: 8px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: auto;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); border: 1px solid color-mix(in srgb, var(--fg) 40%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: thennow-in 0.5s ease-out; }
+.v-thennow-head { margin: 0; display: flex; align-items: center; gap: 4px; font-size: 10px; letter-spacing: 0.12em; color: color-mix(in srgb, var(--fg) 75%, transparent); }
+.v-thennow-head span, .v-thennow-now span { color: var(--warning); font-weight: 600; }
+.v-thennow-head button { margin-left: auto; background: none; border: 0; color: var(--fg); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.v-thennow img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; filter: sepia(0.15); }
+.v-thennow-cap { margin: 0; font-size: 9.5px; color: color-mix(in srgb, var(--fg) 55%, transparent); }
+.v-thennow-now { margin: 0; font-size: 11px; color: var(--fg); }
+@keyframes thennow-in { 0% { opacity: 0; transform: translateX(-12px); } 100% { opacity: 1; transform: none; } }
+@media (max-width: 640px) { .v-thennow { top: auto; bottom: 150px; width: 200px; } }
