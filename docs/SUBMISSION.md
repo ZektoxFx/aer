@@ -20,7 +20,10 @@ The game shows why each layer matters. A meteor strike forces a lone astronaut t
 
 ## Link to Project Demo
 
-**TODO:** a 30-second video with English subtitles, uploaded somewhere public (YouTube unlisted or Google Drive "anyone with the link"), and tested in a private window. Record from the deployed build after the freeze. Script and shot list: `docs/VIDEO.md`.
+- **Demo video (29.8 s, English captions, music):** https://drive.google.com/file/d/1oqNujfutoL7ssayaZprPSbLCmQVTnK04/view
+- **Backup: 7 slides (PDF):** https://drive.google.com/file/d/1f9hyuM5ftyZkdFra0ZmiVzlbIgGMdx-1/view
+
+**CHECK before submitting:** both files must be set to "Anyone with the link · Viewer" in Google Drive, and must open in a private window without signing in. The video was recorded from the live app (https://aer-black.vercel.app) on 15 November, frame by frame, so it plays smoothly. Its music is the team's own "Jezero" title theme.
 
 ## Link to Final Project
 
@@ -89,6 +92,7 @@ Draft:
   - **Other sound effects** are synthesized in the browser. The radio voice is the browser's built-in text-to-speech.
   - **Title and storm music ("Jezero" and "Haboob"):** original, composed and synthesized by our own code (`tools/audio/compose.py`), which Claude helped write. The melodies and every instrument are made in that code: no samples, no recordings and no AI music generator.
   - **Exploring, win and loss music:** CC0 tracks from OpenGameArt (see Other References).
+- **Demo video and slides:** Claude recorded the live app frame by frame (Chrome driven by a script), edited the 30-second cut with ffmpeg, and laid out the 7 backup slides from that footage and the text on this page. The team chose the content and captions.
 - **Fact-checking:** AI was used to look up spacesuit and Mars values. Each one is cited in the code and in this document.
 
 Per-member logs:
