@@ -60,6 +60,18 @@ const MODES: { id: string; label: string; activity: Activity; shelter: Shelter }
   { id: 'run', label: 'RUN', activity: { speedMS: 2, slopeDeg: 0, loadKg: 10 }, shelter: 'none' },
 ];
 
+/**
+ * The key point of each field-manual page in one line, shown first so the page is quick to read. Summaries of the
+ * Data role's page text (jezero_pack.json fieldManualPages), which stays in full under "The science".
+ */
+const PAGE_KEY_POINT: Record<number, string> = {
+  1: 'Solar panels still work under a dusty sky. The real enemy is dust settling on the panel itself.',
+  2: 'A little liquid oxygen left in a cracked tank is a lot of breathing gas. Warm it slowly.',
+  3: 'Mars has no global magnetic field, so a compass is useless. Find a radio beacon by its bearings instead.',
+  4: 'Perseverance reaches Earth through orbiters passing overhead, in short UHF passes a few times a sol.',
+  5: 'Only the scrubber removes CO₂: breathing harder does not help. Slow down and swap the canister.',
+};
+
 /** 3D quick-use keys: each number uses one kind of supply (shown on the HUD bars). */
 const QUICK_USE: Record<string, { key: SuitKey; name: string; label: string }> = {
   '1': { key: 'o2Kg', name: 'O₂ bottle', label: 'refills your O₂' }, '2': { key: 'liohKg', name: 'LiOH canister', label: 'refreshes the CO₂ scrubber' },
@@ -1137,7 +1149,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <p className={hintOn ? 'v-hint' : 'v-hint off'} aria-hidden={!hintOn}>
           {lookLocked
             ? `MOUSE LOOK ON · WASD move · SHIFT run · ${view === 'first' ? '' : 'scroll to zoom · '}V view · ESC frees the cursor`
-            : 'CLICK THE VIEW TO LOOK AROUND WITH THE MOUSE · WASD move · SHIFT run · V first/third person · SPACE pause'}
+            : 'MOVE THE MOUSE OVER THE VIEW TO LOOK AROUND · click to lock the cursor · WASD move · SHIFT run · V camera · SPACE pause'}
         </p>
         <p className="v-credit">Simulated astronaut · {dataCaption(pack, s.weather)} · terrain: HiRISE DTM, height ×1.6 · not live</p>
 
@@ -1409,21 +1421,34 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {readPage !== null && (() => {
           const pg = manualPage(pack.fieldManualPages, readPage);
-          const recipe = data.content?.recipes.find((r) => r.id === pg?.unlocksRecipe);
+          // Simple to read: the one-line takeaway first, what the page is for in this game, the diagram, and the full
+          // science folded away under "The science".
+          const sentences = (pg?.sciencePrinciple ?? '').split(/(?<=\.)\s+(?=[A-Z])/);
+          const uses = [...REPAIRS, ...jobs].filter((j) => j.page === readPage);
+          const matName = (m: string) => data.content?.materials.find((x) => x.id === m)?.name ?? m;
           return (
             <div className="g3-overlay">
               <article className="howto v-manual" aria-label="Field manual page">
                 <p className="v-manual-kicker">FIELD MANUAL · PAGE {readPage}{pg?.category ? ` · ${pg.category.toUpperCase()}` : ''}</p>
                 <h2>{pg?.title ?? 'Page'}</h2>
-                {pg?.sciencePrinciple && <p className="howto-goal">{pg.sciencePrinciple}</p>}
+                {(PAGE_KEY_POINT[readPage] ?? sentences[0]) && <p className="v-manual-lead">{PAGE_KEY_POINT[readPage] ?? sentences[0]}</p>}
+                {uses.length > 0 && (
+                  <div className="v-manual-use">
+                    <span>USE THIS PAGE FOR</span>
+                    {uses.map((j) => (
+                      <p key={j.id}><b>{j.name}</b> · PACK → REPAIRS · needs {Object.entries(j.materials).map(([m, kg]) => `${matName(m).toLowerCase()} ${kg} kg`).join(', ')}{j.tool ? ', the repair kit' : ''}</p>
+                    ))}
+                  </div>
+                )}
                 {pg?.diagram && <pre className="v-manual-diagram">{pg.diagram}</pre>}
-                {recipe && (
-                  <p className="v-manual-build">
-                    <b>Unlocks: {recipe.name}.</b> {recipe.does}. Needs {Object.entries(recipe.needs).map(([m, kg]) => `${m} ${kg} kg`).join(', ')}.
-                  </p>
+                {sentences.length > (PAGE_KEY_POINT[readPage] ? 0 : 1) && (
+                  <details className="v-manual-more">
+                    <summary>THE SCIENCE</summary>
+                    {sentences.slice(PAGE_KEY_POINT[readPage] ? 0 : 1).map((t) => <p key={t}>{t}</p>)}
+                  </details>
                 )}
                 {pg?.source && <p className="v-manual-source">Source: {pg.source}</p>}
-                <button className="choice-btn howto-go" onClick={closePage} autoFocus>CLOSE</button>
+                <button className="choice-btn howto-go" onClick={closePage} autoFocus>GOT IT</button>
               </article>
             </div>
           );
@@ -1431,18 +1456,24 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
 
         {howToOpen && (
           <div className="g3-overlay">
-            <section className="howto" aria-label="How to play">
+            <section className="howto howto-simple" aria-label="How to play">
               <h2>HOW TO PLAY</h2>
-              <p className="howto-goal">You crash-landed in Jezero Crater and your suit is leaking. Collect AER-1's scattered parts to patch the suit, repair your ship and build the rover radio repair kit, then find Perseverance (about 2 km west), fix its radio and call Earth while an orbiter passes overhead. Watch your oxygen, and get under cover when a dust storm comes.</p>
-              <dl>
-                <dt>Walk</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hold <kbd>Shift</kbd> to run</dd>
-                <dt>Look</dt><dd>Click the view, then move the mouse · <kbd>Esc</kbd> frees the cursor · <kbd>V</kbd> first/third person</dd>
-                <dt>Map</dt><dd>Top right. Click it to plan a route, then press WALK ROUTE. Stay inside the green line to get home.</dd>
-                <dt>Suit</dt><dd>Bars along the bottom; the big countdown top left is what runs out first. Stand at the lander to recharge.</dd>
-                <dt>Pick up</dt><dd>Walk up to something you have spotted and press <kbd>F</kbd>. The backpack holds {BACKPACK_MAX_KG} kg; <kbd>I</kbd> opens it.</dd>
-                <dt>Ship</dt><dd>At the lander, store what you found and repair the ship with tools, manual pages, scrap and parts from NASA hardware. A repaired ship refills your suit.</dd>
-                <dt>Weather</dt><dd>Top-left forecast: dust devils, the storm warning, nightfall.</dd>
-                <dt>Menu</dt><dd>☰ MENU: start the Sol 1 mission, pause, or switch to the 2D view.</dd>
+              <p className="howto-lead"><span>YOUR GOAL</span>Call Earth from NASA's Perseverance rover, about 2 km west.</p>
+              <ol className="howto-steps">
+                <li><b>Collect</b> AER-1's scattered parts and supplies <kbd>F</kbd></li>
+                <li><b>Go inside the lander</b> to store them and repair <kbd>I</kbd> → REPAIRS</li>
+                <li><b>Patch your suit</b>, restore ship power, build the rover radio kit</li>
+                <li><b>Walk to Perseverance</b> and fix its radio <kbd>F</kbd></li>
+                <li><b>Call Earth</b> when an orbiter passes overhead</li>
+              </ol>
+              <p className="howto-alive"><span>STAY ALIVE</span>Watch the O₂ bar top left. Keys <kbd>1</kbd>–<kbd>4</kbd> use O₂, LiOH, water, battery. In a dust storm, get under a rock or into the cabin.</p>
+              <dl className="howto-keys">
+                <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>walk · <kbd>Shift</kbd> run</dd>
+                <dt>Mouse</dt><dd>look around (no click needed)</dd>
+                <dt><kbd>V</kbd></dt><dd>first / third person</dd>
+                <dt><kbd>J</kbd></dt><dd>field journal</dd>
+                <dt>Map</dt><dd>click it to plan a route</dd>
+                <dt><kbd>Space</kbd></dt><dd>pause · ☰ MENU for more</dd>
               </dl>
               <button className="choice-btn howto-go" onClick={closeHowTo} autoFocus>LET'S GO</button>
             </section>
