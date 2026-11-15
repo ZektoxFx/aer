@@ -83,7 +83,12 @@ Draft:
 - **Code:** Claude (Anthropic) helped write and test the simulation, the data pipeline and parts of the interface. Commits it helped with carry a `Co-Authored-By: Claude` line, and the README says so.
 - **Story text and game values:** the team set the story beats (meteor strike, radio calls, repairing the ship, then calling Earth). Claude drafted the wording of the radio lines and the repair recipes and salvage values from that direction. The recipes are marked as design values in the code.
 - **Data:** Claude helped find sources and write the data-processing scripts. Another AI agent (Antigravity) drafted the original pack and the story content, including rock chemistry and field manual pages. We replaced its unsourced numbers: the Máaz and Séítah rock values now come from published SuperCam measurements (Wiens et al. 2022), the manual pages cite real sources, and the delta and regolith entries carry no unchecked numbers. Every data value comes from the sources listed below, not from AI. Checking against the sources also caught AI mistakes (an invented dust storm, an outdated list of relay orbiters), which we corrected.
-- **Images and sound:** the app shows no AI-generated images. The intro's surface view is real Perseverance photos, and the AI-generated AER-1 lander image (watermarked "AI GENERATED ASSET") is no longer shown; it stays in the repository. Sound effects are synthesized in the browser, and the radio voice is the browser's built-in text-to-speech. No NASA logos or insignia are used.
+- **Images:** the app shows no AI-generated images. The intro's surface view is real Perseverance photos, and the AI-generated AER-1 lander image (watermarked "AI GENERATED ASSET") is no longer shown; it stays in the repository. No NASA logos or insignia are used.
+- **Sound and music:**
+  - **Mars wind:** a real recording by Perseverance's SuperCam microphone (see NASA Data).
+  - **Other sound effects** are synthesized in the browser. The radio voice is the browser's built-in text-to-speech.
+  - **Title and storm music ("Jezero" and "Haboob"):** original, composed and synthesized by our own code (`tools/audio/compose.py`), which Claude helped write. The melodies and every instrument are made in that code: no samples, no recordings and no AI music generator.
+  - **Exploring, win and loss music:** CC0 tracks from OpenGameArt (see Other References).
 - **Fact-checking:** AI was used to look up spacesuit and Mars values. Each one is cited in the code and in this document.
 
 Per-member logs:
@@ -105,6 +110,7 @@ Per-member logs:
 - **Mars 2020 raw images** (NASA/JPL-Caltech, ASU): point-of-view photos at waypoints, and the intro's view out of the hatch (Mastcam-Z, sol 4, near the landing site).
 - **NASA Mars Relay Network Handbook** (JPL D-71874, Release 4, 2026): orbiter pass windows over Jezero, used for the mission card's next relay pass.
 - **Perseverance SuperCam** rock compositions for the Máaz and Séítah formations (Wiens et al. 2022, *Science Advances* 8, eabo3399, [open access](https://www.science.org/doi/10.1126/sciadv.abo3399)). Used for the rock and terrain descriptions.
+- **Perseverance SuperCam microphone:** the sound of Martian wind, recorded on sol 4 (22 February 2021), credited NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero ([NASA resource page](https://science.nasa.gov/resource/perseverance-rovers-supercam-records-wind-on-mars/)). It is the outdoor wind in the game, getting louder with MEDA's wind speed.
 - **NASA TM-103623**, Appelbaum & Flood, *Solar Radiation on Mars: Update 1990* ([NTRS](https://ntrs.nasa.gov/citations/19910005804)). Used for surface sunlight under dust.
 - **NASA life-support and spacesuit references:**
   - Apollo PLSS documents ([ALSJ](https://history.nasa.gov/alsj/ALSJ-FlightPLSS.pdf)) and Apollo metabolic rates ([TN D-7883](https://www.nasa.gov/wp-content/uploads/static/history/alsj/tnD7883Metabolic.pdf)).
@@ -114,10 +120,11 @@ Per-member logs:
 
 ## Space Agency Partner Data and Other References
 
-- **Space Agency Partner data:** **TODO (team decision):** keep "none", or use this line, which is sourced and true of the game: *"ESA's ExoMars Trace Gas Orbiter and Mars Express relay Perseverance's data to Earth alongside NASA's orbiters. The game's radio story and relay data include them (NASA Mars Relay Network Handbook, JPL D-71874, Release 4, 2026)."* It is a relay role in the story, not an ESA dataset, so judges may not count it as partner data.
+- **Space Agency Partner data:** **TODO (team decision):** keep "none", or use this line, which is sourced and true of the game: *"ESA's ExoMars Trace Gas Orbiter and Mars Express relay Perseverance's data to Earth alongside NASA's orbiters. The game's radio story and relay data include them (NASA Mars Relay Network Handbook, JPL D-71874, Release 4, 2026)."* It is a relay role in the story, not an ESA dataset, so judges may not count it as partner data. Another option: the Mars wind recording comes from SuperCam, whose microphone was built with France's space agency CNES; NASA credits it to NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero.
 - Lorenz et al. 2021, *Lander and rover histories of dust accumulation on and removal from solar arrays on Mars*, Planetary and Space Science ([HAL](https://hal.sorbonne-universite.fr/hal-03369920)). Used for panel dust rates.
 - Sánchez-Lavega et al. 2023, Jezero MEDA pressure ([arXiv 2401.12931](https://arxiv.org/abs/2401.12931)).
-- Open-source software: React, Vite, Vitest, TypeScript, NumPy, SciPy, Pillow, tifffile, imagecodecs.
+- Music (CC0, OpenGameArt.org): [Space Music: Out There](https://opengameart.org/content/space-music-out-there) by yd (exploring) · [Ending Scene, orchestral version](https://opengameart.org/content/ending-scene) by nene (win) · Transmission from the [Dark Sci-Fi Audio Pack](https://opengameart.org/node/188336) by SRG774 (loss).
+- Open-source software: React, Vite, Vitest, TypeScript, three.js, NumPy, SciPy, Pillow, tifffile, imagecodecs, ffmpeg.
 - Full data provenance and caveats: `docs/DATA_SOURCES.md` in the repository.
 
 ---
