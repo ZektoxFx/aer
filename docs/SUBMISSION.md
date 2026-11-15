@@ -50,7 +50,7 @@ AER helps a Mars astronaut answer one question before every surface walk: *can I
 
 ### How it works
 
-- **Suit simulation (TypeScript, checked by automated tests: 264 project-wide on the morning of November 15; TODO update the count at the freeze).** Oxygen use, CO₂ production and scrubber use all come from one metabolic rate set by speed, slope and load. In the 3D view, the load is the astronaut's tools plus whatever is in the backpack.
+- **Suit simulation (TypeScript, checked by automated tests: 281 project-wide).** Oxygen use, CO₂ production and scrubber use all come from one metabolic rate set by speed, slope and load. In the 3D view, the load is the astronaut's tools plus whatever is in the backpack.
   - Rates follow NASA's ISS-era averages (0.84 kg O₂ and 1.0 kg CO₂ per person per day). A 300 W walk matches the Apollo moonwalk average.
   - Starting supplies match Apollo and ISS spacesuit figures: 0.6 kg O₂, 3.9 kg cooling water, an 80 W electronics load.
   - Body heat is balanced against the cold and the suit's evaporative cooler.

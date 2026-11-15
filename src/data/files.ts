@@ -138,6 +138,8 @@ export interface CreditsFile {
   intro: string;
   dataSources: { what: string; mission: string; instrument: string; product: string; provider: string; citation: string; credit: string }[];
   imageCredits: string[];
+  /** Sound and music credits (the Mars wind recording, the CC0 music). */
+  audioCredits?: string[];
   fiction: string;
   aiDisclosure: string[];
   noAffiliation: string;
