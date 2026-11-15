@@ -17,6 +17,7 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `jezero_base_1m.jpg`, `jezero_base_2m.jpg` | Base map photo, contrast-stretched | HiRISE 25 cm orthomosaic, USGS Mars 2020 TRN products ([DOI 10.5066/P9REJ9JN](https://doi.org/10.5066/P9REJ9JN)) |
 | `hillshade_2m.png` | Shaded relief, lit from the north-west | HiRISE 1 m DTM mosaic, same USGS release |
 | `overlay_slope_2m.png` | Slope bands: yellow ≥ 10°, orange ≥ 15°, red ≥ 25°, dark red ≥ 35° | HiRISE DTM |
+| `jezero_tile_25cm.jpg`, `jezero_tile_1m.jpg` + `terrain_tiles.json` | Sharper HiRISE photo tiles for the 3D view, drawn over `jezero_base_2m.jpg`: 25 cm per pixel (the mosaic's full resolution) for 512 × 512 m centred on the AER-1 cabin, and 1 m per pixel for 3072 × 2048 m from the cabin west to the rover's parking spots. Same contrast stretch as the base photo, so they blend without a seam. Optional: phones and data-saver connections skip them (1.8 MB together) | HiRISE 25 cm orthomosaic, same USGS release; built by `tools/data/bake_tiles.py`, which checks the 25 cm tile against the 1 m grid (correlation 0.998) |
 | `terrain_patch_2m.bin` + `terrain_patch_2m.json` | 2 m height tile, 1.6 × 1.6 km (800 × 800), centred on the AER-1 cabin, for the 3D walking view. Covers the cabin, descent stage, parachute, landing site and Ingenuity's airfield. True heights; matches the 10 m grid to 5 cm. Load with `src/data/terrainPatch.ts` (`loadTerrainPatch`, `patchHeightAt`) | HiRISE 1 m DTM mosaic, same USGS release; built by `tools/data/bake_patch.py` |
 | `layers_20m.json` | Slope, roughness, thermal inertia and terrain class for each 20 m cell | HiRISE DTM; THEMIS thermal inertia (Edwards & Buz 2021, [Zenodo 4931348](https://zenodo.org/record/4931348), CC-BY-4.0) |
 | `overlay_terrain_20m.png`, `overlay_thermal_inertia_20m.png` | Colour overlays of the two layers above | Same |
@@ -85,5 +86,6 @@ The scripts are in `tools/data/`. They expect a separate workspace with `raw/`, 
 7. `bake_patch.py WORK REPO` (2 m tile; needs `work/terrain/elevation_2m.npy` from step 1)
 8. `bake_extra.py VORTEX_PDF REPO` (relay and dust devils; the PDF is arXiv 2109.04601)
 9. `tools/audio/compose.py DOWNLOADS` (renders the title and storm music, about 3 minutes), then `tools/audio/bake_audio.py DOWNLOADS REPO` (music and the Mars wind loop; needs ffmpeg; the download links are the pages in `public/audio/audio.json`)
+10. `bake_tiles.py WORK REPO` (photo tiles for the 3D view; needs `work/terrain/ortho_1m.npy` from step 1, and reads the 25 cm tile from the USGS mosaic over the network)
 
 Parts of the data pipeline were written with help from Claude (an AI assistant). The original pack, story content and lander image were made with Antigravity (another AI agent).

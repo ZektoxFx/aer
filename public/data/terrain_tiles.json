@@ -1,0 +1,28 @@
+{
+ "source": "USGS Mars 2020 TRN HiRISE orthomosaic, 25 cm (DOI 10.5066/P9REJ9JN), resampled by tools/data/bake_tiles.py with the same contrast stretch as jezero_base_2m.jpg",
+ "use": "Sharper photo tiles for the 3D view, drawn over jezero_base_2m.jpg. Optional: the view works without them. Row 0 is the tile's north edge, column 0 its west edge.",
+ "frame": "Same frame as jezero_pack.json: metres from the map's north-west corner, x east, y south.",
+ "credit": "NASA/JPL-Caltech/University of Arizona, USGS Astrogeology Science Center",
+ "tiles": [
+  {
+   "file": "jezero_tile_1m.jpg",
+   "metresPerPixel": 1.0,
+   "x0M": 660.0,
+   "y0M": 1146.0,
+   "widthM": 3072.0,
+   "heightM": 2048.0,
+   "cols": 3072,
+   "rows": 2048
+  },
+  {
+   "file": "jezero_tile_25cm.jpg",
+   "metresPerPixel": 0.25,
+   "x0M": 2804.0,
+   "y0M": 1914.0,
+   "widthM": 512.0,
+   "heightM": 512.0,
+   "cols": 2048,
+   "rows": 2048
+  }
+ ]
+}

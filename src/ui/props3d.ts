@@ -329,10 +329,6 @@ export function buildCelestial() {
   rg.addColorStop(0.18, 'rgba(255,255,255,0.45)'); rg.addColorStop(0.5, 'rgba(255,255,255,0.08)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = rg; ctx.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(c);
-  const sunMat = new THREE.SpriteMaterial({ map: tex, color: cssColor('--fg'), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
-  const sunDisc = new THREE.Sprite(sunMat);
-  sunDisc.scale.setScalar(900);
-  sunDisc.renderOrder = 0;
 
   const N = 1600;
   const pos = new Float32Array(N * 3);
@@ -351,26 +347,18 @@ export function buildCelestial() {
   const earth = new THREE.Sprite(earthMat);
   earth.scale.setScalar(160);
   const earthDir = new THREE.Vector3(-0.5, 0.45, -0.75).normalize();
-  const fgC = cssColor('--fg'), lowC = cssColor('--warning');
 
   const group = new THREE.Group();
-  group.add(stars, earth, sunDisc);
-  const tmp = new THREE.Vector3();
-  /** `dir` points at the Sun (x east, y up, z south); `day` 0..1; `dust` 0..1. */
-  const update = (camPos: THREE.Vector3, dir: { x: number; y: number; z: number }, day: number, dust: number) => {
+  group.add(stars, earth);
+  /** `day` 0..1; `dust` 0..1. The Sun itself is drawn by the sky shader (sky3d.ts). */
+  const update = (camPos: THREE.Vector3, day: number, dust: number) => {
     group.position.copy(camPos);
-    sunDisc.position.copy(tmp.set(dir.x, dir.y, dir.z).multiplyScalar(5000));
-    // Fades as it sets and behind storm dust (the disc is barely seen at τ 8).
-    const up = THREE.MathUtils.clamp((dir.y + 0.04) / 0.08, 0, 1);
-    sunMat.opacity = up * (1 - 0.9 * dust);
-    sunDisc.scale.setScalar(700 + 900 * dust);
-    sunMat.color.copy(fgC).lerp(lowC, 1 - THREE.MathUtils.clamp(dir.y * 4, 0, 1));
     // Stars only once the Sun is well down (day < 0.35 is about 1° below the horizon), and not through dust.
     const night = THREE.MathUtils.clamp((0.35 - day) / 0.35, 0, 1) * (1 - dust);
     starMat.opacity = 0.9 * night;
     earth.position.copy(earthDir).multiplyScalar(5000);
     earthMat.opacity = night;
   };
-  const dispose = () => { tex.dispose(); starGeo.dispose(); starMat.dispose(); sunMat.dispose(); earthMat.dispose(); };
+  const dispose = () => { tex.dispose(); starGeo.dispose(); starMat.dispose(); earthMat.dispose(); };
   return { group, update, dispose };
 }
