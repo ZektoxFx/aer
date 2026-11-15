@@ -7,6 +7,9 @@
 //   ascent: a chase camera beside the rocket, the Earth curving away below, the sky going from blue to black, the
 //           plume widening in the thin air; main engine cut-off, stage separation, second stage ignition.
 // The ground curves with the Earth (each vertex drops by d²/2R). Colours come from the :root palette.
+// Since 15 Nov the air is dense, like a film launch: a thick cumulus deck with large weather systems, a thin high
+// layer above it, a bright blue haze over the ground from altitude, a broad glowing limb, and the rocket punches
+// through the deck (the chase camera flies through cloud).
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { ascentAt, downrangeAt, EVENTS, launchClock, launchEvent, LAUNCH_MS, pitchAt } from './launch';
@@ -125,7 +128,8 @@ export function LaunchScene({ active }: { active: boolean }) {
         void main(){ vec3 d = normalize(vD); float e = d.y + dip; float s = max(dot(d, sun), 0.0);
           vec3 c = mix(hor, zen, smoothstep(-0.02, 0.5, e));
           c = mix(c, warm, warmK * pow(s, 3.0) * (1.0 - smoothstep(0.0, 0.35, e)) * 0.75);   // dawn glow along the horizon
-          c += limb * limbK * exp(-abs(e) * 60.0);
+          c += limb * limbK * (exp(-abs(e) * 60.0) + exp(-max(e, 0.0) * 9.0) * 0.5);   // a broad blue band of air over the limb
+          c += sunC * limbK * exp(-abs(e) * 170.0) * 0.45;                              // its bright thin edge
           c += sunC * (pow(s, 1800.0) * 3.0 + pow(s, 24.0) * 0.25);
           gl_FragColor = vec4(c, 1.0); }`,
       side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
@@ -196,32 +200,55 @@ export function LaunchScene({ active }: { active: boolean }) {
 
     // ---- Clouds: a scattered deck at 2.5 km, lit from the low Sun ----
     const cloudMat = new THREE.ShaderMaterial({
-      uniforms: { uR: { value: EARTH_R }, uSun: { value: sunDir }, uC: { value: C.metal }, uShade: { value: C.dim.clone().lerp(C.sky, 0.3) }, uWarm: { value: C.warn }, uFade: { value: 1 } },
+      uniforms: {
+        uR: { value: EARTH_R }, uSun: { value: sunDir }, uC: { value: C.metal }, uShade: { value: C.dim.clone().lerp(C.sky, 0.45) }, uWarm: { value: C.warn }, uFade: { value: 1 },
+        uScale: { value: 1 }, uAlpha: { value: 0.95 }, uCover: { value: 0.5 }, uSeed: { value: new THREE.Vector2(0, 0) },
+      },
       vertexShader: CURVED_VERT,
       fragmentShader: `#include <logdepthbuf_pars_fragment>
         uniform vec3 uSun; uniform vec3 uC; uniform vec3 uShade; uniform vec3 uWarm; uniform float uFade;
+        uniform float uScale; uniform float uAlpha; uniform float uCover; uniform vec2 uSeed;
         varying vec2 vG; varying vec3 vW;
         ${NOISE}
         void main(){
           #include <logdepthbuf_fragment>
-          float n = fbm(vG / 2600.0 + vec2(3.0, 1.0)) * 0.7 + fbm(vG / 520.0) * 0.3;
-          float a = smoothstep(0.56, 0.72, n);
-          if (a < 0.01) discard;
-          float lit = smoothstep(0.56, 0.8, fbm(vG / 520.0 + uSun.xz * 0.6));
-          vec3 c = mix(uShade, uC, 0.4 + 0.6 * lit);
-          c = mix(c, uWarm, 0.18);
+          vec2 q = vG / uScale + uSeed;
           float d = length(vW - cameraPosition);
-          gl_FragColor = vec4(c, a * 0.92 * uFade * (1.0 - smoothstep(60000.0, 400000.0, d)));
+          // Weather systems tens of km across shape everything; cumulus cells and fine puffs sit inside them. The
+          // fine detail fades with distance, so from orbit height the cloud reads as big masses, not speckle.
+          float big = fbm(q / 60000.0 + vec2(7.0, 2.0)), mid = fbm(q / 9000.0 + vec2(1.0, 8.0));
+          float fineK = 1.0 - smoothstep(15000.0, 90000.0, d);
+          float n = big * 0.5 + mid * 0.3 + fbm(q / 2600.0 + vec2(3.0, 1.0)) * (0.12 + 0.13 * fineK) + fbm(q / 520.0) * 0.12 * fineK;
+          n /= 0.92 + 0.25 * fineK;
+          float lo = 0.6 - uCover * 0.22;
+          float a = smoothstep(lo, lo + 0.12, n);
+          if (a < 0.01) discard;
+          // Bright sunlit tops, blue-grey shade underneath, thicker cloud brighter.
+          float lit = smoothstep(0.45, 0.8, fbm(q / 520.0 + uSun.xz * 0.6));
+          float thick = smoothstep(lo, lo + 0.35, n);
+          vec3 c = mix(uShade, uC, 0.3 + 0.55 * lit + 0.25 * thick);
+          c = mix(c, uWarm, 0.14);
+          if (!gl_FrontFacing) c = mix(uShade, uC, 0.35 * thick) * 0.85;   // seen from below: grey undersides
+          gl_FragColor = vec4(c * 1.08, a * uAlpha * uFade * (1.0 - smoothstep(150000.0, 700000.0, d)));
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
-      transparent: true, depthWrite: false,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, // seen from the pad as an overcast deck above
     });
     const clouds = new THREE.Mesh(new THREE.PlaneGeometry(1.6e6, 1.6e6, 160, 160), cloudMat);
     clouds.rotation.x = -Math.PI / 2;
     clouds.position.y = 2500;
     clouds.frustumCulled = false;
     scene.add(clouds);
+    // A thin high layer (cirrus-like streaks at 9 km), larger and fainter, so the air looks deep from above.
+    const highMat = cloudMat.clone();
+    highMat.uniforms.uScale.value = 3.2; highMat.uniforms.uAlpha.value = 0.4; highMat.uniforms.uCover.value = 0.35;
+    highMat.uniforms.uSeed.value.set(41, 17);
+    const highClouds = new THREE.Mesh(new THREE.PlaneGeometry(1.6e6, 1.6e6, 120, 120), highMat);
+    highClouds.rotation.x = -Math.PI / 2;
+    highClouds.position.y = 9000;
+    highClouds.frustumCulled = false;
+    scene.add(highClouds);
 
     // ---- Light ----
     const sun = new THREE.DirectionalLight(C.fg.clone().lerp(C.warn, 0.35), 2.4);
@@ -364,6 +391,7 @@ export function LaunchScene({ active }: { active: boolean }) {
     const t0 = performance.now();
     let last = t0, raf = 0, alive = true, emitAcc = 0, ventAcc = 0;
     const zen = new THREE.Color(), hor = new THREE.Color(), fogC = new THREE.Color();
+    const hazeC = C.sky.clone().lerp(C.fg, 0.18);
     const groundCam = new THREE.Vector3(-520, 34, 430); // a camera site on a rise south-west of the pad
     const fwd = new THREE.Vector3(), side = new THREE.Vector3(0, 0, 1), camWant = new THREE.Vector3(), lookWant = new THREE.Vector3();
     const camPos = new THREE.Vector3(), look = new THREE.Vector3(), jitter = new THREE.Vector3(), tmp = new THREE.Vector3();
@@ -391,11 +419,17 @@ export function LaunchScene({ active }: { active: boolean }) {
       skyMat.uniforms.limbK.value = smooth(15_000, 70_000, alt) * 0.9;
       skyMat.uniforms.warmK.value = 1 - smooth(5_000, 50_000, alt) * 0.6;
       (stars.material as THREE.PointsMaterial).opacity = smooth(35_000, 90_000, alt) * 0.85;
-      fogC.copy(hor);
+      // Dense air: from height the ground sinks into a bright blue haze (the air seen edge-on is thick).
+      fogC.copy(hor).lerp(hazeC, smooth(3_000, 50_000, alt));
       groundMat.uniforms.uFog.value.copy(fogC);
-      groundMat.uniforms.uFogNear.value = 2_000 + alt * 0.6; groundMat.uniforms.uFogFar.value = 60_000 + alt * 7;
+      groundMat.uniforms.uFogNear.value = 2_000 + alt * 0.7; groundMat.uniforms.uFogFar.value = 60_000 + alt * 6;
       groundMat.uniforms.uTime.value = T;
       cloudMat.uniforms.uFade.value = 1;
+      // Punching through the deck: big soft cloud puffs ahead of the rocket while it crosses 2.1-3.3 km.
+      if (alt > 2100 && alt < 3300 && Math.random() < dt * 26) {
+        emit(tmp.copy(rocket.position).addScaledVector(fwd, 60 + Math.random() * 140).add(jitter.set((Math.random() - 0.5) * 110, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 110)),
+          new THREE.Vector3(0, 0, 0), 55 + Math.random() * 45, 12, 1.6 + Math.random() * 0.8);
+      }
       hemi.intensity = 0.7 - 0.45 * smooth(10_000, 80_000, alt);
       earthshine.intensity = 1.3 * smooth(3_000, 40_000, alt);
       earthshine.target.position.copy(rocket.position); earthshine.position.copy(rocket.position).add(tmp.set(0, -100, 40));
