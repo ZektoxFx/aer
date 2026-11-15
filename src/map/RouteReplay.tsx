@@ -19,6 +19,8 @@ interface Props {
   marks: ReplayMark[];
   /** Short attribution shown under the map. */
   credit: string;
+  /** Distance walked as the game counted it (the thinned trail reads a little short); defaults to the trail length. */
+  walkedM?: number;
   /** When given, a button saves the Survival Guide (map + these lines) as a PNG. */
   guide?: SurvivalGuide;
 }
@@ -63,6 +65,7 @@ function drawScene(
   }
   // Markers pop in one after another once the camera has risen a little.
   g.font = `600 11px ${FONT}`; g.textBaseline = 'middle';
+  const placed: { x: number; y: number; w: number }[] = [];
   p.marks.forEach((m, i) => {
     const a = clamp(markIn * (p.marks.length + 2) - i);
     if (a <= 0) return;
@@ -73,14 +76,18 @@ function drawScene(
     g.lineWidth = 1.5; g.strokeStyle = c.space; g.stroke();
     const tw = g.measureText(m.label).width;
     const lx = x + 9 + tw > W - 4 ? x - 9 - tw : x + 9;
-    g.fillStyle = c.space; g.globalAlpha = a * 0.7; g.fillRect(lx - 3, y - 8, tw + 6, 16);
-    g.globalAlpha = a; g.fillStyle = col; g.fillText(m.label, lx, y);
+    // Labels that would overlap an earlier one step down a line.
+    let ly = y;
+    while (placed.some((q) => Math.abs(q.y - ly) < 16 && lx < q.x + q.w + 6 && q.x < lx + tw + 6)) ly += 17;
+    placed.push({ x: lx, y: ly, w: tw });
+    g.fillStyle = c.space; g.globalAlpha = a * 0.7; g.fillRect(lx - 3, ly - 8, tw + 6, 16);
+    g.globalAlpha = a; g.fillStyle = col; g.fillText(m.label, lx, ly);
   });
   g.globalAlpha = 1;
 }
 
 /** Scale bar bottom-right, and the equivalent camera height top-left (a 60° lens seeing this much ground). */
-function drawOverlay(g: CanvasRenderingContext2D, W: number, H: number, mPerPx: number, walkedM: number, c: Palette) {
+function drawOverlay(g: CanvasRenderingContext2D, W: number, H: number, mPerPx: number, walkedM: number, c: Palette, camera = true) {
   g.font = `11px ${FONT}`; g.textBaseline = 'alphabetic';
   const len = niceM(mPerPx * W * 0.18), px = len / mPerPx;
   g.fillStyle = c.space; g.globalAlpha = 0.6; g.fillRect(W - px - 22, H - 30, px + 14, 22); g.globalAlpha = 1;
@@ -88,9 +95,10 @@ function drawOverlay(g: CanvasRenderingContext2D, W: number, H: number, mPerPx: 
   g.fillStyle = c.fg; g.textAlign = 'right'; g.fillText(len >= 1000 ? `${len / 1000} km` : `${len} m`, W - 15, H - 17);
   const heightM = mPerPx * W * 0.866;
   g.textAlign = 'left';
-  g.fillStyle = c.space; g.globalAlpha = 0.6; g.fillRect(8, 8, 230, 38); g.globalAlpha = 1;
-  g.fillStyle = c.fg; g.fillText(`CAMERA  ${heightM >= 1000 ? `${(heightM / 1000).toFixed(1)} km` : `${Math.round(heightM)} m`} up`, 14, 23);
-  g.fillText(`ROUTE   ${walkedM >= 1000 ? `${(walkedM / 1000).toFixed(2)} km` : `${Math.round(walkedM)} m`} walked`, 14, 39);
+  g.fillStyle = c.space; g.globalAlpha = 0.6; g.fillRect(8, 8, 230, camera ? 38 : 22); g.globalAlpha = 1;
+  g.fillStyle = c.fg;
+  if (camera) g.fillText(`CAMERA  ${heightM >= 1000 ? `${(heightM / 1000).toFixed(1)} km` : `${Math.round(heightM)} m`} up`, 14, 23);
+  g.fillText(`ROUTE   ${walkedM >= 1000 ? `${(walkedM / 1000).toFixed(2)} km` : `${Math.round(walkedM)} m`} walked`, 14, camera ? 39 : 23);
 }
 
 export function RouteReplay(props: Props) {
@@ -109,7 +117,7 @@ export function RouteReplay(props: Props) {
     // If the photo arrives after the replay has settled, draw the settled frame once more.
     if (img) img.onload = () => { if (alive) { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); } };
     imgRef.current = img;
-    const walked = trailLength(props.trail);
+    const walked = props.walkedM ?? trailLength(props.trail);
     let raf = 0, t0 = 0, alive = true;
     const frame = (ms: number) => {
       if (!alive) return;
@@ -128,8 +136,9 @@ export function RouteReplay(props: Props) {
       if (t < REPLAY_S + 1.5) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    let observed = false; // the observer fires once on start; only real resizes skip to the settled view
-    const ro = new ResizeObserver(() => { if (!observed) { observed = true; return; } cancelAnimationFrame(raf); t0 = performance.now() - (REPLAY_S + 1.4) * 1000; raf = requestAnimationFrame(frame); });
+    // Only a change of width (a real resize) skips to the settled view; the canvas setting its own height does not.
+    let lastW = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth === lastW) return; lastW = el.clientWidth; cancelAnimationFrame(raf); t0 = performance.now() - (REPLAY_S + 1.4) * 1000; raf = requestAnimationFrame(frame); });
     ro.observe(el);
     return () => { alive = false; cancelAnimationFrame(raf); ro.disconnect(); };
     // The replay runs once per mount; later prop changes are read through `live`.
@@ -151,7 +160,7 @@ export function RouteReplay(props: Props) {
     g.fillStyle = c.fg; g.font = `600 40px ${FONT}`; g.fillText(guide.title, 40, 110);
     g.save(); g.translate(0, 140);
     drawScene(g, W, mapH, { cx: p.area.widthM / 2, cy: p.area.heightM / 2, mPerPx: p.area.widthM / W }, 1, 1, imgRef.current, p, c, 0);
-    drawOverlay(g, W, mapH, p.area.widthM / W, trailLength(p.trail), c);
+    drawOverlay(g, W, mapH, p.area.widthM / W, p.walkedM ?? trailLength(p.trail), c, false);
     g.restore();
     let y = 140 + mapH + 50;
     g.font = `20px ${FONT}`;

@@ -731,7 +731,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const t = takeHome(st, found, bag.salvaged);
     return (
       <RouteReplay
-        imageUrl={pack.imageUrl} area={pack.area} trail={st.trail} end={st.trail[st.trail.length - 1] ?? base} marks={marks}
+        imageUrl={pack.imageUrl} area={pack.area} trail={st.trail} walkedM={st.walkedM} end={st.trail[st.trail.length - 1] ?? base} marks={marks}
         credit="Your route on HiRISE orbital imagery of Jezero crater (USGS Mars 2020 TRN mosaic, archived)"
         guide={endCard.result === 'won' ? {
           title: `${t.walkedM >= 1000 ? `${(t.walkedM / 1000).toFixed(2)} km` : `${t.walkedM} m`} walked · rescued on day ${clockLabel(endCard.atMin).sol}`,

@@ -53,7 +53,8 @@ export const REPLAY_S = 5.5;
 /** Width of ground in view at the start, metres (close over the astronaut). */
 export const START_VIEW_M = 260;
 
-const ease = (x: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 3);
+/** Ease in and out: the camera lifts off gently, climbs, then settles. */
+const ease = (x: number) => { const v = Math.max(0, Math.min(1, x)); return v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2; };
 
 /**
  * The view at replay time `t`: the map point at the centre of the frame and metres per screen pixel.
