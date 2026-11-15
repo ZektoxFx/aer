@@ -23,7 +23,8 @@ import {
   type ActionId, type CauseId, type Sol1State,
 } from './sol1';
 import { Sol1Panel } from './Sol1Panel';
-import { browserStorage, hudKeyAction } from './settings';
+import { browserStorage, hudKeyAction, loadSettings, saveSettings } from './settings';
+import { createGameAudio, type GameAudio, type GameCue } from './gameAudio';
 import { distM, planFromRoute, planHome, walkAt, type WalkPlan } from './walk';
 import { activityFor, basePoint, inCabinZone, type MoveResult } from './movement';
 // three.js is big: load the 3D view on demand so the title screen opens fast (#40).
@@ -105,6 +106,24 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const [roverInfoClosed, setRoverInfoClosed] = useState(false);
   /** The clock holds while an info card is open. */
   const infoHoldRef = useRef(false);
+  // Game sound (3D only, gameAudio.ts): wind and storm from the environment, the suit's fan and breathing, footsteps,
+  // and cues for actions. The Sound setting (title screen, or MENU / M in game) turns it all off.
+  const [soundOn, setSoundOn] = useState(() => loadSettings(browserStorage()).sound);
+  const audioRef = useRef<GameAudio | null>(null);
+  useEffect(() => {
+    if (mode !== '3d' || !soundOn) return;
+    const a = createGameAudio();
+    audioRef.current = a;
+    return () => { a?.dispose(); audioRef.current = null; };
+  }, [mode, soundOn]);
+  const sfx = (c: GameCue) => audioRef.current?.cue(c);
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    const st = browserStorage();
+    saveSettings({ ...loadSettings(st), sound: next }, st);
+  };
+  const onStep3d = useCallback((run: boolean) => audioRef.current?.step(run), []);
   const [o2Hidden, setO2Hidden] = useState<{ level: 'low' | 'critical'; untilMin: number } | null>(null);
   // Pickups and the pack (3D): what is in reach, what is carried, and which manual page is open.
   const [bag, setBagState] = useState<Pack>(EMPTY_PACK);
@@ -545,7 +564,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const it = nearRef.current;
     if (!it) return;
     const r = pickUp(bagRef.current, it, data.content);
-    if (!r.ok) { setToast(`Backpack full (${BACKPACK_MAX_KG} kg). Drop something, or store it at the ship.`); return; }
+    if (!r.ok) { sfx('blocked'); setToast(`Backpack full (${BACKPACK_MAX_KG} kg). Drop something, or store it at the ship.`); return; }
+    sfx('pickup');
     setBag(r.pack);
     nearRef.current = null; setNear(null);
     const e = r.entry;
@@ -564,7 +584,8 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const r = applySupply(list, id, game.current.suit, FULL_SUIT);
     if (!e || !r) return;
     const got = givesLabel(r.added);
-    if (!got) { setToast(`The suit is already full. Kept the ${e.name.toLowerCase()} for later.`); return; }
+    if (!got) { sfx('blocked'); setToast(`The suit is already full. Kept the ${e.name.toLowerCase()} for later.`); return; }
+    sfx((r.added.o2Kg ?? 0) > 0 ? 'use-o2' : (r.added.liohKg ?? 0) > 0 ? 'use-lioh' : (r.added.waterKg ?? 0) > 0 ? 'use-water' : 'use-battery');
     game.current = { ...game.current, suit: r.suit };
     if (where === 'pack') setBag({ ...bagRef.current, entries: r.entries });
     else setShip({ ...shipRef.current, stored: r.entries });
@@ -581,9 +602,11 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     if (inPack) { applyFrom('pack', inPack.id); return; }
     const inShip = storeAt ? shipRef.current.stored.find((e) => gives(e, q.key)) : undefined;
     if (inShip) { applyFrom('ship', inShip.id); return; }
+    sfx('blocked');
     setToast(`No ${q.name} in your pack${storeAt ? ' or the ship' : ''}. Find one on the map (light beams mark supplies).`);
   };
   const dropFromBag = (id: string) => {
+    sfx('drop');
     const e = bagRef.current.entries.find((x) => x.id === id);
     setBag(drop(bagRef.current, id, moveRef.current?.pos ?? astronaut ?? base));
     if (e) setToast(`Put ${e.name} down here. Walk up to it and press F to take it again.`);
@@ -592,6 +615,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const storeInShip = (id?: string) => {
     const r = id ? store(bagRef.current, shipRef.current, id) : storeAll(bagRef.current, shipRef.current);
     const left = r.pack.entries.length;
+    sfx(r.pack === bagRef.current ? 'blocked' : 'store');
     setBag(r.pack); setShip(r.ship);
     if (id) setToast(r.pack === bagRef.current ? lockerFull : 'Stored in the ship.');
     else setToast(left ? `Stored what fits. ${lockerFull}` : 'Everything is stored in the ship. Rocket pieces were broken down into materials.');
@@ -632,6 +656,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const kit = job.id === COMMS_LINK_ID;
     const r = doBuild(job, bagRef.current, shipRef.current, kit ? commsLinkEntry(job.name) : undefined);
     if (!r) return;
+    sfx('done');
     setBag(r.pack); setShip(r.ship);
     passMinutes(job.minutes);
     if (!kit) setToast(`${job.name}: done after ${job.minutes} min. ${job.does}`);
@@ -647,13 +672,14 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     const pass = passNow(game.current.clockMin);
     const stage = callStage(linkedRef.current, hasCommsLink(bagRef.current), pass);
     if (stage === 'connect') {
-      setBag(installLink(bagRef.current)); setLinked(true);
+      setBag(installLink(bagRef.current)); setLinked(true); sfx('done');
       passMinutes(5);
       setToast("Perseverance's radio link is repaired. Now wait for an orbiter to pass overhead.");
     } else if (stage === 'wait' && pass) {
       passMinutes(Math.ceil(pass.inMin) + 1);
     } else if (stage === 'send' && pass) {
       endRef.current = true;
+      sfx('call');
       setCalled(true);
       setEndCard({ result: 'won', atMin: game.current.clockMin, onMarsMin: game.current.clockMin - (runStartRef.current ?? game.current.clockMin), orbiter: pass.orbiter, stats: snapStats(statsRef.current) });
       setPaused(true);
@@ -677,6 +703,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   const repairNow = (rp: Repair) => {
     const r = doRepair(rp, bagRef.current, shipRef.current);
     if (!r) return;
+    sfx('done');
     setBag(r.pack); setShip(r.ship);
     passMinutes(rp.minutes); // the work takes time, in the cabin
     setToast(`${rp.name}: done after ${rp.minutes} min. ${rp.does}`);
@@ -698,6 +725,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
       if (k === 'i') { setPackOpen((o) => !o); setMenuOpen(false); return; }
       if (k in QUICK_USE) { if (!workRef.current) quickUse(k); return; }
       if (k === 'j') { setJournalOpen((o) => !o); return; }
+      if (k === 'm') { toggleSound(); return; }
       if (k === 'escape' && readPage !== null) { closePage(); return; }
     }
     const action = hudKeyAction(e.key);
@@ -723,6 +751,21 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
   // From the sim, so it counts the suit charging in the cabin; the crash leak (applied in step) shortens the O₂ time.
   const leaking = !mission && suitLeaking(ship);
   const fc = leaking ? { ...frame.forecast, o2Min: frame.forecast.o2Min / (1 + SUIT_LEAK) } : frame.forecast;
+  // Sound follows the game about 15 times a second (each HUD frame): wind, storm, night, cabin, effort, CO₂.
+  const soundPaused = paused || work !== null || endCard !== null || credits !== null || roverInfoOpen;
+  useEffect(() => {
+    audioRef.current?.update({
+      windMS: frame.env.windMS ?? 0, storm: stormStrength(frame.env.tau), night: sunElevationDeg(s.clockMin, s.sky) < 0,
+      inCabin: s.shelter === 'cabin', effortW: metabolicW(s.activity), co2KPa: s.suit.inspiredPCO2KPa, paused: soundPaused,
+    });
+  }, [frame, soundPaused]); // eslint-disable-line react-hooks/exhaustive-deps
+  const o2Alarm: 'low' | 'critical' | null = mode !== '3d' || endCard || mission ? null
+    : s.suit.o2Kg <= 0 || fc.o2Min < 10 ? 'critical' : fc.o2Min < 30 ? 'low' : null;
+  useEffect(() => { audioRef.current?.alarm(o2Alarm); }, [o2Alarm, soundOn]);
+  useEffect(() => { audioRef.current?.work(work !== null); }, [work, soundOn]);
+  useEffect(() => { if (roverInfoOpen) audioRef.current?.cue('rover'); }, [roverInfoOpen]);
+  const stormWarning = !!s.storm && stormPhase(s.storm, s.clockMin) === 'warning';
+  useEffect(() => { if (stormWarning) audioRef.current?.cue('storm-warning'); }, [stormWarning]);
   const hero = firstToRunOut(fc);
   const clock = clockLabel(s.clockMin);
   const critical = frame.warnings.some((w) => w.level === 'critical');
@@ -752,6 +795,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
     else if (id === 'storm') triggerStorm();
     else if (id === 'skip') skipHour();
     else if (id === 'restart') restart();
+    else if (id === 'sound') toggleSound();
     else if (id === 'credits') { setPaused(true); setCredits('menu'); }
     else if (id === 'howto') { setHowToOpen(true); hintOnRef.current = true; setHintOn(true); }
     else if ((id === 'hud' || id === 'telemetry') && onView) onView(id);
@@ -1018,7 +1062,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
         <World3D
           pack={pack} base={base} timeScale={timeScale} follow={walk && walk.stoppedAt === null ? followWalk : undefined} placeKey={placeKey}
           startPos={astronaut} moveLocked={mission !== null || flow !== null || work !== null}
-          sunDir={sun.dir} baseLook={baseLook} working={work !== null}
+          sunDir={sun.dir} baseLook={baseLook} working={work !== null} onStep={onStep3d}
           rover={roverItem ? { at: roverItem.at, visible: roverSeen, linked, called } : null}
           tau={frame.env.tau} sunElevationDeg={sunElevationDeg(s.clockMin, s.sky)} onMove={onMove3d}
           onLookChange={setLookLocked} view={view} dustDevils={stormActive ? 0 : dustDevilsInView(s.clockMin, data.devils)}
@@ -1163,6 +1207,7 @@ export function Hud({ data, mode = '2d', onView }: { data: GameData; mode?: '2d'
               ['SKIP +1 HOUR (TEST)', 'skip', false],
               ['RESTART AT THE CABIN', 'restart', false],
               ['HOW TO PLAY', 'howto', false],
+              [soundOn ? 'SOUND: ON (M)' : 'SOUND: OFF (M)', 'sound', false],
               ['CREDITS', 'credits', false],
               ...(onView ? [['SWITCH TO 2D HUD', 'hud', false], ['TELEMETRY CHARTS', 'telemetry', false]] as const : []),
             ] as const).map(([label, id, disabled]) => (

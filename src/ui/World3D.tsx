@@ -48,6 +48,8 @@ export interface World3DProps {
   rover?: { at: Pt; visible: boolean; linked: boolean; called: boolean } | null;
   /** A repair or build is under way: the astronaut kneels at the job and sparks fly. */
   working?: boolean;
+  /** Called on each footfall of the walk animation (for footstep sounds); `run` when running. */
+  onStep?: (run: boolean) => void;
   /** Map: where the quest guide wants the player to go (a light pillar and an on-screen marker). */
   questTarget?: { at: Pt; label: string } | null;
 }
@@ -206,7 +208,7 @@ export function World3D(props: World3DProps) {
     // ---- Player and camera state ----
     const start = { x: base.x + 8, y: base.y + 6 };
     let me: Pt = live.current.startPos ?? start; // open where the astronaut is, not back at the lander (#40)
-    let heading = 0, shownHeading = 0, phase = 0, moveBlend = 0, workBlend = 0;
+    let heading = 0, shownHeading = 0, phase = 0, moveBlend = 0, workBlend = 0, footfall = 0;
     let yawT = 0, pitchT = 0.32, distT = 16;
     let yaw = yawT, pitch = pitchT, dist = distT;
     let camPos: THREE.Vector3 | null = null;
@@ -369,6 +371,8 @@ export function World3D(props: World3DProps) {
       const gx = me.x - W2, gz = me.y - H2, gy = terrain.surfaceY(gx, gz);
       moveBlend += ((m.moving ? 1 : 0) - moveBlend) * ease(8, dt);
       if (m.moving) phase += dt * (m.speedMS > 1.5 ? 13 : 8) * Math.max(0.4, ramp || 1);
+      // A footfall each half stride of the walk animation (so footstep sounds match the legs, whatever the warp).
+      if (m.moving && Math.floor(phase / Math.PI) !== footfall) { footfall = Math.floor(phase / Math.PI); P.onStep?.(m.speedMS > 1.5); }
       // Repairs: face the lander and kneel at the job.
       workBlend += ((P.working ? 1 : 0) - workBlend) * ease(5, dt);
       if (P.working) heading = Math.atan2(base.x - me.x, -(base.y - me.y));
