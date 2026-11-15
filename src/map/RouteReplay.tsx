@@ -2,10 +2,13 @@
 // over where the game ended and pulls back until the whole map is in frame, while the route actually walked draws
 // itself from the crash site. NASA sites salvaged, findings and Perseverance pop in as markers along the way.
 // When it settles it doubles as the map of the Survival Guide card, which can be saved as a PNG.
+// Race Perseverance: the rover's real drive (pois.json traverse, NASA/JPL MMGIS) draws beside yours, metre for
+// metre, with the sol it reached each point, so the card can say on which sol the rover had driven as far as you.
 // Colours come from the :root palette (read at mount).
 import { useEffect, useRef } from 'react';
 import type { Pt } from './geo';
-import { REPLAY_S, replayView, trailCut, trailLength } from './replayPath';
+import type { PoiFile } from '../data/files';
+import { REPLAY_S, replayView, roverCut, roverPath, roverSolAt, trailCut, trailLength, type RoverPath } from './replayPath';
 
 export interface ReplayMark { at: Pt; label: string; tone: 'start' | 'site' | 'finding' | 'goal' }
 export interface SurvivalGuide { title: string; rows: [string, string][]; findings: string[]; note: string }
@@ -43,6 +46,7 @@ function niceM(want: number): number {
 function drawScene(
   g: CanvasRenderingContext2D, W: number, H: number, view: { cx: number; cy: number; mPerPx: number },
   frac: number, markIn: number, img: HTMLImageElement | null, p: Props, c: Palette, now: number,
+  rover: RoverPath | null = null, roverM = 0,
 ) {
   const sx = (x: number) => (x - view.cx) / view.mPerPx + W / 2;
   const sy = (y: number) => (y - view.cy) / view.mPerPx + H / 2;
@@ -50,6 +54,23 @@ function drawScene(
   if (img?.complete && img.naturalWidth) g.drawImage(img, sx(0), sy(0), p.area.widthM / view.mPerPx, p.area.heightM / view.mPerPx);
   g.fillStyle = c.space; g.globalAlpha = 0.18; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
 
+  // Perseverance's real drive up to the same distance, under your route (blue).
+  let roverHead: { x: number; y: number; label: string } | null = null;
+  if (rover && rover.legs.length) {
+    const r = roverCut(rover, roverM);
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    const path = () => { g.beginPath(); for (const leg of r.legs) leg.forEach((q, i) => (i ? g.lineTo(sx(q.x), sy(q.y)) : g.moveTo(sx(q.x), sy(q.y)))); };
+    path(); g.strokeStyle = c.earth; g.globalAlpha = 0.3; g.lineWidth = 6; g.stroke();
+    path(); g.globalAlpha = 0.95; g.lineWidth = 1.6; g.stroke(); g.globalAlpha = 1;
+    if (r.head && r.sol !== null) {
+      const hx = sx(r.head.x), hy = sy(r.head.y);
+      g.beginPath(); g.arc(hx, hy, frac < 1 ? 4 + 2 * Math.sin(now * 8) : 4, 0, Math.PI * 2); g.fillStyle = c.earth; g.fill();
+      g.lineWidth = 1.5; g.strokeStyle = c.space; g.stroke();
+      // Earth year of that sol (landing 18 Feb 2021; a sol is 1.0275 days), so it reads as history, not the game's rover.
+      const year = new Date(Date.UTC(2021, 1, 18) + r.sol * 1.0275 * 86400000).getUTCFullYear();
+      roverHead = { x: hx, y: hy, label: `REAL DRIVE ${year} · SOL ${r.sol}` };
+    }
+  }
   // The route: a wide soft glow under a bright core, with a pulsing head while it is still drawing.
   const route = trailCut(p.trail, frac);
   if (route.length > 1) {
@@ -84,10 +105,26 @@ function drawScene(
     g.globalAlpha = a; g.fillStyle = col; g.fillText(m.label, lx, ly);
   });
   g.globalAlpha = 1;
+  if (roverHead) {
+    g.font = `600 11px ${FONT}`; g.textBaseline = 'middle';
+    const tw = g.measureText(roverHead.label).width;
+    const lx = roverHead.x - 9 - tw < 4 ? roverHead.x + 9 : roverHead.x - 9 - tw;
+    let ly = roverHead.y;
+    while (placed.some((q) => Math.abs(q.y - ly) < 16 && lx < q.x + q.w + 6 && q.x < lx + tw + 6)) ly -= 17;
+    g.fillStyle = c.space; g.globalAlpha = 0.75; g.fillRect(lx - 3, ly - 8, tw + 6, 16);
+    g.globalAlpha = 1; g.fillStyle = c.earth; g.fillText(roverHead.label, lx, ly);
+  }
 }
 
 /** Scale bar bottom-right, and the equivalent camera height top-left (a 60° lens seeing this much ground). */
-function drawOverlay(g: CanvasRenderingContext2D, W: number, H: number, mPerPx: number, walkedM: number, c: Palette, camera = true) {
+/** What the race line in the corner says once the rover is loaded. */
+function raceLine(rover: RoverPath | null, walkedM: number): string | null {
+  if (!rover || !rover.legs.length) return null;
+  const sol = roverSolAt(rover, walkedM), last = rover.legs[rover.legs.length - 1].sol;
+  return sol !== null ? `ROVER   same distance by sol ${sol}` : `ROVER   ${(rover.totalM / 1000).toFixed(1)} km here by sol ${last}`;
+}
+
+function drawOverlay(g: CanvasRenderingContext2D, W: number, H: number, mPerPx: number, walkedM: number, c: Palette, camera = true, race: string | null = null) {
   g.font = `11px ${FONT}`; g.textBaseline = 'alphabetic';
   const len = niceM(mPerPx * W * 0.18), px = len / mPerPx;
   g.fillStyle = c.space; g.globalAlpha = 0.6; g.fillRect(W - px - 22, H - 30, px + 14, 22); g.globalAlpha = 1;
@@ -95,16 +132,19 @@ function drawOverlay(g: CanvasRenderingContext2D, W: number, H: number, mPerPx: 
   g.fillStyle = c.fg; g.textAlign = 'right'; g.fillText(len >= 1000 ? `${len / 1000} km` : `${len} m`, W - 15, H - 17);
   const heightM = mPerPx * W * 0.866;
   g.textAlign = 'left';
-  g.fillStyle = c.space; g.globalAlpha = 0.6; g.fillRect(8, 8, 230, camera ? 38 : 22); g.globalAlpha = 1;
+  const lines = (camera ? 2 : 1) + (race ? 1 : 0);
+  g.fillStyle = c.space; g.globalAlpha = 0.6; g.fillRect(8, 8, 250, 6 + lines * 16); g.globalAlpha = 1;
   g.fillStyle = c.fg;
   if (camera) g.fillText(`CAMERA  ${heightM >= 1000 ? `${(heightM / 1000).toFixed(1)} km` : `${Math.round(heightM)} m`} up`, 14, 23);
   g.fillText(`ROUTE   ${walkedM >= 1000 ? `${(walkedM / 1000).toFixed(2)} km` : `${Math.round(walkedM)} m`} walked`, 14, camera ? 39 : 23);
+  if (race) { g.fillStyle = c.earth; g.fillText(race, 14, camera ? 55 : 39); }
 }
 
 export function RouteReplay(props: Props) {
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const roverRef = useRef<RoverPath | null>(null);
   const live = useRef(props);
   useEffect(() => { live.current = props; });
 
@@ -119,6 +159,12 @@ export function RouteReplay(props: Props) {
     imgRef.current = img;
     const walked = props.walkedM ?? trailLength(props.trail);
     let raf = 0, t0 = 0, alive = true;
+    // The rover's real drive (already cached: the map loaded pois.json at start). The race joins in when it lands.
+    fetch('/data/pois.json').then((r) => r.json() as Promise<PoiFile>).then((f) => {
+      if (!alive || !Array.isArray(f.traverse)) return;
+      roverRef.current = roverPath(f.traverse);
+      cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
+    }).catch(() => { /* no race without the file; the replay still works */ });
     const frame = (ms: number) => {
       if (!alive) return;
       if (!t0) t0 = ms;
@@ -130,8 +176,9 @@ export function RouteReplay(props: Props) {
       if (!g || W === 0) { raf = requestAnimationFrame(frame); return; }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       const view = replayView(t, p.end, p.area, W, H);
-      drawScene(g, W, H, view, clamp(t / (REPLAY_S * 0.85)), clamp((view.f - 0.25) / 0.6), img, p, c, t);
-      drawOverlay(g, W, H, view.mPerPx, walked, c);
+      const frac = clamp(t / (REPLAY_S * 0.85)), rover = roverRef.current;
+      drawScene(g, W, H, view, frac, clamp((view.f - 0.25) / 0.6), img, p, c, t, rover, frac * walked);
+      drawOverlay(g, W, H, view.mPerPx, walked, c, true, frac >= 1 ? raceLine(rover, walked) : null);
       // Keep animating through the pull-back, then a little longer for the last markers; then hold still.
       if (t < REPLAY_S + 1.5) raf = requestAnimationFrame(frame);
     };
@@ -159,8 +206,9 @@ export function RouteReplay(props: Props) {
     g.fillStyle = c.warning; g.font = `600 18px ${FONT}`; g.fillText('AER · INTERPLANETARY SURVIVAL GUIDE · JEZERO CRATER, MARS', 40, 56);
     g.fillStyle = c.fg; g.font = `600 40px ${FONT}`; g.fillText(guide.title, 40, 110);
     g.save(); g.translate(0, 140);
-    drawScene(g, W, mapH, { cx: p.area.widthM / 2, cy: p.area.heightM / 2, mPerPx: p.area.widthM / W }, 1, 1, imgRef.current, p, c, 0);
-    drawOverlay(g, W, mapH, p.area.widthM / W, p.walkedM ?? trailLength(p.trail), c, false);
+    const walkedM = p.walkedM ?? trailLength(p.trail);
+    drawScene(g, W, mapH, { cx: p.area.widthM / 2, cy: p.area.heightM / 2, mPerPx: p.area.widthM / W }, 1, 1, imgRef.current, p, c, 0, roverRef.current, walkedM);
+    drawOverlay(g, W, mapH, p.area.widthM / W, walkedM, c, false, raceLine(roverRef.current, walkedM));
     g.restore();
     let y = 140 + mapH + 50;
     g.font = `20px ${FONT}`;
@@ -177,7 +225,7 @@ export function RouteReplay(props: Props) {
     }
     y += 30; g.fillStyle = c.fg; g.font = `italic 18px ${FONT}`; g.fillText(guide.note, 40, y);
     g.fillStyle = c.dim; g.font = `13px ${FONT}`;
-    g.fillText('Map: HiRISE orthomosaic, USGS Mars 2020 TRN (archived NASA data, not live). Story and rescue are game fiction.', 40, H - 40);
+    g.fillText('Map: HiRISE orthomosaic, USGS Mars 2020 TRN. Blue: Perseverance traverse, NASA/JPL MMGIS (archived, not live). Story is fiction.', 40, H - 40);
     g.fillText('NASA Space Apps 2026 · Interplanetary Survival Guide: Martian Map', 40, H - 20);
     cv.toBlob((b) => {
       if (!b) return;
@@ -193,6 +241,7 @@ export function RouteReplay(props: Props) {
       <canvas ref={canvas} aria-label="Your route on the HiRISE map of Jezero crater" />
       <figcaption>
         <span>{props.credit}</span>
+        <span className="route-race-note">Blue: Perseverance's real drive (NASA/JPL MMGIS), shown at the same distance as yours. It stops to study rocks, so it is slow on purpose.</span>
         {props.guide && <button className="choice-btn route-save" onClick={save}>SAVE SURVIVAL GUIDE (PNG)</button>}
       </figcaption>
     </figure>

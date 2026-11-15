@@ -69,3 +69,43 @@ export function replayView(t: number, end: Pt, area: { widthM: number; heightM: 
   const mid = { x: area.widthM / 2, y: area.heightM / 2 };
   return { cx: end.x + (mid.x - end.x) * f, cy: end.y + (mid.y - end.y) * f, mPerPx, f };
 }
+
+// ---- Race Perseverance: the rover's real drive (pois.json `traverse`, NASA/JPL MMGIS) drawn beside your route. ----
+
+/** One sol of the rover's drive, as baked in pois.json (map metres, x east, y south). */
+export interface RoverDrive { sol: number; pointsXY: [number, number][] }
+/** The drive flattened for drawing: one polyline per sol with the distance driven before it. */
+export interface RoverPath { legs: { sol: number; pts: Pt[]; startM: number; lenM: number }[]; totalM: number }
+
+/** Order the drives by sol and add up distance. Gaps between sols (the track leaves the map) are not counted. */
+export function roverPath(drives: RoverDrive[]): RoverPath {
+  let at = 0;
+  const legs = [...drives].sort((a, b) => a.sol - b.sol).map((d) => {
+    const pts = d.pointsXY.map(([x, y]) => ({ x, y }));
+    const lenM = trailLength(pts), leg = { sol: d.sol, pts, startM: at, lenM };
+    at += lenM;
+    return leg;
+  });
+  return { legs, totalM: at };
+}
+
+/** The sol on which the rover's total drive first reached `distM`, or null if it never drove that far here. */
+export function roverSolAt(path: RoverPath, distM: number): number | null {
+  if (distM <= 0) return path.legs[0]?.sol ?? null;
+  const leg = path.legs.find((l) => l.startM + l.lenM >= distM);
+  return leg ? leg.sol : null;
+}
+
+/** The rover's polylines up to `distM` driven (the last one cut part-way), plus where it is and on which sol. */
+export function roverCut(path: RoverPath, distM: number): { legs: Pt[][]; head: Pt | null; sol: number | null } {
+  const out: Pt[][] = [];
+  let head: Pt | null = null, sol: number | null = null;
+  for (const l of path.legs) {
+    if (l.startM >= distM && out.length) break;
+    const pts = l.startM + l.lenM <= distM ? l.pts : trailCut(l.pts, l.lenM > 0 ? (distM - l.startM) / l.lenM : 1);
+    out.push(pts);
+    head = pts[pts.length - 1] ?? head;
+    sol = l.sol;
+  }
+  return { legs: out, head, sol };
+}

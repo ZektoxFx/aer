@@ -431,6 +431,7 @@
 .route-replay figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
   font-size: 10px; color: color-mix(in srgb, var(--fg) 60%, transparent); }
 .route-save { font-size: 11px; }
+.route-race-note { flex-basis: 100%; order: 2; font-size: 11px; color: var(--earth-glow); opacity: 0.85; }
 
 /* ---- Earth's reply after the light delay (EarthReply.tsx) ---- */
 .earth-reply { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px;
