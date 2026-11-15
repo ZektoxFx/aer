@@ -54,6 +54,10 @@ export interface World3DProps {
 
 /** Mouse-look sensitivity, radians per pixel. */
 const LOOK_SENS = 0.0022;
+/** Hover look (no click) is gentler than captured-cursor look, so crossing the view to reach the HUD barely turns it. */
+const HOVER_SENS = 0.7;
+/** Side bands of the view (fraction of its width) where a resting cursor keeps the camera turning. */
+const EDGE_TURN = 0.06;
 const PITCH_MIN = 0.06, PITCH_MAX = 1.25;
 /** LOCAL DRAFT: first-person eye height (m above the ground) and field of view in each mode. */
 const EYE_M = 1.62, FOV_THIRD = 55, FOV_FIRST = 68;
@@ -245,13 +249,24 @@ export function World3D(props: World3DProps) {
         if (req instanceof Promise) req.catch(() => {});
       } catch { /* not allowed here: dragging still works */ }
     };
+    // Hover look: with the cursor over the 3D view (not over the HUD), moving the mouse turns the camera, no click
+    // needed. Resting the cursor near the left or right edge keeps turning (handled in the frame loop).
+    let hoverX = -1; // cursor x as a fraction of the view width, −1 when it is not over the view
     const pmove = (e: PointerEvent) => {
       if (locked()) return turn(e.movementX, e.movementY);
-      if (!dragging) return;
+      if (!dragging) {
+        if (e.target === canvas && e.pointerType === 'mouse') {
+          turn(e.movementX * HOVER_SENS, e.movementY * HOVER_SENS);
+          const r = canvas.getBoundingClientRect();
+          hoverX = (e.clientX - r.left) / Math.max(1, r.width);
+        } else hoverX = -1;
+        return;
+      }
       turn((e.clientX - lastX) * 2.2, (e.clientY - lastY) * 2.2);
       lastX = e.clientX; lastY = e.clientY;
     };
     const pup = () => { dragging = false; };
+    const pleave = () => { hoverX = -1; };
     const lockChange = () => { dragging = false; live.current.onLookChange?.(locked()); };
     const wheel = (e: WheelEvent) => { e.preventDefault(); if (live.current.view === 'first') return; distT = Math.min(CAM_MAX_M, Math.max(4, distT * (1 + Math.sign(e.deltaY) * 0.12))); };
     document.addEventListener('pointerlockchange', lockChange);
@@ -259,6 +274,7 @@ export function World3D(props: World3DProps) {
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
     canvas.addEventListener('pointerdown', pdown);
+    canvas.addEventListener('pointerleave', pleave);
     window.addEventListener('pointermove', pmove);
     window.addEventListener('pointerup', pup);
     canvas.addEventListener('wheel', wheel, { passive: false });
@@ -306,6 +322,11 @@ export function World3D(props: World3DProps) {
         placeRef.current = P.placeKey; me = start; camPos = null; ramp = 0; prints.erase(Infinity);
       }
       if (keys.has('q')) yawT -= dt * 1.8;
+      // Cursor resting near a side edge of the view: keep turning that way, faster the closer to the edge.
+      if (hoverX >= 0 && !locked()) {
+        if (hoverX < EDGE_TURN) yawT -= dt * 1.6 * (1 - hoverX / EDGE_TURN);
+        else if (hoverX > 1 - EDGE_TURN) yawT += dt * 1.6 * (1 - (1 - hoverX) / EDGE_TURN);
+      }
       if (keys.has('e')) yawT += dt * 1.8;
       yaw += (yawT - yaw) * ease(14, dt);
       pitch += (pitchT - pitch) * ease(14, dt);
@@ -462,6 +483,7 @@ export function World3D(props: World3DProps) {
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', blur);
       window.removeEventListener('pointermove', pmove);
+      canvas.removeEventListener('pointerleave', pleave);
       window.removeEventListener('pointerup', pup);
       document.removeEventListener('pointerlockchange', lockChange);
       if (locked()) document.exitPointerLock();

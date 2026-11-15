@@ -45,7 +45,7 @@ export function browserStorage(): Storage | null {
 export const CONTROLS: { keys: string; action: string }[] = [
   { keys: 'W A S D', action: '3D: walk (arrow keys work too)' },
   { keys: 'Shift', action: '3D: run' },
-  { keys: 'Mouse', action: '3D: click the view, then move to look (Esc frees the cursor)' },
+  { keys: 'Mouse', action: '3D: move over the view to look around (click to lock the cursor; Esc frees it)' },
   { keys: 'Q · E · scroll', action: '3D: turn the camera · zoom in (third person)' },
   { keys: 'V', action: '3D: first / third person' }, // LOCAL DRAFT (Map/Aiman)
   { keys: 'F · I', action: '3D: pick up what is in reach · open the pack' },
