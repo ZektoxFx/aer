@@ -3,7 +3,7 @@
    --earth-glow, --space and --alarm set). */
 
 .intro {
-  position: fixed; inset: 0; z-index: 10; overflow: hidden;
+  position: fixed; inset: 0; z-index: 10; overflow: hidden; overflow: clip; /* clip: nothing (the oversized star layer) can scroll the intro out of frame */
   background: var(--space); color: var(--mars-dust);
   display: grid; place-items: center;
 }
@@ -545,7 +545,36 @@
 @keyframes crash-in { 0% { opacity: 0; filter: brightness(2.4) blur(6px); } 35% { opacity: 1; } 100% { opacity: 1; filter: none; } }
 /* The heat of entry seen from the camera: a warm glow at the edges of the frame, following the simulated heating. */
 .crash-heat { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; mix-blend-mode: screen;
-  background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 55%, color-mix(in srgb, var(--warning) 40%, transparent) 100%); }
+  background:
+    radial-gradient(ellipse 75% 70% at 50% 50%, transparent 50%, color-mix(in srgb, var(--warning) 55%, transparent) 92%, color-mix(in srgb, var(--alarm) 60%, transparent) 100%),
+    radial-gradient(ellipse 30% 26% at 50% 50%, color-mix(in srgb, var(--warning) 18%, transparent), transparent 100%);
+  animation: heat-flicker 0.11s steps(2) infinite; }
+@keyframes heat-flicker { 0% { filter: brightness(1); } 100% { filter: brightness(1.18); } }
+
+/* The descent timeline along the bottom: the real stages of a Mars landing, then the story's failures in red. */
+.edl-bar { position: absolute; left: 6%; right: 6%; bottom: 7%; z-index: 1; --edl-pos: 0;
+  font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--mars-dust); }
+.edl-title { margin: 0 0 8px; letter-spacing: 0.18em; font-weight: 600; text-shadow: 0 1px 4px var(--space); }
+.edl-title span { margin-left: 10px; letter-spacing: 0.04em; font-weight: 400; opacity: 0.65; }
+.edl-track { position: relative; height: 3px; background: color-mix(in srgb, var(--mars-dust) 22%, transparent); }
+.edl-fill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--edl-pos) * 100%);
+  background: linear-gradient(90deg, var(--mars-dust), var(--warning) 70%, var(--alarm));
+  box-shadow: 0 0 8px var(--warning); }
+.edl-marks { position: relative; list-style: none; margin: 0; padding: 0; height: 30px; }
+.edl-mark { position: absolute; top: 0; transform: translateX(-50%); padding-top: 9px; white-space: nowrap; opacity: 0.4;
+  letter-spacing: 0.06em; transition: opacity 0.25s, color 0.25s; }
+.edl-mark:first-child { transform: none; }
+.edl-mark:last-child { transform: translateX(-100%); }
+.edl-mark i { position: absolute; top: -6px; left: 50%; width: 7px; height: 7px; margin-left: -4px; border-radius: 50%;
+  background: var(--space); border: 1px solid currentColor; }
+.edl-mark:first-child i { left: 0; margin-left: -3px; }
+.edl-mark:last-child i { left: auto; right: -4px; }
+.edl-mark[data-on='1'] { opacity: 1; text-shadow: 0 1px 4px var(--space); }
+.edl-mark[data-on='1'] i { background: currentColor; box-shadow: 0 0 8px currentColor; }
+.edl-mark[data-failed='1'][data-on='1'] { color: var(--alarm); animation: edl-alert 0.5s ease-out; }
+@keyframes edl-alert { 0% { transform: translateX(-50%) scale(1.5); } 100% { transform: translateX(-50%) scale(1); } }
+.edl-mark:last-child[data-on='1'] { animation: none; }
+@media (max-width: 640px) { .edl-mark { font-size: 8px; } .edl-title span { display: none; } }
 
 /* ---- LOCAL DRAFT: the eyes open onto the live 3D game underneath (no picture). ---- */
 .intro.phase-pov, .intro.phase-blur { background: transparent; }

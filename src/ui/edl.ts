@@ -120,3 +120,38 @@ export function crashTime(T: number): { t: number; seg: number; f: number } {
   return { t: E.impact, seg: CRASH_SEG.length, f: 1 };
 }
 
+
+/** Speed of sound in Mars' cold CO₂ air near the surface, m/s (about 240). Used only to quote a Mach number. */
+export const MARS_SOUND = 240;
+
+/** One event on the descent timeline. `failed` marks the story's failures (game fiction). */
+export interface EdlMark { id: string; label: string; t: number; failed: boolean }
+
+/**
+ * The descent's events in order, for the timeline bar. Entry, peak heating, the parachute and the heat-shield drop
+ * follow a real Mars landing; the torn chute, sputtering retros and the impact are the story.
+ * The heat shield drops 40% of the way through the chute's short life, matching the animation.
+ */
+export function edlTimeline(run: EdlRun): EdlMark[] {
+  const e = run.events;
+  return [
+    { id: 'entry', label: 'ENTRY', t: 0, failed: false },
+    { id: 'heat', label: 'PEAK HEAT', t: e.peakHeat, failed: false },
+    { id: 'chute', label: 'PARACHUTE', t: e.chute, failed: false },
+    { id: 'shield', label: 'SHIELD OFF', t: e.chute + 0.4 * (e.tear - e.chute), failed: false },
+    { id: 'tear', label: 'CHUTE TORN', t: e.tear, failed: true },
+    { id: 'retro', label: 'RETROS', t: e.retro, failed: true },
+    { id: 'impact', label: 'IMPACT', t: e.impact, failed: true },
+  ];
+}
+
+/** Where simulated time `t` sits on the bar, 0..1, with the marks spaced evenly (the late events are seconds apart). */
+export function timelinePos(marks: EdlMark[], t: number): number {
+  const n = marks.length - 1;
+  if (t <= marks[0].t) return 0;
+  for (let i = 0; i < n; i++) {
+    const a = marks[i].t, b = marks[i + 1].t;
+    if (t < b) return (i + (t - a) / Math.max(1e-9, b - a)) / n;
+  }
+  return 1;
+}

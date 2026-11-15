@@ -11,12 +11,14 @@
 // Colours come from the :root palette.
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { AFTER_S, CRASH_RUN as RUN, CRASH_SEG as SEG, crashTime, edlAt, FLY_S, MARS_G, MARS_R } from './edl';
+import { AFTER_S, CRASH_RUN as RUN, CRASH_SEG as SEG, crashTime, edlAt, edlTimeline, FLY_S, MARS_G, MARS_R, MARS_SOUND, timelinePos } from './edl';
 
 /** The map's HiRISE photo: 6.4 × 4.0 km, and where the AER-1 cabin sits in it (metres from the north-west corner). */
 const PHOTO = { w: 6400, h: 4000, cabinX: 3060, cabinY: 2170 };
 /** Seconds of the opening wide shot before the camera settles beside the capsule. */
 const OPEN_S = 1.8;
+/** The descent's events for the timeline bar along the bottom (real stages first, then the story's failures). */
+const MARKS = edlTimeline(RUN);
 
 function css(name: string): THREE.Color {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -99,6 +101,7 @@ export function CrashSequence({ active }: { active: boolean }) {
   const flash = useRef<HTMLDivElement>(null);
   const dark = useRef<HTMLDivElement>(null);
   const glow = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = host.current;
@@ -501,13 +504,20 @@ export function CrashSequence({ active }: { active: boolean }) {
 
       // Overlays: telemetry, what is happening, the impact flash, and the fade to black (eyes shut).
       if (hud.current) {
+        const v = impacted ? 0 : s.v;
+        const nearPeakG = !impacted && Math.abs(t - RUN.events.peakG) <= 4;
         hud.current.textContent = [
           `ALT     ${alt >= 10_000 ? (alt / 1000).toFixed(1) : (alt / 1000).toFixed(2)} km`,
-          `SPEED   ${s.v >= 1000 && !impacted ? `${(s.v / 1000).toFixed(2)} km/s` : `${Math.round(impacted ? 0 : s.v)} m/s`}`,
-          `DECEL   ${(impacted ? 0 : s.gLoad).toFixed(1)} g`,
-          `HEATING ${Math.round(heat * 100)}%`,
+          `SPEED   ${Math.round(v * 3.6).toLocaleString('en-US')} km/h   MACH ${(v / MARS_SOUND).toFixed(1)}`,
+          `DECEL   ${(impacted ? 0 : s.gLoad).toFixed(1)} g${nearPeakG ? '  ◂ PEAK' : ''}`,
+          `HEATING ${Math.round(heat * 100)}%${heat > 0.97 ? '  ◂ PEAK' : ''}`,
           `GRAVITY ${MARS_G} m/s²   T+${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`,
         ].join('\n');
+      }
+      // Timeline bar: fill up to "now" and light each event as it happens (the failures in alarm red).
+      if (bar.current) {
+        bar.current.style.setProperty('--edl-pos', String(impacted ? 1 : timelinePos(MARKS, t)));
+        bar.current.querySelectorAll<HTMLElement>('.edl-mark').forEach((k, i) => { k.dataset.on = impacted || t >= MARKS[i].t ? '1' : '0'; });
       }
       if (cap.current) {
         const label = impacted ? '▲ IMPACT' : SEG[Math.min(seg, SEG.length - 1)].label + (seg === 0 && heat > 0.6 ? ': PEAK HEATING' : '');
@@ -541,6 +551,17 @@ export function CrashSequence({ active }: { active: boolean }) {
       <pre ref={hud} className="crash-hud" />
       <p ref={cap} className="crash-cap" />
       <p className="crash-note">SIMULATED DESCENT · physics sped up ~50× · failures are game fiction</p>
+      <div ref={bar} className="edl-bar">
+        <p className="edl-title">ENTRY · DESCENT · LANDING <span>Earth hears it ~11 min later: no one can help in time</span></p>
+        <div className="edl-track"><div className="edl-fill" /></div>
+        <ol className="edl-marks">
+          {MARKS.map((m, i) => (
+            <li key={m.id} className="edl-mark" data-failed={m.failed ? '1' : '0'} data-on="0" style={{ left: `${(i / (MARKS.length - 1)) * 100}%` }}>
+              <i />{m.failed ? `▲ ${m.label}` : m.label}
+            </li>
+          ))}
+        </ol>
+      </div>
       <div ref={flash} className="crash-flash" />
       <div ref={dark} className="crash-dark" />
     </div>
