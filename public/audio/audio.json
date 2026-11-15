@@ -1,13 +1,13 @@
 {
- "about": "Built by tools/audio/bake_audio.py. Music is CC0 (OpenGameArt); mars-wind.mp3 is NASA's Perseverance SuperCam microphone recording from sol 4 (credit NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero), resampled, levelled and looped.",
+ "about": "Built by tools/audio/bake_audio.py. title and storm are original music composed in code (tools/audio/compose.py); explore, won and lost are CC0 (OpenGameArt); mars-wind.mp3 is NASA's Perseverance SuperCam microphone recording from sol 4 (credit NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero), resampled, levelled and looped.",
  "tracks": {
   "title": {
-   "title": "Cosmic Navigation",
-   "author": "Synth-thetic",
-   "page": "https://opengameart.org/content/cosmic-navigation",
-   "sourceLufs": -20.5,
-   "gainDb": 0.5,
-   "lufs": -20.2
+   "title": "Jezero (title theme)",
+   "author": "AER team, composed in code",
+   "page": "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py",
+   "sourceLufs": -14.1,
+   "gainDb": -5.9,
+   "lufs": -20.3
   },
   "explore": {
    "title": "Space Music: Out There",
@@ -18,11 +18,11 @@
    "lufs": -20.3
   },
   "storm": {
-   "title": "Urgent (Dark Sci-Fi Audio Pack)",
-   "author": "SRG774",
-   "page": "https://opengameart.org/node/188336",
-   "sourceLufs": -43.1,
-   "gainDb": 23.1,
+   "title": "Haboob (storm)",
+   "author": "AER team, composed in code",
+   "page": "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py",
+   "sourceLufs": -14.0,
+   "gainDb": -6.0,
    "lufs": -20.2
   },
   "won": {

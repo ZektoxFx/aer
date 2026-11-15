@@ -1,5 +1,6 @@
-// Background music: CC0 tracks from OpenGameArt, levelled and encoded by tools/audio/bake_audio.py (public/audio/,
-// credits in credits.json audioCredits). Streamed with <audio> elements (a long track decoded into memory would take
+// Background music: the title and storm themes are original, composed in code (tools/audio/compose.py); the others
+// are CC0 tracks from OpenGameArt. Levelled and encoded by tools/audio/bake_audio.py (public/audio/, credits in
+// credits.json audioCredits). Streamed with <audio> elements (a long track decoded into memory would take
 // ~90 MB), crossfaded between tracks, and crossfaded into itself to loop without a gap.
 //
 // Two screens ask for music: the title screen (and its intro) and the game. While the title screen holds its claim,

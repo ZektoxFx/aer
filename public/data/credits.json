@@ -102,7 +102,8 @@
  ],
  "audioCredits": [
   "Mars wind: recorded by Perseverance's SuperCam microphone on sol 4 (22 February 2021), NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero. Levelled and looped for the game.",
-  "Music (CC0, OpenGameArt.org): Cosmic Navigation by Synth-thetic · Space Music: Out There by yd · Urgent and Transmission (Dark Sci-Fi Audio Pack) by SRG774 · Ending Scene (orchestral version) by nene",
+  "Title and storm music (“Jezero” and “Haboob”): original, composed and synthesized in code for AER (tools/audio/compose.py, written with help from Claude). Voice, throat singing, drums and brass are all synthesized; no samples.",
+  "Other music (CC0, OpenGameArt.org): Space Music: Out There by yd · Transmission (Dark Sci-Fi Audio Pack) by SRG774 · Ending Scene (orchestral version) by nene",
   "Other sound effects are synthesized in the browser; the radio voice is the browser's built-in speech."
  ],
  "fiction": "The AER-1 lander, its crew, its supplies and tank, the rover's beacon and the radio bridge are game fiction. Perseverance, Ingenuity, the landing hardware, the sample sites and all data layers are real.",

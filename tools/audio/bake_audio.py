@@ -10,7 +10,7 @@ What it does:
   (the end crossfades into the start). The file carries PAD_S of extra audio on each side so the game can loop the
   inner part exactly (loopStart = PAD_S, loopEnd = PAD_S + loop length), clear of MP3 encoder padding.
 
-Usage: python bake_audio.py DOWNLOAD_DIR REPO_DIR
+Usage: python compose.py DOWNLOAD_DIR, then python bake_audio.py DOWNLOAD_DIR REPO_DIR
 """
 import json
 import re
@@ -28,11 +28,13 @@ XFADE_S = 3.0
 
 # file in DOWNLOAD_DIR -> output name, page, author, licence
 SOURCES = {
-    "title": ("cosmic_navigation_loop.flac", "Cosmic Navigation", "Synth-thetic",
-              "https://opengameart.org/content/cosmic-navigation"),
+    # title and storm are original, composed in code by tools/audio/compose.py (run it into DOWNLOAD_DIR first).
+    "title": ("aer_title.wav", "Jezero (title theme)", "AER team, composed in code",
+              "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py"),
     "explore": ("OutThere_0.ogg", "Space Music: Out There", "yd",
                 "https://opengameart.org/content/space-music-out-there"),
-    "storm": ("urgent_0.mp3", "Urgent (Dark Sci-Fi Audio Pack)", "SRG774", "https://opengameart.org/node/188336"),
+    "storm": ("aer_storm.wav", "Haboob (storm)", "AER team, composed in code",
+              "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py"),
     "won": ("ending_scene_orchestral.wav", "Ending Scene (orchestral version)", "nene",
             "https://opengameart.org/content/ending-scene"),
     "lost": ("transmission_1.mp3", "Transmission (Dark Sci-Fi Audio Pack)", "SRG774",
@@ -96,7 +98,7 @@ def main(dl, repo):
     report["wind"] = {"page": WIND[1], **wind(dl / WIND[0], out / "mars-wind.mp3", dl)}
     print("wind", report["wind"])
     (out / "audio.json").write_text(json.dumps({
-        "about": "Built by tools/audio/bake_audio.py. Music is CC0 (OpenGameArt); mars-wind.mp3 is NASA's "
+        "about": "Built by tools/audio/bake_audio.py. title and storm are original music composed in code (tools/audio/compose.py); explore, won and lost are CC0 (OpenGameArt); mars-wind.mp3 is NASA's "
                  "Perseverance SuperCam microphone recording from sol 4 (credit NASA/JPL-Caltech/LANL/CNES/CNRS/"
                  "ISAE-Supaero), resampled, levelled and looped.",
         "tracks": report}, ensure_ascii=False, indent=1), encoding="utf-8")

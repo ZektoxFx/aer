@@ -35,7 +35,7 @@ Everything in `public/data/` was fetched before the hackathon demo and baked int
 | `crashed_lander_aer1.jpg` | The fictional AER-1 lander | **AI-generated**, with a visible watermark. No longer shown in the app (the intro switched to real Perseverance photos in #38) |
 | `fake.json` | The original team placeholder, restored | Not data |
 | `../audio/mars-wind.mp3` | Real Mars wind, looped, played under the game's synthesized wind | Perseverance SuperCam microphone, sol 4 (22 February 2021), [NASA resource page](https://science.nasa.gov/resource/perseverance-rovers-supercam-records-wind-on-mars/); credit NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero. Resampled from 100 kHz to 48 kHz, levelled and looped by `tools/audio/bake_audio.py` |
-| `../audio/*.mp3` (title, explore, storm, won, lost) | Background music | CC0 tracks from OpenGameArt: [Cosmic Navigation](https://opengameart.org/content/cosmic-navigation) (Synth-thetic), [Out There](https://opengameart.org/content/space-music-out-there) (yd), Urgent and Transmission from the [Dark Sci-Fi Audio Pack](https://opengameart.org/node/188336) (SRG774), [Ending Scene, orchestral](https://opengameart.org/content/ending-scene) (nene). Levelled to −20 LUFS by `tools/audio/bake_audio.py`; `audio.json` lists each source |
+| `../audio/*.mp3` (title, explore, storm, won, lost) | Background music | Title ("Jezero") and storm ("Haboob"): original desert-epic pieces composed and synthesized in code by `tools/audio/compose.py` (voice, throat singing, taiko, frame drums, brass; no samples). The rest are CC0 tracks from OpenGameArt: [Out There](https://opengameart.org/content/space-music-out-there) (yd), Transmission from the [Dark Sci-Fi Audio Pack](https://opengameart.org/node/188336) (SRG774), [Ending Scene, orchestral](https://opengameart.org/content/ending-scene) (nene). Levelled to −20 LUFS by `tools/audio/bake_audio.py`; `audio.json` lists each source |
 
 ## How things were measured
 
@@ -84,6 +84,6 @@ The scripts are in `tools/data/`. They expect a separate workspace with `raw/`, 
 6. `bake_content.py` (content, credits, manual pages, rock formations)
 7. `bake_patch.py WORK REPO` (2 m tile; needs `work/terrain/elevation_2m.npy` from step 1)
 8. `bake_extra.py VORTEX_PDF REPO` (relay and dust devils; the PDF is arXiv 2109.04601)
-9. `tools/audio/bake_audio.py DOWNLOADS REPO` (music and the Mars wind loop; needs ffmpeg; the download links are the pages in `public/audio/audio.json`)
+9. `tools/audio/compose.py DOWNLOADS` (renders the title and storm music, about 3 minutes), then `tools/audio/bake_audio.py DOWNLOADS REPO` (music and the Mars wind loop; needs ffmpeg; the download links are the pages in `public/audio/audio.json`)
 
 Parts of the data pipeline were written with help from Claude (an AI assistant). The original pack, story content and lander image were made with Antigravity (another AI agent).

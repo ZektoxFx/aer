@@ -35,6 +35,6 @@ describe('music', () => {
   it('credits the Mars wind recording and every music author', () => {
     const lines = (credits.audioCredits ?? []).join('\n');
     expect(lines).toContain('SuperCam');
-    for (const who of ['Synth-thetic', 'yd', 'SRG774', 'nene']) expect(lines).toContain(who);
+    for (const who of ['compose.py', 'yd', 'SRG774', 'nene']) expect(lines).toContain(who);
   });
 });
