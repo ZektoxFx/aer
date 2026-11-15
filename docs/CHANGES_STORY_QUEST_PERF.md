@@ -91,6 +91,23 @@ All three merge cleanly with each other (checked with `git merge-tree`).
 
 ---
 
+### Added on 15 Nov (morning): ending route replay + Survival Guide PNG
+
+- `src/map/replayPath.ts` (pure, tested in `replayPath.test.ts`): `trailAdd` keeps a breadcrumb every 8 m
+  (thinned past 3000 points), `trailCut` cuts the trail by distance, `replayView` is the pull-back view
+  (starts 260 m wide over where the game ended, eases out to the whole map). Named differently from the
+  component on purpose: Windows ignores case, so `routeReplay.ts` and `RouteReplay.tsx` would collide.
+- `src/map/RouteReplay.tsx`: canvas replay on the HiRISE photo. Glowing route, markers (crash site, NASA
+  sites salvaged, findings where they were made, Perseverance), scale bar, equivalent camera height. On a
+  won game, "SAVE SURVIVAL GUIDE (PNG)" saves a 1200 px image: map + take-home lines + findings + credits.
+- `Hud.tsx`: `statsRef` now also holds `trail` and `foundAt` (`EndStats`, `freshStats`, `snapStats`);
+  the step loop calls `trailAdd`; `unlockFindings` records where each finding was made; both end cards
+  (won and lost) open with the replay. Chik's credits still roll by themselves after 12 s; the replay
+  finishes in about 7 s.
+- `game3d.css`: `.route-replay`, and the end card widens to 760 px when it holds the replay.
+
+The Three Forks tubes also leave the 3D world once taken (`gone()` in Hud.tsx); other salvage sites stay.
+
 ## 3. How it was tested
 
 - `npm test`: 264 passed. `npm run build`: OK. `npm run lint`: no new warnings.
