@@ -5,8 +5,8 @@
    "title": "Jezero (title theme)",
    "author": "AER team, composed in code",
    "page": "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py",
-   "sourceLufs": -14.1,
-   "gainDb": -5.9,
+   "sourceLufs": -13.6,
+   "gainDb": -6.4,
    "lufs": -20.3
   },
   "explore": {
@@ -21,9 +21,9 @@
    "title": "Haboob (storm)",
    "author": "AER team, composed in code",
    "page": "https://github.com/ZektoxFx/aer/blob/main/tools/audio/compose.py",
-   "sourceLufs": -14.0,
-   "gainDb": -6.0,
-   "lufs": -20.2
+   "sourceLufs": -12.7,
+   "gainDb": -7.3,
+   "lufs": -20.3
   },
   "won": {
    "title": "Ending Scene (orchestral version)",
