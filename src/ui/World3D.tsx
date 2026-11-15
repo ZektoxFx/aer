@@ -57,6 +57,9 @@ const LOOK_SENS = 0.0022;
 const PITCH_MIN = 0.06, PITCH_MAX = 1.25;
 /** LOCAL DRAFT: first-person eye height (m above the ground) and field of view in each mode. */
 const EYE_M = 1.62, FOV_THIRD = 55, FOV_FIRST = 68;
+/** Third person: the furthest the camera can zoom out behind the astronaut, metres (the default view's distance;
+ * it was 80 m, which let the camera fly far away from the action). */
+const CAM_MAX_M = 16;
 /** Fraction of the way to close per frame for a smoothing rate (per second), whatever the frame rate. */
 const ease = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
 
@@ -250,7 +253,7 @@ export function World3D(props: World3DProps) {
     };
     const pup = () => { dragging = false; };
     const lockChange = () => { dragging = false; live.current.onLookChange?.(locked()); };
-    const wheel = (e: WheelEvent) => { e.preventDefault(); if (live.current.view === 'first') return; distT = Math.min(80, Math.max(4, distT * (1 + Math.sign(e.deltaY) * 0.12))); };
+    const wheel = (e: WheelEvent) => { e.preventDefault(); if (live.current.view === 'first') return; distT = Math.min(CAM_MAX_M, Math.max(4, distT * (1 + Math.sign(e.deltaY) * 0.12))); };
     document.addEventListener('pointerlockchange', lockChange);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
